@@ -3,13 +3,24 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: LaunchPad API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: campaigns
+    description: Campaign management
+  - name: jobs
+    description: Background job worker
+  - name: checkout
+    description: Stripe checkout and billing
+  - name: auth
+    description: Magic link authentication
+  - name: uploads
+    description: File uploads
+
 paths:
   /healthz:
     get:
@@ -24,6 +35,256 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /campaigns/generate:
+    post:
+      operationId: generateCampaign
+      tags: [campaigns]
+      summary: Generate a new campaign with AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCampaignInput"
+      responses:
+        "201":
+          description: Campaign created (generation starts async)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "400":
+          description: Bad request
+
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      tags: [campaigns]
+      summary: List campaigns for the authenticated user
+      parameters:
+        - in: query
+          name: token
+          schema:
+            type: string
+          required: false
+          description: Magic link auth token
+      responses:
+        "200":
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignSummary"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get campaign details
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "404":
+          description: Not found
+
+  /campaigns/{id}/revise:
+    post:
+      operationId: reviseCampaign
+      tags: [campaigns]
+      summary: Request a revision to the campaign via AI
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevisionInput"
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "403":
+          description: Revision limit reached (ship to unlock unlimited)
+        "404":
+          description: Not found
+
+  /campaigns/{id}/publish:
+    post:
+      operationId: publishCampaign
+      tags: [campaigns]
+      summary: Kick off Stripe checkout for publishing a campaign
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishInput"
+      responses:
+        "200":
+          description: Stripe checkout URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResult"
+        "404":
+          description: Not found
+
+  /campaigns/{id}/pause:
+    post:
+      operationId: pauseCampaign
+      tags: [campaigns]
+      summary: Pause a live campaign across all platforms
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Campaign paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "404":
+          description: Not found
+
+  /campaigns/{id}/metrics:
+    get:
+      operationId: getCampaignMetrics
+      tags: [campaigns]
+      summary: Get latest metrics for a live campaign
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Campaign metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignMetrics"
+        "404":
+          description: Not found
+
+  /campaigns/{id}/status:
+    get:
+      operationId: getCampaignStatus
+      tags: [campaigns]
+      summary: Poll campaign generation/publishing status
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Current campaign status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStatusResponse"
+        "404":
+          description: Not found
+
+  /jobs/worker:
+    post:
+      operationId: runJobWorker
+      tags: [jobs]
+      summary: Process pending image generation jobs (called by cron)
+      responses:
+        "200":
+          description: Worker run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerResult"
+        "401":
+          description: Unauthorized (missing worker secret header)
+
+  /auth/verify:
+    get:
+      operationId: verifyMagicLink
+      tags: [auth]
+      summary: Verify a magic link token and return session info
+      parameters:
+        - in: query
+          name: token
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Valid token — user info returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "401":
+          description: Invalid or expired token
+
+  /uploads/product-image:
+    post:
+      operationId: uploadProductImage
+      tags: [uploads]
+      summary: Upload a product photo (resized client-side to max 1024px JPEG)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageUploadInput"
+      responses:
+        "200":
+          description: Uploaded image URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageUploadResult"
+
+  /webhooks/stripe:
+    post:
+      operationId: stripeWebhook
+      tags: [checkout]
+      summary: Stripe webhook receiver
+      responses:
+        "200":
+          description: Acknowledged
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +295,262 @@ components:
       required:
         - status
 
+    GenerateCampaignInput:
+      type: object
+      required: [brief]
+      properties:
+        brief:
+          type: string
+          description: Founder's description of their product
+        productImageUrl:
+          type: ["string", "null"]
+          description: Pre-uploaded product image URL
+
+    RevisionInput:
+      type: object
+      required: [request]
+      properties:
+        request:
+          type: string
+          description: What the user wants changed
+
+    PublishInput:
+      type: object
+      required: [dailyBudgetCents, metaSharePct, tiktokSharePct]
+      properties:
+        dailyBudgetCents:
+          type: integer
+          description: Daily ad budget in cents (2500, 7500, or 20000 presets)
+        metaSharePct:
+          type: integer
+          description: Percentage of budget going to Meta (0-100)
+        tiktokSharePct:
+          type: integer
+          description: Percentage of budget going to TikTok (0-100)
+        successUrl:
+          type: ["string", "null"]
+          description: URL to redirect to after successful checkout
+
+    ImageUploadInput:
+      type: object
+      required: [dataUrl]
+      properties:
+        dataUrl:
+          type: string
+          description: Base64 data URL of the resized product image
+
+    CampaignAd:
+      type: object
+      required: [hook, body, cta, angle, imagePrompt, gradientHex1, gradientHex2]
+      properties:
+        hook:
+          type: string
+        body:
+          type: string
+        cta:
+          type: string
+        angle:
+          type: string
+        imagePrompt:
+          type: string
+        gradientHex1:
+          type: string
+        gradientHex2:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+
+    CampaignLanding:
+      type: object
+      required: [hero, sub, features, socialProof, cta]
+      properties:
+        hero:
+          type: string
+        sub:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        socialProof:
+          type: string
+        cta:
+          type: string
+
+    CampaignData:
+      type: object
+      required: [brandName, tagline, category, palette, audience, channelSplit, recommendedBudgetPreset, ads, landing]
+      properties:
+        brandName:
+          type: string
+        tagline:
+          type: string
+        category:
+          type: string
+        palette:
+          type: array
+          items:
+            type: string
+          description: 4 hex color values
+        audience:
+          type: object
+          required: [ageMin, ageMax, interests, geo]
+          properties:
+            ageMin:
+              type: integer
+            ageMax:
+              type: integer
+            interests:
+              type: array
+              items:
+                type: string
+            geo:
+              type: string
+        channelSplit:
+          type: object
+          required: [metaPct, tiktokPct, rationale]
+          properties:
+            metaPct:
+              type: integer
+            tiktokPct:
+              type: integer
+            rationale:
+              type: string
+        recommendedBudgetPreset:
+          type: string
+          enum: [starter, growth, scale]
+        ads:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignAd"
+        landing:
+          $ref: "#/components/schemas/CampaignLanding"
+
+    Campaign:
+      type: object
+      required: [id, status, brief, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: ["string", "null"]
+        brief:
+          type: string
+        productImageUrl:
+          type: ["string", "null"]
+        campaignData:
+          description: Full AI-generated campaign JSON
+          oneOf:
+            - $ref: "#/components/schemas/CampaignData"
+            - type: "null"
+        status:
+          type: string
+          enum: [draft, generating, ready, publishing, live, paused]
+        landingSlug:
+          type: ["string", "null"]
+        landingUrl:
+          type: ["string", "null"]
+        revisionsUsed:
+          type: integer
+        revisionsAllowed:
+          type: integer
+        createdAt:
+          type: string
+
+    CampaignSummary:
+      type: object
+      required: [id, brandName, status, createdAt]
+      properties:
+        id:
+          type: string
+        brandName:
+          type: string
+        status:
+          type: string
+          enum: [draft, generating, ready, publishing, live, paused]
+        spendTodayCents:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    CampaignStatusResponse:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [draft, generating, ready, publishing, live, paused]
+        campaignData:
+          description: Populated once generation is complete
+          oneOf:
+            - $ref: "#/components/schemas/CampaignData"
+            - type: "null"
+        adAssets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdAsset"
+
+    AdAsset:
+      type: object
+      required: [idx, status]
+      properties:
+        idx:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, processing, done, failed]
+        model:
+          type: ["string", "null"]
+
+    CampaignMetrics:
+      type: object
+      required: [campaignId, impressions, clicks, spendCents, updatedAt]
+      properties:
+        campaignId:
+          type: string
+        impressions:
+          type: integer
+        clicks:
+          type: integer
+        spendCents:
+          type: integer
+        updatedAt:
+          type: string
+
+    CheckoutResult:
+      type: object
+      required: [checkoutUrl]
+      properties:
+        checkoutUrl:
+          type: string
+
+    WorkerResult:
+      type: object
+      required: [processed, succeeded, failed]
+      properties:
+        processed:
+          type: integer
+        succeeded:
+          type: integer
+        failed:
+          type: integer
+
+    AuthResult:
+      type: object
+      required: [userId, email]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+
+    ImageUploadResult:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
