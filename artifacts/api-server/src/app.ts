@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
@@ -12,16 +12,10 @@ app.use(
     logger,
     serializers: {
       req(req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
@@ -29,19 +23,11 @@ app.use(
 
 app.use(cors());
 
-// Stripe webhooks need raw body for signature verification
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.path === "/api/webhooks/stripe") {
-    express.raw({ type: "application/json" })(req, res, (err) => {
-      if (err) return next(err);
-      (req as Request & { rawBody?: Buffer }).rawBody = req.body as Buffer;
-      next();
-    });
-  } else {
-    express.json({ limit: "10mb" })(req, res, next);
-  }
-});
+// Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
+app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
 
+// Everything else gets JSON parsing
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // API routes

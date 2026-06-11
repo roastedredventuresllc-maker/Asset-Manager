@@ -1,14 +1,19 @@
 import { logger } from "./logger.js";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
 
-const BUCKET_ID = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID ?? "default";
+const LOCAL_ASSETS_DIR = "/tmp/launchpad-assets";
 
-async function getStorageClient() {
-  try {
-    const { Client } = await import("@replit/object-storage");
-    return new Client();
-  } catch {
-    return null;
-  }
+async function saveLocally(key: string, buffer: Buffer): Promise<string> {
+  const dir = join(LOCAL_ASSETS_DIR, key.split("/").slice(0, -1).join("/"));
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(LOCAL_ASSETS_DIR, key), buffer);
+  // Serve via /api/assets/:key route
+  const domain =
+    process.env.REPLIT_DEV_DOMAIN ??
+    process.env.REPLIT_DOMAINS?.split(",")[0] ??
+    "localhost:8080";
+  return `https://${domain}/api/assets/${key}`;
 }
 
 export async function uploadBuffer(
@@ -16,18 +21,23 @@ export async function uploadBuffer(
   buffer: Buffer,
   contentType: string,
 ): Promise<string> {
-  const client = await getStorageClient();
-  if (!client) {
-    logger.warn("Object storage not available — returning data URL stub");
-    return `data:${contentType};base64,${buffer.toString("base64").substring(0, 100)}…`;
+  // Try Replit Object Storage first
+  try {
+    const { Client } = await import("@replit/object-storage");
+    const client = new Client();
+    await client.uploadFromBytes(key, buffer, { contentType });
+    const domain =
+      process.env.REPLIT_DEV_DOMAIN ??
+      process.env.REPLIT_DOMAINS?.split(",")[0] ??
+      "localhost:8080";
+    return `https://${domain}/api/assets/${key}`;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ msg }, "Object storage unavailable — falling back to local filesystem");
   }
 
-  await client.uploadFromBytes(key, buffer, { contentType });
-  const domain =
-    process.env.REPLIT_DEV_DOMAIN ??
-    process.env.REPLIT_DOMAINS?.split(",")[0] ??
-    "localhost:5000";
-  return `https://${domain}/api/assets/${key}`;
+  // Local filesystem fallback (dev / no bucket configured)
+  return saveLocally(key, buffer);
 }
 
 export async function uploadFromUrl(key: string, url: string): Promise<string> {
