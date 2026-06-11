@@ -108,7 +108,7 @@ async function generateCampaignAsync(
     logger.error({ err, campaignId }, "Campaign generation error");
     await db
       .update(campaignsTable)
-      .set({ status: "draft" })
+      .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
   }
 }

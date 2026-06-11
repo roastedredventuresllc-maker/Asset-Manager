@@ -60,7 +60,8 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
       queryKey: getGetCampaignStatusQueryKey(campaignId),
       refetchInterval: (query) => {
         const state = query.state.data?.status;
-        return state === "generating" || state === "draft" ? 3000 : false;
+        if (state === "generating") return 3000;
+        return false;
       },
     },
   });
@@ -69,6 +70,10 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
 
   if (statusRes.status === "generating") {
     return <WorkingState />;
+  }
+
+  if (statusRes.status === "error") {
+    return <ErrorState setCampaignId={setCampaignId} />;
   }
 
   if (statusRes.status === "live" || statusRes.status === "paused") {
@@ -172,6 +177,24 @@ function WorkingState() {
     <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background animate-in fade-in duration-500">
       <div className="w-12 h-12 rounded-full border-[1px] border-border border-t-foreground animate-spin mb-6"></div>
       <p className="font-serif italic text-2xl text-muted-foreground">Building your campaign…</p>
+    </div>
+  );
+}
+
+function ErrorState({ setCampaignId }: { setCampaignId: (id: string | null) => void }) {
+  return (
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background animate-in fade-in duration-500">
+      <p className="font-serif text-3xl mb-3">Something went wrong</p>
+      <p className="font-sans text-muted-foreground text-sm mb-8 text-center max-w-xs">
+        The AI couldn't generate your campaign. Make sure the server has a valid{" "}
+        <code className="bg-secondary px-1 rounded text-xs">ANTHROPIC_API_KEY</code> and try again.
+      </p>
+      <button
+        onClick={() => setCampaignId(null)}
+        className="bg-foreground text-background px-6 py-3 rounded-full font-sans text-sm hover:opacity-90 transition-opacity"
+      >
+        Try again
+      </button>
     </div>
   );
 }
