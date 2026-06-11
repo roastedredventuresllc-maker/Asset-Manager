@@ -14,15 +14,10 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resizeImage } from "@/lib/image-upload";
-import { Paperclip, Send, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Paperclip, Send, ArrowRight, CheckCircle2, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-
-// Assuming we have this custom hook based on the brief
-// We might need to fall back to a manual fetch if useUploadProductImage is not found,
-// but the prompt says to use useUploadProductImage.
-import { useUploadImage } from "@workspace/api-client-react"; // Wait, we might not have it. Let's just mock it or assume it's useUploadImage if not useUploadProductImage. Actually, let's use the fetch API for upload just in case.
 
 export default function Home() {
   const [location, setLocation] = useLocation();
@@ -87,40 +82,68 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
 function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) {
   const [brief, setBrief] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const generateCampaign = useGenerateCampaign();
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0] ?? null;
+    setFile(selected);
+    if (selected) {
+      const url = URL.createObjectURL(selected);
+      setPreview(url);
+    } else {
+      setPreview(null);
+    }
+  };
+
+  const removeFile = () => {
+    setFile(null);
+    setPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSubmit = async () => {
-    if (!brief.trim()) return;
-    setIsUploading(true);
-    let productImageUrl = null;
-    
+    if (!brief.trim()) { setError("Add a description first."); return; }
+    setIsSubmitting(true);
+    setError(null);
+    let productImageUrl: string | null = null;
+
     try {
       if (file) {
         const dataUrl = await resizeImage(file, 1024);
         const res = await fetch("/api/uploads/product-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl })
+          body: JSON.stringify({ dataUrl }),
         });
         if (res.ok) {
           const data = await res.json();
           productImageUrl = data.url;
         }
+        // upload failure is non-fatal — we proceed without the image
       }
 
-      generateCampaign.mutate({ data: { brief, productImageUrl } }, {
-        onSuccess: (campaign) => {
-          setCampaignId(campaign.id);
-        },
-        onSettled: () => {
-          setIsUploading(false);
+      generateCampaign.mutate(
+        { data: { brief: brief.trim(), productImageUrl } },
+        {
+          onSuccess: (campaign) => setCampaignId(campaign.id),
+          onError: () => {
+            setError("Something went wrong. Try again.");
+            setIsSubmitting(false);
+          },
+          onSettled: () => setIsSubmitting(false),
         }
-      });
-    } catch (err) {
-      setIsUploading(false);
+      );
+    } catch {
+      setError("Something went wrong. Try again.");
+      setIsSubmitting(false);
     }
   };
+
+  const isPending = isSubmitting || generateCampaign.isPending;
 
   return (
     <div className="min-h-[100dvh] flex items-center justify-center p-4 bg-background">
@@ -129,38 +152,63 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
           What are you <span className="italic opacity-50">launching?</span>
         </h1>
 
-        <div className="w-full bg-card rounded-2xl p-2 shadow-sm border border-border flex flex-col focus-within:ring-1 focus-within:ring-ring transition-all">
-          <textarea
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            placeholder="Describe your product..."
-            className="w-full min-h-[120px] resize-none bg-transparent outline-none p-4 text-lg font-sans placeholder:text-muted-foreground"
-          />
-          <div className="flex justify-between items-center px-4 pb-2">
-            <label className="cursor-pointer p-2 hover:bg-secondary rounded-full transition-colors">
-              <input 
-                type="file" 
-                className="hidden" 
-                accept="image/jpeg,image/png"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-              <Paperclip className={`w-5 h-5 ${file ? "text-foreground" : "text-muted-foreground"}`} />
-            </label>
-            <button 
-              onClick={handleSubmit}
-              disabled={!brief.trim() || isUploading || generateCampaign.isPending}
-              className="bg-foreground text-background p-3 rounded-full hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+        <div className="w-full flex flex-col gap-2">
+          <div className="w-full bg-card rounded-2xl p-2 shadow-sm border border-border flex flex-col focus-within:ring-1 focus-within:ring-ring transition-all">
+            <textarea
+              value={brief}
+              onChange={(e) => { setBrief(e.target.value); setError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+              placeholder="Describe your product..."
+              className="w-full min-h-[120px] resize-none bg-transparent outline-none p-4 text-lg font-sans placeholder:text-muted-foreground"
+            />
+
+            {preview && (
+              <div className="px-4 pb-2">
+                <div className="relative inline-flex items-center gap-2 bg-secondary rounded-xl pr-2 overflow-hidden">
+                  <img src={preview} alt="Product" className="h-12 w-12 object-cover rounded-lg" />
+                  <span className="font-sans text-xs text-muted-foreground max-w-[160px] truncate">{file?.name}</span>
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="p-1 hover:bg-border rounded-full transition-colors flex-shrink-0"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center px-4 pb-2 pt-1">
+              <label className="cursor-pointer p-2 hover:bg-secondary rounded-full transition-colors" title="Attach product image">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFileChange}
+                />
+                <Paperclip className={`w-5 h-5 ${file ? "text-foreground" : "text-muted-foreground"}`} />
+              </label>
+              <button
+                onClick={handleSubmit}
+                disabled={isPending}
+                className="bg-foreground text-background p-3 rounded-full hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
           </div>
+
+          {error && (
+            <p className="text-center font-sans text-sm text-red-500">{error}</p>
+          )}
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
           {["A fitness app for busy parents", "An AI writing tool", "A sustainable clothing brand", "A SaaS invoicing tool"].map((chip) => (
             <button
               key={chip}
-              onClick={() => setBrief(chip)}
+              onClick={() => { setBrief(chip); setError(null); }}
               className="text-sm font-sans text-muted-foreground bg-secondary/50 hover:bg-secondary px-4 py-2 rounded-full transition-colors border border-border/50"
             >
               {chip}
