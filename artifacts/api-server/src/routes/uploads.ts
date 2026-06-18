@@ -29,7 +29,7 @@ router.post("/product-image", async (req, res) => {
     const key = `product-images/${generateId("img")}.jpg`;
 
     // Optionally re-encode with sharp if available
-    let finalBuffer = buffer;
+    let finalBuffer: Buffer = buffer;
     try {
       const { default: sharp } = await import("sharp");
       finalBuffer = await sharp(buffer)

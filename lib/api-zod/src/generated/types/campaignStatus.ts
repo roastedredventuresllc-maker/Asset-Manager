@@ -16,4 +16,5 @@ export const CampaignStatus = {
   publishing: 'publishing',
   live: 'live',
   paused: 'paused',
+  error: 'error',
 } as const;

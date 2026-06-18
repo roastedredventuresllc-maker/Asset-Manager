@@ -1,10 +1,10 @@
 import { Router, type Request, type Response } from "express";
-import { db, campaignsTable, subscriptionsTable, publishesTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, campaignsTable, subscriptionsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { findOrCreateUser, createMagicLink } from "../lib/auth.js";
-import { getAdPlatform } from "../ads/index.js";
 import { sendMagicLinkEmail } from "../lib/email.js";
 import { generateId } from "../lib/ids.js";
+import { publishCampaignToPlatforms } from "../lib/publish.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -94,10 +94,10 @@ async function handleCheckoutComplete(
   // 1. Find or create user
   const userId = await findOrCreateUser(email);
 
-  // 2. Claim the campaign
+  // 2. Claim the campaign for this user
   await db
     .update(campaignsTable)
-    .set({ userId, status: "live" })
+    .set({ userId })
     .where(eq(campaignsTable.id, campaignId));
 
   // 3. Upsert subscription
@@ -124,68 +124,12 @@ async function handleCheckoutComplete(
       },
     });
 
-  // 4. Fire publishing pipeline
-  const campaign = await db.query.campaignsTable.findFirst({
-    where: eq(campaignsTable.id, campaignId),
+  // 4. Fire publishing pipeline (marks campaign live on success)
+  await publishCampaignToPlatforms(campaignId, {
+    dailyBudgetCents: parseInt(dailyBudgetCents ?? "7500"),
+    metaSharePct: parseInt(metaSharePct ?? "60"),
+    tiktokSharePct: parseInt(tiktokSharePct ?? "40"),
   });
-
-  if (campaign?.campaignJson) {
-    const cj = campaign.campaignJson as {
-      brandName: string;
-      audience: { ageMin: number; ageMax: number; interests: string[]; geo: string };
-      ads: Array<{ hook: string; body: string; cta: string; angle: string; imagePrompt: string; gradientHex1: string; gradientHex2: string; imageUrl?: string | null }>;
-    };
-
-    const domain =
-      process.env.REPLIT_DEV_DOMAIN ??
-      process.env.REPLIT_DOMAINS?.split(",")[0] ??
-      "localhost:3000";
-    const landingUrl = campaign.landingSlug
-      ? `https://${domain}/p/${campaign.landingSlug}`
-      : `https://${domain}`;
-
-    const budget = parseInt(dailyBudgetCents ?? "7500");
-    const metaPct = parseInt(metaSharePct ?? "60");
-    const tiktokPct = parseInt(tiktokSharePct ?? "40");
-
-    const platforms: Array<"meta" | "tiktok"> = [];
-    if (metaPct > 0) platforms.push("meta");
-    if (tiktokPct > 0) platforms.push("tiktok");
-
-    for (const platform of platforms) {
-      const share = platform === "meta" ? metaPct : tiktokPct;
-      const platformBudget = Math.round(budget * share / 100);
-
-      try {
-        const adPlatform = getAdPlatform(platform);
-        const result = await adPlatform.publishCampaign({
-          campaignId,
-          brandName: cj.brandName,
-          tagline: "",
-          landingUrl,
-          dailyBudgetCents: platformBudget,
-          audience: cj.audience,
-          ads: cj.ads,
-        });
-
-        await db.insert(publishesTable).values({
-          id: generateId("pub"),
-          campaignId,
-          platform,
-          externalCampaignId: result.externalCampaignId,
-          externalAdSetId: result.externalAdSetId,
-          externalAdId: result.externalAdId,
-          dailyBudgetCents: platformBudget,
-          status: "active",
-          publishedAt: new Date(),
-        });
-
-        logger.info({ campaignId, platform, result }, "Campaign published");
-      } catch (err) {
-        logger.error({ err, campaignId, platform }, "Failed to publish to platform");
-      }
-    }
-  }
 
   // 5. Send magic link email
   const token = await createMagicLink(userId);

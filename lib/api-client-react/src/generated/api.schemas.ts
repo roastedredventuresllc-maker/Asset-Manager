@@ -108,6 +108,7 @@ export const CampaignStatus = {
   publishing: 'publishing',
   live: 'live',
   paused: 'paused',
+  error: 'error',
 } as const;
 
 export interface Campaign {
@@ -139,6 +140,7 @@ export const CampaignSummaryStatus = {
   publishing: 'publishing',
   live: 'live',
   paused: 'paused',
+  error: 'error',
 } as const;
 
 export interface CampaignSummary {
@@ -160,6 +162,7 @@ export const CampaignStatusResponseStatus = {
   publishing: 'publishing',
   live: 'live',
   paused: 'paused',
+  error: 'error',
 } as const;
 
 export type AdAssetStatus = typeof AdAssetStatus[keyof typeof AdAssetStatus];

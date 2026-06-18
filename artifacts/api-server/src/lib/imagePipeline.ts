@@ -44,7 +44,10 @@ async function callFalAi(
       logger.warn({ model, status: res.status }, "fal.ai request failed");
       return null;
     }
-    return res.json();
+    return (await res.json()) as {
+      images?: Array<{ url: string }>;
+      image?: { url: string };
+    } | null;
   } catch (err) {
     logger.warn({ err, model }, "fal.ai fetch error");
     return null;
@@ -174,7 +177,7 @@ export async function processImageJob(job: GenerateImageJob): Promise<void> {
 
   await db
     .update(adAssetsTable)
-    .set({ status: "processing", attempts: db.$count(adAssetsTable) })
+    .set({ status: "processing" })
     .where(eq(adAssetsTable.id, job.adAssetId));
 
   try {

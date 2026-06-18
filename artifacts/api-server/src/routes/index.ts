@@ -5,6 +5,7 @@ import jobsRouter from "./jobs.js";
 import authRouter from "./auth.js";
 import uploadsRouter from "./uploads.js";
 import webhooksRouter from "./webhooks.js";
+import assetsRouter from "./assets.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/jobs", jobsRouter);
 router.use("/auth", authRouter);
 router.use("/uploads", uploadsRouter);
 router.use("/webhooks", webhooksRouter);
+router.use("/assets", assetsRouter);
 
 export default router;

@@ -25,6 +25,17 @@ async function tiktokFetch(path: string, method: string, body?: object): Promise
   return json.data;
 }
 
+async function uploadImage(imageUrl: string, advertiserId: string): Promise<string> {
+  const res = await tiktokFetch("/file/image/ad/upload/", "POST", {
+    advertiser_id: advertiserId,
+    upload_type: "UPLOAD_BY_URL",
+    image_url: imageUrl,
+    file_name: `launchpad_${Date.now()}.png`,
+  }) as { image_id: string };
+  if (!res.image_id) throw new Error("Failed to upload image to TikTok");
+  return res.image_id;
+}
+
 export class TikTokAdPlatform implements AdPlatform {
   async publishCampaign(input: PublishInput): Promise<PublishResult> {
     const bcId = process.env.TIKTOK_BC_ID;
@@ -54,30 +65,45 @@ export class TikTokAdPlatform implements AdPlatform {
       targeting_expansion: { expansion_enabled: true },
     }) as { adgroup_id: string };
 
-    // 3. Create ad
+    // 3. Create the ad from the primary creative. We generate static images,
+    // so the ad format is SINGLE_IMAGE; the image is uploaded first to obtain
+    // an image_id. TikTok requires an identity for image ads.
     const firstAd = input.ads[0];
     if (!firstAd) throw new Error("No ads to publish");
+
+    const identityId = process.env.TIKTOK_IDENTITY_ID;
+    if (!identityId) throw new Error("TIKTOK_IDENTITY_ID not set");
+
+    let imageId: string | undefined;
+    if (firstAd.imageUrl) {
+      imageId = await uploadImage(firstAd.imageUrl, advertiserId);
+    }
 
     const adRes = await tiktokFetch("/ad/create/", "POST", {
       advertiser_id: advertiserId,
       adgroup_id: adGroupRes.adgroup_id,
+      identity_type: "CUSTOMIZED_USER",
+      identity_id: identityId,
       creatives: [
         {
           ad_name: `${input.brandName} Ad`,
-          ad_format: "SINGLE_VIDEO",
+          ad_format: "SINGLE_IMAGE",
           ad_text: firstAd.body,
           call_to_action: "LEARN_MORE",
           landing_page_url: input.landingUrl,
+          ...(imageId ? { image_ids: [imageId] } : {}),
         },
       ],
-    }) as { ad_id: string };
+    }) as { ad_ids?: string[]; ad_id?: string };
+
+    const adId = adRes.ad_ids?.[0] ?? adRes.ad_id ?? "";
 
     logger.info({ campaignId: campaignRes.campaign_id }, "TikTok campaign published");
 
     return {
       externalCampaignId: campaignRes.campaign_id,
       externalAdSetId: adGroupRes.adgroup_id,
-      externalAdId: adRes.ad_id,
+      externalAdId: adId,
     };
   }
 

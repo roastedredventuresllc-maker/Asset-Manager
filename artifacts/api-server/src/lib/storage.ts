@@ -1,8 +1,21 @@
 import { logger } from "./logger.js";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { writeFile, mkdir, readFile } from "fs/promises";
+import { join, normalize, extname } from "path";
 
 const LOCAL_ASSETS_DIR = "/tmp/launchpad-assets";
+
+const CONTENT_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+};
+
+function contentTypeFor(key: string): string {
+  return CONTENT_TYPES[extname(key).toLowerCase()] ?? "application/octet-stream";
+}
 
 async function saveLocally(key: string, buffer: Buffer): Promise<string> {
   const dir = join(LOCAL_ASSETS_DIR, key.split("/").slice(0, -1).join("/"));
@@ -25,7 +38,8 @@ export async function uploadBuffer(
   try {
     const { Client } = await import("@replit/object-storage");
     const client = new Client();
-    await client.uploadFromBytes(key, buffer, { contentType });
+    void contentType; // Object Storage infers content type from the key
+    await client.uploadFromBytes(key, buffer);
     const domain =
       process.env.REPLIT_DEV_DOMAIN ??
       process.env.REPLIT_DOMAINS?.split(",")[0] ??
@@ -46,4 +60,46 @@ export async function uploadFromUrl(key: string, url: string): Promise<string> {
   const buffer = Buffer.from(await res.arrayBuffer());
   const contentType = res.headers.get("content-type") ?? "image/png";
   return uploadBuffer(key, buffer, contentType);
+}
+
+/**
+ * Fetch a stored asset by key. Tries the local filesystem first (where
+ * uploadBuffer writes when no bucket is configured), then Replit Object
+ * Storage. Returns null if not found anywhere. Rejects path traversal.
+ */
+export async function getAsset(
+  key: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const contentType = contentTypeFor(key);
+
+  // Guard against path traversal (e.g. ../../etc/passwd)
+  const safeKey = normalize(key).replace(/^(\.\.(\/|\\|$))+/, "");
+  if (safeKey.includes("..")) return null;
+
+  // Local filesystem (primary in dev / no bucket)
+  try {
+    const buffer = await readFile(join(LOCAL_ASSETS_DIR, safeKey));
+    return { buffer, contentType };
+  } catch {
+    // fall through to object storage
+  }
+
+  // Replit Object Storage (production with a bucket)
+  try {
+    const { Client } = await import("@replit/object-storage");
+    const client = new Client();
+    const result = (await client.downloadAsBytes(safeKey)) as {
+      ok?: boolean;
+      value?: Buffer[] | Buffer;
+    };
+    const bytes = Array.isArray(result?.value) ? result.value[0] : result?.value;
+    if (result?.ok && bytes) {
+      return { buffer: Buffer.from(bytes), contentType };
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ msg, key: safeKey }, "Object storage download failed");
+  }
+
+  return null;
 }

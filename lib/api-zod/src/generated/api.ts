@@ -36,7 +36,7 @@ export const ListCampaignsQueryParams = zod.object({
 export const ListCampaignsResponseItem = zod.object({
   "id": zod.string(),
   "brandName": zod.string(),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
   "spendTodayCents": zod.number().nullish(),
   "createdAt": zod.string()
 })
@@ -90,7 +90,7 @@ export const GetCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
@@ -150,7 +150,7 @@ export const ReviseCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
@@ -225,7 +225,7 @@ export const PauseCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
@@ -259,7 +259,7 @@ export const GetCampaignStatusParams = zod.object({
 
 export const GetCampaignStatusResponse = zod.object({
   "id": zod.string(),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
   "campaignData": zod.union([zod.object({
   "brandName": zod.string(),
   "tagline": zod.string(),

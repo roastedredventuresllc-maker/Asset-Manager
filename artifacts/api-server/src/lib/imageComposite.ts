@@ -8,6 +8,36 @@ export interface CompositeOptions {
   height: number;
 }
 
+/** Escape text before embedding in SVG markup — otherwise an unescaped `&`,
+ * `<`, etc. (common in ad copy like "Health & Wellness") breaks SVG parsing
+ * and the whole image render fails. */
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}
+
+/** A white pill button whose width adapts to the CTA text so it never
+ * overflows or leaves the text clipped. */
+function ctaPillSvg(cx: number, rectTopY: number, rawText: string, fontSize = 15): string {
+  const display = truncate(rawText, 26);
+  const charW = fontSize * 0.62;
+  const padX = 30;
+  const pillW = Math.max(150, Math.ceil(display.length * charW) + padX * 2);
+  const pillH = Math.round(fontSize * 3);
+  const x = cx - pillW / 2;
+  const textY = rectTopY + Math.round(pillH / 2) + Math.round(fontSize * 0.35);
+  return `<rect x="${x}" y="${rectTopY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="white"/>
+  <text x="${cx}" y="${textY}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" fill="#111111" font-weight="700">${escapeXml(display)}</text>`;
+}
+
 /**
  * Composite brand name + headline + CTA button on top of a source image buffer.
  * Returns a flat PNG buffer.
@@ -30,17 +60,13 @@ export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> 
   <text x="${width / 2}" y="${height - 160}" text-anchor="middle"
     font-family="Inter, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,0.7)"
     letter-spacing="3" font-weight="600">
-    ${brandName.toUpperCase()}
+    ${escapeXml(brandName.toUpperCase())}
   </text>
   <text x="${width / 2}" y="${height - 120}" text-anchor="middle"
     font-family="Georgia, serif" font-size="${width > 1000 ? 36 : 28}" fill="white" font-weight="400">
-    ${ad.hook.length > 50 ? ad.hook.substring(0, 50) + "…" : ad.hook}
+    ${escapeXml(truncate(ad.hook, 50))}
   </text>
-  <rect x="${width / 2 - 80}" y="${height - 90}" width="160" height="44" rx="22" fill="white"/>
-  <text x="${width / 2}" y="${height - 62}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="14" fill="#111111" font-weight="600">
-    ${ad.cta}
-  </text>
+  ${ctaPillSvg(width / 2, height - 90, ad.cta, 15)}
 </svg>`;
 
   if (sourceImageBuffer) {
@@ -69,8 +95,8 @@ export async function makeSvgFallback(opts: CompositeOptions): Promise<Buffer> {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${hex1}"/>
-      <stop offset="100%" stop-color="${hex2}"/>
+      <stop offset="0%" stop-color="${escapeXml(hex1)}"/>
+      <stop offset="100%" stop-color="${escapeXml(hex2)}"/>
     </linearGradient>
     <radialGradient id="light" cx="30%" cy="20%" r="60%">
       <stop offset="0%" stop-color="white" stop-opacity="0.12"/>
@@ -79,25 +105,21 @@ export async function makeSvgFallback(opts: CompositeOptions): Promise<Buffer> {
   </defs>
   <rect width="${width}" height="${height}" fill="url(#bg)"/>
   <rect width="${width}" height="${height}" fill="url(#light)"/>
+  <text x="${width / 2}" y="${height * 0.25}" text-anchor="middle"
+    font-family="Inter, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,0.55)"
+    letter-spacing="3" font-weight="600">
+    ${escapeXml(brandName.toUpperCase())}
+  </text>
   <text x="${width / 2}" y="${height * 0.38}" text-anchor="middle"
     font-family="Georgia, serif" font-size="${width > 1000 ? 48 : 36}" fill="white" font-weight="400">
-    ${ad.hook.length > 40 ? ad.hook.substring(0, 40) + "…" : ad.hook}
+    ${escapeXml(truncate(ad.hook, 40))}
   </text>
   <text x="${width / 2}" y="${height * 0.52}" text-anchor="middle"
     font-family="Inter, Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.75)"
     font-weight="400">
-    ${ad.body.length > 60 ? ad.body.substring(0, 60) + "…" : ad.body}
+    ${escapeXml(truncate(ad.body, 60))}
   </text>
-  <text x="${width / 2}" y="${height * 0.25}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,0.55)"
-    letter-spacing="3" font-weight="600">
-    ${brandName.toUpperCase()}
-  </text>
-  <rect x="${width / 2 - 90}" y="${height * 0.63}" width="180" height="48" rx="24" fill="white"/>
-  <text x="${width / 2}" y="${height * 0.63 + 32}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="15" fill="#111111" font-weight="600">
-    ${ad.cta}
-  </text>
+  ${ctaPillSvg(width / 2, height * 0.63, ad.cta, 16)}
 </svg>`;
 
   let base = sharp(Buffer.from(svg));

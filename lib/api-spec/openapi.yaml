@@ -445,7 +445,7 @@ components:
             - type: "null"
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused]
+          enum: [draft, generating, ready, publishing, live, paused, error]
         landingSlug:
           type: ["string", "null"]
         landingUrl:
@@ -467,7 +467,7 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused]
+          enum: [draft, generating, ready, publishing, live, paused, error]
         spendTodayCents:
           type: ["integer", "null"]
         createdAt:
@@ -481,7 +481,7 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused]
+          enum: [draft, generating, ready, publishing, live, paused, error]
         campaignData:
           description: Populated once generation is complete
           oneOf:

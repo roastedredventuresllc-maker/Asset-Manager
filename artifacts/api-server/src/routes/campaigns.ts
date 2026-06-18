@@ -4,8 +4,8 @@ import { eq, desc, sum, and } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "../lib/claude.js";
 import { generateId, generateSlug } from "../lib/ids.js";
 import { getAdPlatform } from "../ads/index.js";
+import { publishCampaignToPlatforms } from "../lib/publish.js";
 import { logger } from "../lib/logger.js";
-import type Stripe from "stripe";
 
 const router = Router();
 
@@ -313,6 +313,54 @@ router.post("/:id/publish", async (req, res) => {
     .where(eq(campaignsTable.id, req.params.id));
 
   return res.json({ checkoutUrl: session.url });
+});
+
+// POST /api/campaigns/:id/test-publish — DEV ONLY.
+// Runs the paid-social publishing pipeline directly, bypassing Stripe, so the
+// publish → live → metrics → pause flow can be tested end-to-end (in mock mode,
+// or against real platforms once META_*/TIKTOK_* + ADS_MODE=live are set).
+// Disabled in production.
+router.post("/:id/test-publish", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({ error: "test-publish is disabled in production" });
+  }
+
+  const { dailyBudgetCents, metaSharePct, tiktokSharePct } = req.body as {
+    dailyBudgetCents?: number;
+    metaSharePct?: number;
+    tiktokSharePct?: number;
+  };
+
+  const campaign = await db.query.campaignsTable.findFirst({
+    where: eq(campaignsTable.id, req.params.id),
+  });
+  if (!campaign) return res.status(404).json({ error: "not found" });
+  if (!campaign.campaignJson) {
+    return res.status(400).json({ error: "campaign not generated yet" });
+  }
+
+  let result;
+  try {
+    result = await publishCampaignToPlatforms(req.params.id, {
+      dailyBudgetCents: dailyBudgetCents ?? 7500,
+      metaSharePct: metaSharePct ?? 60,
+      tiktokSharePct: tiktokSharePct ?? 40,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, campaignId: req.params.id }, "test-publish failed");
+    return res.status(500).json({ error: message });
+  }
+
+  const fresh = await db.query.campaignsTable.findFirst({
+    where: eq(campaignsTable.id, req.params.id),
+  });
+  return res.json({
+    adsMode: process.env.ADS_MODE ?? "mock",
+    live: result.live,
+    outcomes: result.outcomes,
+    campaign: toCampaignResponse(fresh!),
+  });
 });
 
 // POST /api/campaigns/:id/pause

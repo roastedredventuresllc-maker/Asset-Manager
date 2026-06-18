@@ -8,7 +8,7 @@ export const campaignsTable = pgTable("campaigns", {
   brief: text("brief").notNull(),
   productImageUrl: text("product_image_url"),
   campaignJson: jsonb("campaign_json"), // AI-generated CampaignData object
-  status: text("status").notNull().default("draft"), // draft | generating | ready | publishing | live | paused
+  status: text("status").notNull().default("draft"), // draft | generating | ready | publishing | live | paused | error
   landingSlug: text("landing_slug"),
   revisionsUsed: integer("revisions_used").notNull().default(0),
   revisionsAllowed: integer("revisions_allowed").notNull().default(3),
