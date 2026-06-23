@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
 import { uploadBuffer } from "./storage.js";
 import { compositeAdImage, makeSvgFallback } from "./imageComposite.js";
-import { openai, editImages } from "@workspace/integrations-openai-ai-server/image";
+import type { AspectRatio } from "@workspace/integrations-gemini-ai/image";
 import type { CampaignAd } from "../ads/types.js";
 
 interface GenerateImageJob {
@@ -28,7 +28,12 @@ async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   try {
     const res = await fetch(url);
     if (!res.ok) return undefined;
-    return Buffer.from(await res.arrayBuffer());
+    const input = Buffer.from(await res.arrayBuffer());
+    // Normalize to PNG so the edit calls' declared MIME type (image/png for
+    // both Gemini inlineData and the OpenAI temp file) matches the real bytes.
+    // Uploads are stored as JPEG, which would otherwise be a format mismatch.
+    const { default: sharp } = await import("sharp");
+    return await sharp(input).png().toBuffer();
   } catch {
     return undefined;
   }
@@ -40,6 +45,7 @@ async function generateWithOpenAI(
   portrait: boolean,
 ): Promise<Buffer | null> {
   try {
+    const { openai } = await import("@workspace/integrations-openai-ai-server/image");
     const res = await openai.images.generate({
       model: "gpt-image-1",
       prompt: prompt + PHOTO_STYLE,
@@ -61,6 +67,7 @@ async function editWithOpenAI(
 ): Promise<Buffer | null> {
   const tmpPath = join(tmpdir(), `product-${randomUUID()}.png`);
   try {
+    const { editImages } = await import("@workspace/integrations-openai-ai-server/image");
     await writeFile(tmpPath, productBuffer);
     return await editImages([tmpPath], prompt + PHOTO_STYLE);
   } catch (err) {
@@ -71,6 +78,33 @@ async function editWithOpenAI(
   }
 }
 
+/**
+ * Primary generator: Nano Banana (Google Gemini 2.5 Flash Image).
+ * If `productBuffer` is provided, the scene is built around that real product
+ * photo (image editing); otherwise it's pure text-to-image. Lazily imported so
+ * a missing integration degrades to the OpenAI fallback instead of crashing.
+ */
+async function generateWithGemini(
+  prompt: string,
+  aspectRatio: AspectRatio,
+  productBuffer?: Buffer,
+): Promise<Buffer | null> {
+  try {
+    const gemini = await import("@workspace/integrations-gemini-ai/image");
+    if (productBuffer) {
+      return await gemini.editImage(
+        prompt + PHOTO_STYLE,
+        { data: productBuffer, mimeType: "image/png" },
+        aspectRatio,
+      );
+    }
+    return await gemini.generateImage(prompt + PHOTO_STYLE, aspectRatio);
+  } catch (err) {
+    logger.warn({ err }, "Nano Banana (gemini-2.5-flash-image) generation failed");
+    return null;
+  }
+}
+
 async function generateImageBuffer(
   job: GenerateImageJob,
 ): Promise<{ buffer: Buffer; model: string }> {
@@ -78,23 +112,35 @@ async function generateImageBuffer(
   const portrait = idx === 1;
   const width = 1080;
   const height = portrait ? 1920 : 1080;
+  const aspectRatio: AspectRatio = portrait ? "9:16" : "1:1";
 
   const productBuffer = productImageUrl
     ? await fetchProductImage(productImageUrl)
     : undefined;
 
-  let raw: Buffer | null = null;
-  let model = "gpt-image-1";
+  // Hero ad (idx 0): if the user uploaded a product photo, build the scene
+  // around it. Other slots are pure text-to-image.
+  const useProductPhoto = idx === 0 && !!productBuffer;
 
-  // Hero ad: if the user uploaded a product photo, build the scene around it.
-  if (idx === 0 && productBuffer) {
-    raw = await editWithOpenAI(productBuffer, ad.imagePrompt);
+  let raw: Buffer | null = null;
+  let model = "";
+
+  // Primary: Nano Banana (Gemini 2.5 Flash Image) — best-in-class generation.
+  raw = await generateWithGemini(
+    ad.imagePrompt,
+    aspectRatio,
+    useProductPhoto ? productBuffer : undefined,
+  );
+  if (raw) model = useProductPhoto ? "gemini-2.5-flash-image-edit" : "gemini-2.5-flash-image";
+
+  // Fallback: gpt-image-1 (OpenAI) if Nano Banana is unavailable.
+  if (!raw && useProductPhoto) {
+    raw = await editWithOpenAI(productBuffer!, ad.imagePrompt);
     if (raw) model = "gpt-image-1-edit";
   }
-
   if (!raw) {
     raw = await generateWithOpenAI(ad.imagePrompt, portrait);
-    model = "gpt-image-1";
+    if (raw) model = "gpt-image-1";
   }
 
   if (raw) {

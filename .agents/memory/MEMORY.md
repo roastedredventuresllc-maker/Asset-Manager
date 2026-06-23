@@ -1,3 +1,2 @@
-# Memory Index
-
-- [LaunchPad revision + image polling](launchpad-revision-polling.md) — polling watches adAsset.status (not campaign.status); resetting assets needs query invalidation; revisions must be serialized (no version token).
+- [esbuild externalizes @google/*](esbuild-external-google.md) — any @google/* pkg must be a DIRECT dep of api-server, not just transitive via a workspace lib, or it ERR_MODULE_NOT_FOUND at runtime (build+typecheck still pass).
+- [LaunchPad ad-image generation](ad-image-generation.md) — "Nano Banana" = Gemini 2.5 Flash Image via Replit Gemini integration; primary → gpt-image-1 → SVG; Higgsfield unsupported; upgrade path = gemini-3-pro-image-preview.
