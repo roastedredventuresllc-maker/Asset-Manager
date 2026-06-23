@@ -24,49 +24,53 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
     limit,
   });
 
-  let processed = 0;
-  let succeeded = 0;
-  let failed = 0;
+  // Process the batch concurrently — image generation is I/O-bound and slow
+  // (~15-20s each), so running the 3 ad images in parallel keeps the whole
+  // campaign under the latency budget instead of summing each one.
+  const results = await Promise.all(
+    pendingJobs.map(async (job): Promise<"succeeded" | "failed"> => {
+      await db
+        .update(jobsTable)
+        .set({ status: "processing", attempts: job.attempts + 1 })
+        .where(eq(jobsTable.id, job.id));
 
-  for (const job of pendingJobs) {
-    processed++;
-    await db
-      .update(jobsTable)
-      .set({ status: "processing", attempts: job.attempts + 1 })
-      .where(eq(jobsTable.id, job.id));
+      try {
+        if (job.type === "generate_image") {
+          const payload = job.payload as Parameters<typeof processImageJob>[0];
+          await processImageJob(payload);
+          await db
+            .update(jobsTable)
+            .set({ status: "done" })
+            .where(eq(jobsTable.id, job.id));
+          return "succeeded";
+        }
 
-    try {
-      if (job.type === "generate_image") {
-        const payload = job.payload as Parameters<typeof processImageJob>[0];
-        await processImageJob(payload);
-        await db
-          .update(jobsTable)
-          .set({ status: "done" })
-          .where(eq(jobsTable.id, job.id));
-        succeeded++;
-      } else {
         logger.warn({ jobType: job.type }, "Unknown job type");
         await db
           .update(jobsTable)
           .set({ status: "failed", lastError: "Unknown job type" })
           .where(eq(jobsTable.id, job.id));
-        failed++;
+        return "failed";
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        logger.error({ err, jobId: job.id }, "Job processing failed");
+        await db
+          .update(jobsTable)
+          .set({
+            status: job.attempts + 1 >= MAX_ATTEMPTS ? "failed" : "pending",
+            lastError: error,
+          })
+          .where(eq(jobsTable.id, job.id));
+        return "failed";
       }
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err);
-      logger.error({ err, jobId: job.id }, "Job processing failed");
-      await db
-        .update(jobsTable)
-        .set({
-          status: job.attempts + 1 >= MAX_ATTEMPTS ? "failed" : "pending",
-          lastError: error,
-        })
-        .where(eq(jobsTable.id, job.id));
-      failed++;
-    }
-  }
+    }),
+  );
 
-  return { processed, succeeded, failed };
+  return {
+    processed: results.length,
+    succeeded: results.filter((r) => r === "succeeded").length,
+    failed: results.filter((r) => r === "failed").length,
+  };
 }
 
 let running = false;

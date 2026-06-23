@@ -1,8 +1,13 @@
-import { db, adAssetsTable, campaignsTable } from "@workspace/db";
+import { db, adAssetsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { writeFile, unlink } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
 import { uploadBuffer } from "./storage.js";
 import { compositeAdImage, makeSvgFallback } from "./imageComposite.js";
+import { openai, editImages } from "@workspace/integrations-openai-ai-server/image";
 import type { CampaignAd } from "../ads/types.js";
 
 interface GenerateImageJob {
@@ -14,6 +19,11 @@ interface GenerateImageJob {
   productImageUrl?: string | null;
 }
 
+// We composite clean, on-brand typography ourselves, so the AI image should be
+// pure photography with no rendered text/logos (AI text tends to be garbled).
+const PHOTO_STYLE =
+  " Professional advertising product photography, photorealistic, sharp focus, high detail, studio-grade lighting, premium commercial campaign quality. Absolutely no text, no words, no letters, no logos, no watermarks.";
+
 async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   try {
     const res = await fetch(url);
@@ -24,33 +34,40 @@ async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   }
 }
 
-async function callFalAi(
-  model: string,
-  payload: object,
-): Promise<{ images?: Array<{ url: string }>; image?: { url: string } } | null> {
-  const key = process.env.FAL_API_KEY;
-  if (!key) return null;
-
+/** Text-to-image with gpt-image-1. Square or portrait depending on the slot. */
+async function generateWithOpenAI(
+  prompt: string,
+  portrait: boolean,
+): Promise<Buffer | null> {
   try {
-    const res = await fetch(`https://fal.run/${model}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    const res = await openai.images.generate({
+      model: "gpt-image-1",
+      prompt: prompt + PHOTO_STYLE,
+      size: portrait ? "1024x1536" : "1024x1024",
+      quality: "medium",
     });
-    if (!res.ok) {
-      logger.warn({ model, status: res.status }, "fal.ai request failed");
-      return null;
-    }
-    return (await res.json()) as {
-      images?: Array<{ url: string }>;
-      image?: { url: string };
-    } | null;
+    const b64 = res.data?.[0]?.b64_json;
+    return b64 ? Buffer.from(b64, "base64") : null;
   } catch (err) {
-    logger.warn({ err, model }, "fal.ai fetch error");
+    logger.warn({ err }, "gpt-image-1 generation failed");
     return null;
+  }
+}
+
+/** Image edit with gpt-image-1 — features the user's actual product photo. */
+async function editWithOpenAI(
+  productBuffer: Buffer,
+  prompt: string,
+): Promise<Buffer | null> {
+  const tmpPath = join(tmpdir(), `product-${randomUUID()}.png`);
+  try {
+    await writeFile(tmpPath, productBuffer);
+    return await editImages([tmpPath], prompt + PHOTO_STYLE);
+  } catch (err) {
+    logger.warn({ err }, "gpt-image-1 edit failed");
+    return null;
+  } finally {
+    await unlink(tmpPath).catch(() => {});
   }
 }
 
@@ -58,85 +75,40 @@ async function generateImageBuffer(
   job: GenerateImageJob,
 ): Promise<{ buffer: Buffer; model: string }> {
   const { ad, idx, productImageUrl } = job;
+  const portrait = idx === 1;
+  const width = 1080;
+  const height = portrait ? 1920 : 1080;
+
   const productBuffer = productImageUrl
     ? await fetchProductImage(productImageUrl)
     : undefined;
 
-  // Ad 0 + 2: 1080x1080. Ad 1: 1080x1920 vertical.
-  const width = 1080;
-  const height = idx === 1 ? 1920 : 1080;
+  let raw: Buffer | null = null;
+  let model = "gpt-image-1";
 
-  // Ad 2: Ideogram for typography accuracy
-  if (idx === 2) {
-    const res = await callFalAi("fal-ai/ideogram/v3", {
-      prompt: `${ad.imagePrompt}. Include the text: "${ad.hook}"`,
-      aspect_ratio: "SQUARE",
-      style: "DESIGN",
-    });
-    if (res?.images?.[0]?.url) {
-      const imgRes = await fetch(res.images[0].url);
-      const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
-      const { default: sharp } = await import("sharp");
-      const finalBuffer = await sharp(rawBuffer)
-        .resize(width, height, { fit: "cover" })
-        .composite([
-          {
-            input: await buildTextOverlay(ad, job.brandName, width, height),
-            top: 0,
-            left: 0,
-          },
-        ])
-        .png()
-        .toBuffer();
-      return { buffer: finalBuffer, model: "ideogram-v3" };
-    }
-  }
-
-  // Ad 0 with product photo: fal.ai image edit (Gemini Nano Banana)
+  // Hero ad: if the user uploaded a product photo, build the scene around it.
   if (idx === 0 && productBuffer) {
-    const base64 = productBuffer.toString("base64");
-    const res = await callFalAi("fal-ai/gemini-flash-edit", {
-      prompt: ad.imagePrompt,
-      image_url: `data:image/jpeg;base64,${base64}`,
-    });
-    if (res?.images?.[0]?.url || res?.image?.url) {
-      const url = (res.images?.[0]?.url ?? res.image?.url)!;
-      const imgRes = await fetch(url);
-      const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
-      const finalBuffer = await compositeAdImage({
-        ad,
-        brandName: job.brandName,
-        sourceImageBuffer: rawBuffer,
-        width,
-        height,
-      });
-      return { buffer: finalBuffer, model: "gemini-flash-edit" };
-    }
+    raw = await editWithOpenAI(productBuffer, ad.imagePrompt);
+    if (raw) model = "gpt-image-1-edit";
   }
 
-  // FLUX 1.1 Pro text-to-image fallback
-  const fluxModel = "fal-ai/flux/pro/v1.1";
-  const res = await callFalAi(fluxModel, {
-    prompt: ad.imagePrompt,
-    image_size: idx === 1 ? "portrait_9_16" : "square_1_1",
-    num_images: 1,
-    safety_tolerance: "2",
-  });
+  if (!raw) {
+    raw = await generateWithOpenAI(ad.imagePrompt, portrait);
+    model = "gpt-image-1";
+  }
 
-  if (res?.images?.[0]?.url) {
-    const imgRes = await fetch(res.images[0].url);
-    const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
+  if (raw) {
     const finalBuffer = await compositeAdImage({
       ad,
       brandName: job.brandName,
-      sourceImageBuffer: rawBuffer,
+      sourceImageBuffer: raw,
       width,
       height,
     });
-    return { buffer: finalBuffer, model: "flux-pro-1.1" };
+    return { buffer: finalBuffer, model };
   }
 
-  // SVG fallback: fal.ai unavailable or all attempts failed
+  // Last-resort fallback: branded gradient (no image model available)
   logger.info({ adAssetId: job.adAssetId }, "Using SVG fallback for ad image");
   const svgBuffer = await makeSvgFallback({
     ad,
@@ -146,30 +118,6 @@ async function generateImageBuffer(
     height,
   });
   return { buffer: svgBuffer, model: "svg-fallback" };
-}
-
-async function buildTextOverlay(
-  ad: CampaignAd,
-  brandName: string,
-  width: number,
-  height: number,
-): Promise<Buffer> {
-  const { compositeAdImage: _c, ..._ } = await import("./imageComposite.js");
-  const { default: sharp } = await import("sharp");
-  // Transparent overlay with just the text/button
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="none"/>
-    <text x="${width/2}" y="${height-140}" text-anchor="middle"
-      font-family="Georgia,serif" font-size="32" fill="white" font-weight="400">
-      ${ad.hook.substring(0, 50)}
-    </text>
-    <rect x="${width/2-80}" y="${height-100}" width="160" height="44" rx="22" fill="white"/>
-    <text x="${width/2}" y="${height-72}" text-anchor="middle"
-      font-family="Inter,Arial,sans-serif" font-size="14" fill="#111" font-weight="600">
-      ${ad.cta}
-    </text>
-  </svg>`;
-  return Buffer.from(svg);
 }
 
 export async function processImageJob(job: GenerateImageJob): Promise<void> {

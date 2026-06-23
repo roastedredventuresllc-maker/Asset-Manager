@@ -14,8 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resizeImage } from "@/lib/image-upload";
-import { Paperclip, Send, ArrowRight, CheckCircle2, X } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquarePlus } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -54,8 +53,17 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
       enabled: !!campaignId,
       queryKey: getGetCampaignStatusQueryKey(campaignId),
       refetchInterval: (query) => {
-        const state = query.state.data?.status;
-        if (state === "generating") return 3000;
+        const data = query.state.data;
+        if (!data) return 2000;
+        // The campaign flips to "ready" before the ad images finish (they are
+        // generated as background jobs after the copy is ready). Keep polling
+        // while generating OR while any asset is still pending/processing, so
+        // the UI swaps the shimmer for the real images instead of freezing.
+        const assetsPending = (data.adAssets ?? []).some(
+          (a) => a.status !== "done" && a.status !== "failed",
+        );
+        if (data.status === "generating" || data.status === "publishing") return 2000;
+        if (assetsPending) return 2000;
         return false;
       },
     },
@@ -256,9 +264,22 @@ function ErrorState({ setCampaignId }: { setCampaignId: (id: string | null) => v
   );
 }
 
+function FeedbackButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 rounded-full bg-background/80 backdrop-blur border border-border px-3 py-1.5 text-xs font-sans text-muted-foreground hover:text-foreground hover:border-foreground/40 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border"
+    >
+      <MessageSquarePlus className="w-3.5 h-3.5" />
+      {label}
+    </button>
+  );
+}
+
 function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: string, setCampaignId: (id: string | null) => void, statusRes: any }) {
-  const [showRevision, setShowRevision] = useState(false);
-  const [showShipModal, setShowShipModal] = useState(false);
+  const [revisionTarget, setRevisionTarget] = useState<string | null>(null);
+  const [showLaunch, setShowLaunch] = useState(false);
 
   const { data: campaign } = useGetCampaign(campaignId, {
     query: {
@@ -270,6 +291,14 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
   const data = statusRes.campaignData || campaign?.campaignData;
 
   if (!data) return <WorkingState />;
+
+  if (showLaunch) {
+    return <LaunchPage campaignId={campaignId} data={data} onBack={() => setShowLaunch(false)} />;
+  }
+
+  const assetsGenerating = (statusRes.adAssets ?? []).some(
+    (a: any) => a.status !== "done" && a.status !== "failed",
+  );
 
   return (
     <div className="min-h-[100dvh] bg-background pb-32 animate-in fade-in duration-1000">
@@ -283,9 +312,20 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
       </div>
 
       <div className="max-w-[1100px] mx-auto px-6">
-        <div className="text-center mt-12 mb-24">
+        <div className="text-center mt-12 mb-6">
           <h1 className="font-serif text-7xl md:text-[88px] leading-none mb-4">{data.brandName}</h1>
           <p className="font-serif italic text-2xl text-muted-foreground">{data.tagline}</p>
+        </div>
+        <div className="flex justify-center mb-24">
+          <FeedbackButton
+            label="Tweak name or tagline"
+            disabled={assetsGenerating}
+            onClick={() =>
+              setRevisionTarget(
+                `the brand name & tagline (currently "${data.brandName}" — "${data.tagline}")`,
+              )
+            }
+          />
         </div>
 
         <div className="mb-24">
@@ -294,13 +334,26 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
             {data.ads.map((ad: any, i: number) => {
               const asset = statusRes.adAssets?.find((a: any) => a.idx === i);
               return (
-                <div key={i} className="flex flex-col gap-4">
+                <div key={i} className="flex flex-col gap-4 group/ad">
                   <div className="w-full aspect-square bg-secondary rounded-xl overflow-hidden relative">
                     {asset?.imageUrl ? (
                       <img src={asset.imageUrl} className="w-full h-full object-cover animate-in fade-in duration-1000" />
+                    ) : asset?.status === "failed" ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-secondary text-muted-foreground font-sans text-xs">
+                        Image didn't generate
+                      </div>
                     ) : (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite] bg-secondary" />
                     )}
+                    <div className="absolute top-3 right-3 opacity-70 group-hover/ad:opacity-100 transition-opacity">
+                      <FeedbackButton
+                        label="Edit"
+                        disabled={assetsGenerating}
+                        onClick={() =>
+                          setRevisionTarget(`Ad ${i + 1} — the "${ad.angle}" angle (hook: "${ad.hook}")`)
+                        }
+                      />
+                    </div>
                   </div>
                   <div>
                     <div className="text-[11px] font-sans uppercase tracking-[1px] opacity-50 mb-2">{ad.angle}</div>
@@ -314,7 +367,14 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
         </div>
 
         <div className="mb-24">
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-8">Landing Page</div>
+          <div className="flex items-center justify-between mb-8">
+            <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Landing Page</div>
+            <FeedbackButton
+              label="Edit landing page"
+              disabled={assetsGenerating}
+              onClick={() => setRevisionTarget("the landing page")}
+            />
+          </div>
           <div className="w-full h-[600px] rounded-2xl overflow-hidden border border-border shadow-sm">
             {campaign?.landingSlug ? (
                <iframe src={`/p/${campaign.landingSlug}`} className="w-full h-full border-none" />
@@ -326,38 +386,61 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
 
         <div className="flex flex-col items-center gap-6">
           <button 
-            onClick={() => setShowShipModal(true)}
-            className="bg-foreground text-background px-8 py-4 rounded-full font-sans font-medium text-lg flex items-center gap-2 hover:opacity-90 transition-opacity"
+            onClick={() => setShowLaunch(true)}
+            disabled={assetsGenerating}
+            className="bg-foreground text-background px-8 py-4 rounded-full font-sans font-medium text-lg flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Ship {data.brandName} <ArrowRight className="w-5 h-5" />
+            {assetsGenerating ? "Finishing images…" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
           </button>
           
           <button 
-            onClick={() => setShowRevision(true)}
-            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setRevisionTarget("the overall campaign")}
+            disabled={assetsGenerating}
+            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Something's off?
+            Something's off? Give overall feedback
           </button>
         </div>
       </div>
 
-      <RevisionSheet open={showRevision} onOpenChange={setShowRevision} campaignId={campaignId} campaign={campaign} />
-      <ShipModal open={showShipModal} onOpenChange={setShowShipModal} campaignId={campaignId} data={data} />
+      <RevisionSheet
+        open={!!revisionTarget}
+        target={revisionTarget}
+        assetsGenerating={assetsGenerating}
+        onOpenChange={(o: boolean) => { if (!o) setRevisionTarget(null); }}
+        campaignId={campaignId}
+        campaign={campaign}
+      />
     </div>
   );
 }
 
-function RevisionSheet({ open, onOpenChange, campaignId, campaign }: any) {
+function RevisionSheet({ open, onOpenChange, campaignId, campaign, target, assetsGenerating }: any) {
   const [msg, setMsg] = useState("");
   const [messages, setMessages] = useState<{role: "user" | "ai", content: string}[]>([]);
   const revise = useReviseCampaign();
+  const queryClient = useQueryClient();
+
+  // Start a fresh thread whenever the user opens feedback on a different asset.
+  useEffect(() => { setMessages([]); setMsg(""); }, [target]);
+
+  const isTargeted = !!target && target !== "the overall campaign";
 
   const handleSend = () => {
     if (!msg.trim()) return;
-    setMessages([...messages, { role: "user", content: msg }]);
-    revise.mutate({ id: campaignId, data: { request: msg } }, {
+    const userText = msg.trim();
+    setMessages(prev => [...prev, { role: "user", content: userText }]);
+    const request = isTargeted ? `Regarding ${target}: ${userText}` : userText;
+    revise.mutate({ id: campaignId, data: { request } }, {
       onSuccess: () => {
-        setMessages(prev => [...prev, { role: "ai", content: "Got it. I've updated the campaign." }]);
+        // Visual revisions reset the ad images to pending on the server, so
+        // invalidate to resume polling and stream the new images in.
+        queryClient.invalidateQueries({ queryKey: getGetCampaignStatusQueryKey(campaignId) });
+        queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+        setMessages(prev => [...prev, { role: "ai", content: "Got it — I've updated the campaign. Close this to watch the changes apply." }]);
+      },
+      onError: () => {
+        setMessages(prev => [...prev, { role: "ai", content: "That didn't go through. Try rephrasing your request." }]);
       }
     });
     setMsg("");
@@ -369,7 +452,10 @@ function RevisionSheet({ open, onOpenChange, campaignId, campaign }: any) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-[65vh] rounded-t-3xl border-none shadow-2xl flex flex-col p-0 bg-background">
         <SheetHeader className="p-6 pb-2 border-b border-border/50">
-          <SheetTitle className="font-serif text-3xl">What's off?</SheetTitle>
+          <SheetTitle className="font-serif text-3xl">{isTargeted ? "Edit this" : "What's off?"}</SheetTitle>
+          {isTargeted && (
+            <p className="font-sans text-sm text-muted-foreground mt-1">Feedback on {target}</p>
+          )}
         </SheetHeader>
         
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
@@ -402,21 +488,29 @@ function RevisionSheet({ open, onOpenChange, campaignId, campaign }: any) {
                Ship it to unlock unlimited revisions.
              </div>
           ) : (
-            <div className="flex items-center gap-2 max-w-[800px] mx-auto">
-              <input 
-                className="flex-1 bg-secondary rounded-full px-6 py-4 outline-none font-sans text-sm"
-                placeholder="Make it edgier..."
-                value={msg}
-                onChange={e => setMsg(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-              />
-              <button 
-                onClick={handleSend}
-                disabled={!msg.trim() || revise.isPending}
-                className="bg-foreground text-background p-4 rounded-full disabled:opacity-50 transition-opacity"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+            <div className="max-w-[800px] mx-auto">
+              {assetsGenerating && (
+                <div className="text-center font-sans text-xs text-muted-foreground mb-3">
+                  Applying your last change — images are regenerating. One tweak at a time.
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input 
+                  className="flex-1 bg-secondary rounded-full px-6 py-4 outline-none font-sans text-sm disabled:opacity-50"
+                  placeholder="Make it edgier..."
+                  value={msg}
+                  disabled={assetsGenerating}
+                  onChange={e => setMsg(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                />
+                <button 
+                  onClick={handleSend}
+                  disabled={!msg.trim() || revise.isPending || assetsGenerating}
+                  className="bg-foreground text-background p-4 rounded-full disabled:opacity-50 transition-opacity"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -425,7 +519,7 @@ function RevisionSheet({ open, onOpenChange, campaignId, campaign }: any) {
   );
 }
 
-function ShipModal({ open, onOpenChange, campaignId, data }: any) {
+function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: any; onBack: () => void }) {
   const [budget, setBudget] = useState(data.recommendedBudgetPreset === 'scale' ? 20000 : data.recommendedBudgetPreset === 'starter' ? 2500 : 7500);
   const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 50);
   const [showAdjust, setShowAdjust] = useState(false);
@@ -448,9 +542,18 @@ function ShipModal({ open, onOpenChange, campaignId, data }: any) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[800px] p-12 bg-background border-none shadow-2xl rounded-[32px]">
-        <h2 className="font-serif text-5xl mb-12 text-center">Ship it</h2>
+    <div className="min-h-[100dvh] bg-background animate-in fade-in duration-700">
+      <div className="max-w-[800px] mx-auto px-6 pt-6">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-2 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to review
+        </button>
+      </div>
+      <div className="max-w-[800px] mx-auto px-6 pb-24 pt-8">
+        <h2 className="font-serif text-5xl md:text-6xl mb-3 text-center">Ship {data.brandName}</h2>
+        <p className="font-serif italic text-xl text-muted-foreground text-center mb-12">Choose a budget and where it runs.</p>
         
         <div className="mb-10">
           <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-6 text-center">Daily Budget</div>
@@ -509,8 +612,8 @@ function ShipModal({ open, onOpenChange, campaignId, data }: any) {
         >
           {publish.isPending ? "Preparing..." : `Ship ${data.brandName}`} <ArrowRight className="w-5 h-5" />
         </button>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
