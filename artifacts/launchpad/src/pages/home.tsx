@@ -146,7 +146,16 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
   const isPending = isSubmitting || generateCampaign.isPending;
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center p-4 bg-background">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background relative">
+      <header className="absolute top-0 left-0 right-0 flex justify-between items-center max-w-[1100px] mx-auto px-6 py-6 w-full">
+        <span className="font-sans font-bold text-xl tracking-tighter">LP</span>
+        <a
+          href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/docs`}
+          className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Developers
+        </a>
+      </header>
       <div className="max-w-[800px] w-full mx-auto flex flex-col items-center gap-12 animate-in fade-in duration-700">
         <h1 className="font-serif text-5xl md:text-7xl text-center text-foreground">
           What are you <span className="italic opacity-50">launching?</span>

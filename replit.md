@@ -30,9 +30,10 @@ Founders describe their product, get a complete AI-generated ad campaign in 30 s
 ## Where things live
 
 - `artifacts/launchpad/` — React frontend (one-page, six-state UX)
-- `artifacts/api-server/src/routes/` — Express route handlers
+- `artifacts/api-server/src/routes/` — Express route handlers (incl. `mcp.ts` — MCP endpoint at `/api/mcp`)
+- `artifacts/api-server/src/mcp/` — MCP server: registers campaign tools for AI clients
 - `artifacts/api-server/src/ads/` — Ad platform interfaces (mock/meta/tiktok)
-- `artifacts/api-server/src/lib/` — Shared libs: Claude, auth, storage, image pipeline
+- `artifacts/api-server/src/lib/` — Shared libs: Claude, auth, storage, image pipeline, `campaignService.ts` (shared by REST routes + MCP)
 - `lib/db/src/schema/` — Drizzle table definitions (users, campaigns, ad_assets, publishes, jobs, subscriptions, magic_links, metrics_snapshots)
 - `lib/api-spec/openapi.yaml` — OpenAPI spec (source of truth)
 - `lib/api-client-react/` — Generated React Query hooks

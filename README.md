@@ -183,6 +183,15 @@ Served at `/p/:slug` — server-rendered HTML from stored campaign JSON. Zero DN
 
 ---
 
+## MCP Server (for AI assistants)
+
+LaunchPad exposes its full campaign lifecycle as an [MCP](https://modelcontextprotocol.io) server embedded in the api-server at `POST /api/mcp` (Streamable HTTP transport). AI clients like Claude Desktop and Cursor can generate, revise, publish, pause, and monitor campaigns on a user's behalf, authenticated with a LaunchPad magic-link token (`Authorization: Bearer <token>`).
+
+- Developer docs (tools, client config, safety): [`docs/mcp-server.md`](docs/mcp-server.md)
+- In-app docs page: `/docs` (linked as "Developers" from the home page header)
+
+> ⚠️ The `publish_campaign` and `pause_campaign` tools affect real spend and live ads. Publish returns a Stripe Checkout URL rather than charging silently.
+
 ## Pro Tier
 
 $99/mo Pro is **never shown in the ship flow**. It surfaces only:
