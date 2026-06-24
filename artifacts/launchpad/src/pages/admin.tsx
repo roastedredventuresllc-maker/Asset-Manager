@@ -1,17 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import {
-  Lock,
-  LogOut,
-  Heart,
-  MessageCircle,
-  Send,
-  Bookmark,
-  MoreHorizontal,
-  ChevronRight,
-  Share2,
-  Music2,
-} from "lucide-react";
+import { Lock, LogOut, Upload, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { resizeImage } from "../lib/image-upload";
 
 const TOKEN_KEY = "lp_admin_token";
 
@@ -67,27 +57,36 @@ interface Library {
   landingPattern: { structure: string[]; principles: string };
 }
 
+type AssetStatus = "analyzing" | "ready" | "failed";
+interface ReferenceAnalysis {
+  format: string;
+  hook: string;
+  angle: string;
+  visualTokens: string[];
+  copyPattern: string;
+  tone: string;
+  whyItWorks: string;
+}
+interface ReferenceAsset {
+  id: string;
+  platform: string;
+  source: "curated" | "uploaded";
+  sourceUrl: string | null;
+  title: string | null;
+  imageUrl: string;
+  status: AssetStatus;
+  analysis: ReferenceAnalysis | null;
+}
+interface PlatformMeta {
+  slug: string;
+  label: string;
+}
+
 function hashHue(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
   return h;
 }
-function gradientFor(id: string): string {
-  const h = hashHue(id);
-  return `linear-gradient(140deg, hsl(${h} 44% 85%), hsl(${(h + 42) % 360} 48% 70%))`;
-}
-function accentFor(id: string): string {
-  return `hsl(${hashHue(id)} 46% 52%)`;
-}
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export default function Admin() {
   const [, setLocation] = useLocation();
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
@@ -98,6 +97,65 @@ export default function Admin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [assets, setAssets] = useState<ReferenceAsset[] | null>(null);
+  const [assetPlatforms, setAssetPlatforms] = useState<PlatformMeta[]>([]);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const refetchAssets = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/admin/reference-assets", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        platforms: PlatformMeta[];
+        assets: ReferenceAsset[];
+      };
+      setAssets(data.assets);
+      setAssetPlatforms(data.platforms);
+    } catch {
+      /* keep previous state */
+    }
+  }, [token]);
+
+  const handleUpload = async (platform: string, file: File) => {
+    if (!token) return;
+    setUploading(platform);
+    setUploadError(null);
+    try {
+      const dataUrl = await resizeImage(file, 1280);
+      const res = await fetch("/api/admin/reference-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({ platform, dataUrl }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        setUploadError(d.error ?? "Upload failed.");
+        return;
+      }
+      await refetchAssets();
+    } catch {
+      setUploadError("Couldn't process that image.");
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!token) return;
+    setAssets((prev) => prev?.filter((a) => a.id !== id) ?? prev);
+    try {
+      await fetch(`/api/admin/reference-assets/${id}`, {
+        method: "DELETE",
+        headers: { "x-admin-token": token },
+      });
+    } catch {
+      void refetchAssets();
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -140,6 +198,17 @@ export default function Admin() {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (phase === "ready" && token) void refetchAssets();
+  }, [phase, token, refetchAssets]);
+
+  useEffect(() => {
+    if (!assets || !token) return;
+    if (!assets.some((a) => a.status === "analyzing")) return;
+    const t = setTimeout(() => void refetchAssets(), 4000);
+    return () => clearTimeout(t);
+  }, [assets, token, refetchAssets]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,28 +371,19 @@ export default function Admin() {
           </p>
         </div>
 
-        <Section label="Ad creative archetypes">
-          <div className="grid gap-x-8 gap-y-14 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))] items-start">
+        <ReferenceExamples
+          assets={assets}
+          platforms={assetPlatforms}
+          uploading={uploading}
+          uploadError={uploadError}
+          onUpload={handleUpload}
+          onDelete={handleDelete}
+        />
+
+        <Section label="Creative strategy patterns">
+          <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] items-start">
             {library.adArchetypes.map((ad) => (
-              <figure key={ad.id} className="flex flex-col">
-                {ad.surface === "feed-square" ? (
-                  <FeedCard ad={ad} />
-                ) : (
-                  <VerticalCard ad={ad} />
-                )}
-                <figcaption className="mt-5">
-                  <div className="text-[11px] font-sans uppercase tracking-[1.5px] opacity-40">
-                    {placementName(ad.surface)} · {ad.angle}
-                  </div>
-                  <h4 className="font-serif text-2xl mt-1.5">{ad.title}</h4>
-                  <p className="font-sans text-xs text-muted-foreground leading-relaxed mt-2">
-                    <span className="opacity-50">Imagery</span> — {ad.imageryStyle}
-                  </p>
-                  <p className="font-sans text-xs text-muted-foreground leading-relaxed mt-1.5">
-                    <span className="opacity-50">Why it works</span> — {ad.whyItWorks}
-                  </p>
-                </figcaption>
-              </figure>
+              <ArchetypeCard key={ad.id} ad={ad} placement={placementName(ad.surface)} />
             ))}
           </div>
         </Section>
@@ -433,92 +493,208 @@ function PrincipleList({ items }: { items: string[] }) {
   );
 }
 
-function FeedCard({ ad }: { ad: ReferenceArchetype }) {
+function ArchetypeCard({ ad, placement }: { ad: ReferenceArchetype; placement: string }) {
   return (
-    <div className="w-full max-w-[340px] mx-auto bg-card rounded-2xl border border-border shadow-sm overflow-hidden font-sans">
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
-          style={{ background: accentFor(ad.id) }}
-        >
-          {initials(ad.vertical)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold leading-tight truncate">your_brand</div>
-          <div className="text-[11px] text-muted-foreground leading-tight">Sponsored</div>
-        </div>
-        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+    <article className="bg-card border border-border rounded-2xl p-6 flex flex-col h-full">
+      <div className="text-[11px] font-sans uppercase tracking-[1.5px] opacity-40">
+        {placement} · {ad.angle}
       </div>
-      <div
-        className="aspect-square relative flex items-center justify-center"
-        style={{ background: gradientFor(ad.id) }}
-      >
-        <span className="font-serif text-6xl text-white/40 select-none">{initials(ad.vertical)}</span>
-        <span className="absolute bottom-2.5 left-2.5 text-[10px] font-sans uppercase tracking-wide text-white/80 bg-black/20 backdrop-blur rounded-full px-2 py-0.5">
-          {ad.vertical}
-        </span>
+      <h4 className="font-serif text-2xl mt-1.5 mb-4">{ad.title}</h4>
+      <div className="flex flex-col gap-3">
+        <ArchLine label="Hook" value={ad.hookPattern} />
+        <ArchLine label="Body" value={ad.bodyPattern} />
+        <ArchLine label="CTA" value={ad.ctaPattern} />
+        <ArchLine label="Imagery" value={ad.imageryStyle} />
       </div>
-      <div className="flex items-center gap-4 px-3 py-2.5">
-        <Heart className="w-5 h-5" />
-        <MessageCircle className="w-5 h-5" />
-        <Send className="w-5 h-5" />
-        <Bookmark className="w-5 h-5 ml-auto" />
-      </div>
-      <div className="px-3 pb-2.5">
-        <p className="text-[13px] leading-snug">
-          <span className="font-semibold">your_brand</span> {ad.hookPattern}
-        </p>
-        <p className="text-[12px] text-muted-foreground leading-snug mt-1">{ad.bodyPattern}</p>
-      </div>
-      <a className="flex items-center justify-between px-3 py-3 border-t border-border bg-secondary/40 text-[13px] font-medium cursor-default">
-        {ad.ctaPattern}
-        <ChevronRight className="w-4 h-4" />
-      </a>
+      <p className="font-sans text-xs text-muted-foreground leading-relaxed mt-4 pt-4 border-t border-border/60">
+        <span className="opacity-50">Why it works</span> — {ad.whyItWorks}
+      </p>
+    </article>
+  );
+}
+
+function ArchLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mb-0.5">
+        {label}
+      </span>
+      <span className="font-sans text-sm text-foreground/80 leading-snug">{value}</span>
     </div>
   );
 }
 
-function VerticalCard({ ad }: { ad: ReferenceArchetype }) {
-  const isTikTok = ad.surface === "tiktok-infeed";
+function ReferenceExamples({
+  assets,
+  platforms,
+  uploading,
+  uploadError,
+  onUpload,
+  onDelete,
+}: {
+  assets: ReferenceAsset[] | null;
+  platforms: PlatformMeta[];
+  uploading: string | null;
+  uploadError: string | null;
+  onUpload: (platform: string, file: File) => void;
+  onDelete: (id: string) => void;
+}) {
   return (
-    <div className="mx-auto w-[230px]">
-      <div
-        className="relative rounded-[2rem] border-[6px] border-foreground/90 overflow-hidden shadow-xl"
-        style={{ aspectRatio: "9 / 16" }}
-      >
-        <div className="absolute inset-0" style={{ background: gradientFor(ad.id) }} />
-        <span className="absolute inset-0 flex items-center justify-center font-serif text-white/30 text-5xl select-none">
-          {initials(ad.vertical)}
-        </span>
-        <div className="absolute top-3 left-0 right-0 flex justify-center">
-          <span className="text-[10px] font-sans uppercase tracking-wide text-white/90 bg-black/25 backdrop-blur rounded-full px-2.5 py-0.5">
-            Sponsored
-          </span>
+    <Section label="Real reference examples">
+      <p className="-mt-4 mb-10 max-w-2xl font-sans text-sm text-muted-foreground leading-relaxed">
+        Real, best-in-class ads — curated from the web and uploaded by you. Each one is
+        vision-analysed and indexed into the reference corpus that shapes every generation. Add your
+        own to any platform.
+      </p>
+      {assets === null ? (
+        <div className="flex items-center gap-2 font-sans text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading examples…
         </div>
+      ) : (
+        <div className="flex flex-col gap-16">
+          {platforms.map((p) => {
+            const items = assets.filter((a) => a.platform === p.slug);
+            return (
+              <div key={p.slug}>
+                <div className="flex items-center justify-between gap-4 mb-6">
+                  <h3 className="font-serif text-3xl flex items-baseline gap-2.5">
+                    {p.label}
+                    <span className="font-sans text-sm text-muted-foreground">{items.length}</span>
+                  </h3>
+                  <UploadButton
+                    platform={p.slug}
+                    uploading={uploading === p.slug}
+                    onUpload={onUpload}
+                  />
+                </div>
+                {items.length === 0 ? (
+                  <p className="font-sans text-sm text-muted-foreground">
+                    No examples yet — add the first one.
+                  </p>
+                ) : (
+                  <div className="grid gap-x-6 gap-y-10 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] items-start">
+                    {items.map((a) => (
+                      <AssetCard key={a.id} asset={a} onDelete={onDelete} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {uploadError && <p className="mt-5 font-sans text-sm text-red-500">{uploadError}</p>}
+    </Section>
+  );
+}
 
-        {isTikTok && (
-          <div className="absolute right-2.5 bottom-28 flex flex-col items-center gap-4 text-white">
-            <Heart className="w-6 h-6" />
-            <MessageCircle className="w-6 h-6" />
-            <Share2 className="w-6 h-6" />
-            <Music2 className="w-5 h-5 animate-spin [animation-duration:4s]" />
+function UploadButton({
+  platform,
+  uploading,
+  onUpload,
+}: {
+  platform: string;
+  uploading: boolean;
+  onUpload: (platform: string, file: File) => void;
+}) {
+  return (
+    <label
+      className={`inline-flex items-center gap-1.5 font-sans text-sm rounded-full px-4 py-2 transition-opacity ${
+        uploading
+          ? "bg-secondary text-muted-foreground cursor-wait"
+          : "bg-foreground text-background hover:opacity-90 cursor-pointer"
+      }`}
+    >
+      {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+      {uploading ? "Uploading…" : "Add example"}
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={uploading}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onUpload(platform, f);
+          e.target.value = "";
+        }}
+      />
+    </label>
+  );
+}
+
+function AssetCard({ asset, onDelete }: { asset: ReferenceAsset; onDelete: (id: string) => void }) {
+  const a = asset;
+  return (
+    <figure className="group flex flex-col">
+      <div className="relative rounded-xl overflow-hidden border border-border bg-secondary/40">
+        <img
+          src={a.imageUrl}
+          alt={a.title ?? "Ad reference"}
+          loading="lazy"
+          className="w-full h-auto block"
+        />
+        {a.status === "analyzing" && (
+          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-[11px] font-sans uppercase tracking-wide text-muted-foreground">
+              Indexing…
+            </span>
           </div>
         )}
-
-        <div
-          className={`absolute left-0 right-0 bottom-0 p-3 pt-10 bg-gradient-to-t from-black/75 to-transparent text-white ${
-            isTikTok ? "pr-12" : ""
-          }`}
+        {a.status === "failed" && (
+          <div className="absolute top-2 left-2 text-[10px] font-sans bg-red-500/90 text-white rounded-full px-2 py-0.5">
+            Analysis failed
+          </div>
+        )}
+        <button
+          onClick={() => onDelete(a.id)}
+          title="Remove"
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
         >
-          <p className="font-semibold text-[13px] leading-snug">{ad.hookPattern}</p>
-          <p className="text-[11px] text-white/80 leading-snug mt-1 line-clamp-2">{ad.bodyPattern}</p>
-          <button className="mt-2.5 w-full bg-white text-black rounded-lg py-1.5 text-[12px] font-semibold flex items-center justify-center gap-1 cursor-default">
-            {ad.ctaPattern}
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
-    </div>
+      <figcaption className="mt-3">
+        <div className="flex items-center gap-2.5">
+          <span className="text-[10px] font-sans uppercase tracking-[1.5px] opacity-40">
+            {a.source === "curated" ? "Curated" : "Uploaded"}
+          </span>
+          {a.sourceUrl && (
+            <a
+              href={a.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] font-sans text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
+            >
+              source <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+        {a.title && <h4 className="font-serif text-lg leading-snug mt-1">{a.title}</h4>}
+        {a.analysis && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[11px] font-sans text-muted-foreground leading-relaxed">
+              <span className="opacity-50">Angle</span> — {a.analysis.angle}
+            </p>
+            <p className="text-[11px] font-sans text-muted-foreground leading-relaxed">
+              <span className="opacity-50">Why</span> — {a.analysis.whyItWorks}
+            </p>
+            {a.analysis.visualTokens?.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {a.analysis.visualTokens.slice(0, 4).map((t, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] font-sans px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/60"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </figcaption>
+    </figure>
   );
 }
 

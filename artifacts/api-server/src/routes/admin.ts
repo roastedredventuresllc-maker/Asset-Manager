@@ -1,6 +1,15 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { createHmac, createHash, timingSafeEqual } from "crypto";
 import { getReferenceLibrary } from "../lib/referenceLibrary.js";
+import {
+  REFERENCE_PLATFORMS,
+  isValidPlatform,
+  ingestReferenceImage,
+  listReferenceAssets,
+  deleteReferenceAsset,
+  seedReferenceLibrary,
+} from "../lib/referenceAssets.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -102,6 +111,78 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 // GET /api/admin/reference-library — the curated reference library, gated.
 router.get("/reference-library", requireAdmin, (_req: Request, res: Response) => {
   return res.json(getReferenceLibrary());
+});
+
+// GET /api/admin/reference-assets — real ad-creative corpus (curated + uploaded).
+router.get("/reference-assets", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const assets = await listReferenceAssets();
+    return res.json({ platforms: REFERENCE_PLATFORMS, assets });
+  } catch (err) {
+    logger.error({ err }, "Failed to list reference assets");
+    return res.status(500).json({ error: "Failed to load reference assets." });
+  }
+});
+
+// POST /api/admin/reference-assets — upload + index a new reference image.
+router.post("/reference-assets", requireAdmin, async (req: Request, res: Response) => {
+  const { platform, dataUrl, title } = (req.body ?? {}) as {
+    platform?: unknown;
+    dataUrl?: unknown;
+    title?: unknown;
+  };
+
+  if (!isValidPlatform(platform)) {
+    return res.status(400).json({ error: "Invalid platform." });
+  }
+  if (typeof dataUrl !== "string") {
+    return res.status(400).json({ error: "dataUrl required." });
+  }
+  const match = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+  if (!match) return res.status(400).json({ error: "Invalid image data." });
+
+  const buffer = Buffer.from(match[2] ?? "", "base64");
+  if (buffer.length === 0) return res.status(400).json({ error: "Empty image." });
+  // Stay under the express.json() body limit (10mb) once base64 overhead is added.
+  if (buffer.length > 7 * 1024 * 1024) {
+    return res.status(400).json({ error: "Image too large (max 7MB)." });
+  }
+
+  try {
+    const asset = await ingestReferenceImage({
+      platform,
+      source: "uploaded",
+      title: typeof title === "string" && title.trim() ? title.trim().slice(0, 160) : null,
+      buffer,
+    });
+    return res.status(201).json(asset);
+  } catch (err) {
+    logger.error({ err }, "Reference asset upload failed");
+    return res.status(500).json({ error: "Upload failed." });
+  }
+});
+
+// DELETE /api/admin/reference-assets/:id — remove an asset from the corpus.
+router.delete("/reference-assets/:id", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const ok = await deleteReferenceAsset(String(req.params.id));
+    if (!ok) return res.status(404).json({ error: "Not found." });
+    return res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Reference asset delete failed");
+    return res.status(500).json({ error: "Delete failed." });
+  }
+});
+
+// POST /api/admin/reference-assets/seed — (re)populate curated examples. Idempotent.
+router.post("/reference-assets/seed", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await seedReferenceLibrary();
+    return res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Reference seed failed");
+    return res.status(500).json({ error: "Seed failed." });
+  }
 });
 
 export default router;

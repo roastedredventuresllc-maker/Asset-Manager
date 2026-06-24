@@ -38,3 +38,28 @@ idx 2 = alternate feed 1:1. This MUST match the idx→placement mapping in
 composited separately downstream. The sanitizer is deliberately scoped to
 explicit/quoted text — it does not try to catch every implicit reference (the
 negative suffix is the backstop), to avoid mangling good prompts.
+
+## Real indexed corpus (second guidance source, alongside the static playbook)
+
+Generation guidance now comes from TWO sources, both appended to
+`GENERATE_SYSTEM` in `claude.ts`:
+1. the static hand-written playbook above (`referenceLibrary.ts` →
+   `buildReferencePlaybook`), and
+2. a REAL RAG corpus of vision-analysed ad images (`referenceAssets.ts` →
+   `getIndexedReferenceNotes`), stored in the `reference_assets` table.
+
+The real corpus is seeded at startup from `referenceSeed.ts` (idempotent by
+`seedKey`; `ensureSeededInBackground` only seeds when the table is empty),
+admin-managed (upload/delete/seed via `/api/admin/reference-assets`, all
+`requireAdmin`), each image Claude-vision-analysed into the same
+`ReferenceAnalysis` shape. Assets stuck in `analyzing` after a restart are
+recovered on next boot (`recoverStaleAnalyzing` re-reads the stored image via
+`getAsset` — no re-download).
+
+**Why:** "real reference library, no blank cards" needed actual images, not CSS
+placeholders; RAG (not fine-tuning) is how taste improves on the current stack.
+**How to apply:** add curated seeds in `referenceSeed.ts`; keep BOTH guidance
+sources in mind when editing the system prompt. Storage falls back to local FS
+when no object-storage bucket is configured, and `imageUrl` is stored absolute
+(dev-domain) — so the corpus does NOT persist across production deploys until
+object storage is set up.

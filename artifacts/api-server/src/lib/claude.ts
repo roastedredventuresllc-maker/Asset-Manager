@@ -1,5 +1,6 @@
 import { anthropic as client } from "@workspace/integrations-anthropic-ai";
 import { buildReferencePlaybook } from "./referenceLibrary.js";
+import { getIndexedReferenceNotes } from "./referenceAssets.js";
 
 export interface CampaignAd {
   hook: string;
@@ -129,10 +130,12 @@ function sanitizeImagePrompt(prompt: string): string {
 
 export async function generateCampaign(brief: string): Promise<CampaignData> {
   const playbook = buildReferencePlaybook(brief);
+  // RAG: pull in notes from the indexed corpus of real ad creatives (best-effort).
+  const indexedNotes = await getIndexedReferenceNotes(brief).catch(() => "");
   const message = await client.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 4096,
-    system: `${GENERATE_SYSTEM}\n\n${playbook}`,
+    system: `${GENERATE_SYSTEM}\n\n${playbook}${indexedNotes}`,
     messages: [
       {
         role: "user",

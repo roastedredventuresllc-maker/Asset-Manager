@@ -1,1 +1,3 @@
 - [LaunchPad dev & landing constraints](launchpad-dev-notes.md) — api-server has no dev watcher (restart workflow after backend edits); landing HTML renders AI palette/copy so escape + sanitizeColor everything; admin auth is a stateless HMAC token.
+- [Reference corpus (real + static)](ad-reference-library.md) — gen guidance = static playbook + real RAG corpus of vision-analysed ads (reference_assets table); keep both in sync; corpus needs object storage to persist in prod.
+- [api-server typecheck](api-server-typecheck.md) — per-package typecheck shows false @workspace/db errors from stale dists; use root `pnpm run typecheck` (tsc --build) or rebuild lib/db decls first.
