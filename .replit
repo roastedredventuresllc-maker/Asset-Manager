@@ -24,6 +24,8 @@ timeoutMs = 20000
 [userenv.shared]
 ADS_MODE = "mock"
 
+[userenv.development]
+
 [[ports]]
 localPort = 8080
 externalPort = 80

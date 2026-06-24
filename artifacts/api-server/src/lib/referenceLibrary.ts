@@ -42,6 +42,19 @@ export interface ReferenceArchetype {
   whyItWorks: string;
 }
 
+/** A best-in-class landing-page / website pattern that converts in 2026. */
+export interface WebsiteReference {
+  id: string;
+  title: string;
+  vertical: string;
+  keywords: string[];
+  heroDevice: string;
+  sections: string[];
+  typography: string;
+  palette: string;
+  whyItWorks: string;
+}
+
 /** Which placement each of the three generated ads targets. */
 export interface AdSlotContract {
   idx: number;
@@ -114,6 +127,15 @@ export const DESIGN_PRINCIPLES_2026: string[] = [
   "Proof early, friction late: place social proof / ratings / a credibility cue up front; make the CTA obvious and low-commitment.",
 ];
 
+export const WEB_DESIGN_PRINCIPLES_2026: string[] = [
+  "One conversion goal per page: every section earns the scroll toward a single primary CTA. Cut anything that doesn't move the visitor toward it.",
+  "Above-the-fold clarity in 3 seconds: the visitor instantly knows what it is, who it's for, and the next step. Outcome-led headline, never a vague slogan.",
+  "Show, don't tell: a real product visual, live demo, or before/after beats descriptive paragraphs and generic stock photography.",
+  "Proof next to the ask: ratings, named testimonials, logos, or user counts sit exactly where doubt arises — not buried in a footer.",
+  "Restrained designed system: 1–2 typefaces, one accent color, a confident type scale, generous whitespace, consistent rounded geometry. Editorial, not templated.",
+  "Speed & mobile-first: sub-second feel, a thumb-reachable sticky CTA, and sections that reflow cleanly to a single column on phones.",
+];
+
 /** High-converting 2026 landing-page structure (outcome-led, proof-rich). */
 export const LANDING_PATTERN = {
   structure: [
@@ -127,6 +149,102 @@ export const LANDING_PATTERN = {
   principles:
     "Whitespace-led, single accent color, sticky CTA, sub-second feel. Every section earns the scroll toward one conversion goal.",
 };
+
+/**
+ * Best-in-class 2026 landing-page archetypes by vertical. These drive the copy
+ * the AI writes for the post-click page (hero, benefits, proof, CTA) and are
+ * surfaced in the admin reference library as browser-frame mockups.
+ */
+export const WEBSITE_REFERENCES: WebsiteReference[] = [
+  {
+    id: "saas-product-tour",
+    title: "Product-tour SaaS",
+    vertical: "saas",
+    keywords: ["saas", "software", "app", "tool", "platform", "dashboard", "workflow", "productivity", "b2b", "automation", "crm", "invoicing", "analytics"],
+    heroDevice: "Live product UI floating on a soft gradient, one screen highlighted, outcome headline beside it.",
+    sections: ["Outcome hero + product shot", "Trusted-by logo row", "Benefit-by-outcome rows (alternating)", "Interactive / animated demo", "Social proof wall", "Simple pricing", "FAQ", "Closing CTA"],
+    typography: "Clean grotesque sans for UI confidence, large tracked headline, generous line-height.",
+    palette: "Near-white canvas, ink text, a single saturated brand accent on CTAs and highlights.",
+    whyItWorks: "Showing the actual product doing the job — not describing it — collapses the gap between curiosity and trust and lifts trial starts.",
+  },
+  {
+    id: "dtc-product-story",
+    title: "DTC product story",
+    vertical: "ecommerce",
+    keywords: ["dtc", "ecommerce", "shop", "store", "product", "brand", "consumer", "gadget", "accessory", "buy", "retail", "cpg"],
+    heroDevice: "Full-bleed hero of the product in real use, bold benefit headline overlaid, add-to-cart in reach.",
+    sections: ["Lifestyle hero + CTA", "Scrolling benefit ticker", "Ingredient / material breakdown", "UGC review wall with photos", "Us-vs-the-old-way comparison", "Guarantee & shipping", "Sticky buy bar"],
+    typography: "Editorial serif display for desire, humanist sans for body, confident size jumps.",
+    palette: "Warm neutral base, product-derived accent, lots of negative space around the hero.",
+    whyItWorks: "A narrative from desire → proof → reassurance mirrors the buyer's doubts in order and removes them one by one before the ask.",
+  },
+  {
+    id: "wellness-ritual",
+    title: "Wellness ritual page",
+    vertical: "wellness",
+    keywords: ["wellness", "supplement", "health", "sleep", "calm", "vitamin", "gut", "energy", "self care", "mental health", "skincare", "beauty"],
+    heroDevice: "Calm editorial hero — product held in soft morning light, serene one-line promise.",
+    sections: ["Serene promise hero", "The felt-problem framing", "Science / ingredient proof", "The simple daily ritual (3 steps)", "Real customer testimonial", "Subscribe-and-save offer", "Risk-reversal guarantee"],
+    typography: "Soft serif headlines, airy sans body, lowercase warmth, lots of breathing room.",
+    palette: "Muted earthy tones — sand, clay, sage — one quiet accent. Nothing shouts.",
+    whyItWorks: "Sensitive categories convert on calm credibility: emotional problem resonance plus believable proof earns trust where hype repels it.",
+  },
+  {
+    id: "fintech-trust",
+    title: "Trust-led fintech",
+    vertical: "fintech",
+    keywords: ["fintech", "finance", "money", "bank", "invest", "savings", "budget", "crypto", "payments", "card", "wealth", "trading"],
+    heroDevice: "Bold numeric hero (a rate, a saving, a number) with a clean card motif and one decisive CTA.",
+    sections: ["Numeric outcome hero", "Security & regulatory trust strip", "How it works in 3 steps", "Interactive calculator / preview", "Authority proof (press, audits)", "Transparent fees", "Final CTA with reassurance"],
+    typography: "Precise grotesque, tabular numerals, high contrast, disciplined hierarchy.",
+    palette: "Restrained mono base with one bold trust accent; deep ink for authority.",
+    whyItWorks: "Concrete numbers plus visible security and regulatory cues overcome the category's default skepticism faster than any slogan.",
+  },
+  {
+    id: "app-mobile-first",
+    title: "Mobile-app showcase",
+    vertical: "app",
+    keywords: ["app", "mobile", "ios", "android", "consumer app", "habit", "tracker", "social", "game", "download", "fitness app"],
+    heroDevice: "Floating phone mockup showing the core action mid-tap, app-store badges beside it.",
+    sections: ["Phone-mockup hero + store badges", "The one magic moment (demo)", "App-store rating + reviews", "Feature carousel (swipeable)", "How it fits your day", "Download CTA"],
+    typography: "Friendly geometric sans, big rounded headline, app-like spacing.",
+    palette: "Bright but controlled — one vivid accent on a clean canvas, app-native feel.",
+    whyItWorks: "Demonstrating the core loop on a real device removes uncertainty about what the app does and lifts install intent.",
+  },
+  {
+    id: "course-outcome",
+    title: "Outcome-promise course",
+    vertical: "education",
+    keywords: ["course", "education", "learn", "class", "bootcamp", "coaching", "skill", "certification", "cohort", "mentor", "training"],
+    heroDevice: "Outcome hero (skill + timeframe) with the instructor on camera and a clear enroll CTA.",
+    sections: ["Outcome + timeframe hero", "Who it's for / not for", "Curriculum breakdown", "Student results & testimonials", "Instructor credibility", "Pricing + guarantee", "Enroll CTA"],
+    typography: "Confident serif headline for authority, clean sans for the syllabus, scannable lists.",
+    palette: "Academic-warm neutrals with one motivating accent on CTAs and progress.",
+    whyItWorks: "A specific, time-bound outcome plus visible student results makes the transformation feel achievable and de-risks the purchase.",
+  },
+  {
+    id: "fashion-editorial",
+    title: "Editorial fashion drop",
+    vertical: "fashion",
+    keywords: ["fashion", "clothing", "apparel", "wear", "style", "outfit", "streetwear", "denim", "accessories", "drop", "collection", "luxury"],
+    heroDevice: "Oversized editorial campaign image, minimal type, a single 'Shop the drop' CTA.",
+    sections: ["Full-bleed campaign hero", "Lookbook grid", "Craft / material story", "Drop scarcity & dates", "Styled-on-real-people gallery", "Shop CTA"],
+    typography: "High-fashion serif or refined display caps, lots of negative space, restraint over volume.",
+    palette: "Two-tone editorial palette, monochrome with one accent; imagery carries the color.",
+    whyItWorks: "Restraint signals premium and sells a self-image rather than a discount, driving desire and full-price conversion.",
+  },
+  {
+    id: "foodbev-appetite",
+    title: "Appetite-appeal food & drink",
+    vertical: "food-bev",
+    keywords: ["food", "drink", "beverage", "coffee", "snack", "meal", "tea", "recipe", "kitchen", "grocery", "delivery", "restaurant"],
+    heroDevice: "Hyper-fresh hero (pour, steam, bite) with a craving-led headline and order CTA.",
+    sections: ["Appetite hero + CTA", "Sourcing / how it's made", "Flavor or menu grid", "Sustainability & provenance", "Reviews / ratings", "Find-in-store or order CTA"],
+    typography: "Characterful display for flavor personality, clean sans for the menu, warm and tactile.",
+    palette: "Rich appetite tones pulled from the product, warm light, shallow-depth imagery.",
+    whyItWorks: "Appetite cues stop the scroll instantly and a provenance story justifies premium price and builds repeat trust.",
+  },
+];
 
 /** The three ads always map to these placements (kept in sync with imagePipeline). */
 export const AD_SLOT_CONTRACTS: AdSlotContract[] = [
@@ -427,6 +545,53 @@ export function selectReferences(
   return picked.slice(0, k);
 }
 
+/**
+ * Pick the most relevant landing-page archetype(s) for the brief, mirroring the
+ * ad selector's keyword + vertical scoring. Always returns at least one.
+ */
+export function selectWebsiteReferences(
+  brief: string,
+  category?: string,
+  k = 1,
+): WebsiteReference[] {
+  const tokens = new Set([...tokenize(brief), ...tokenize(category ?? "")]);
+
+  const scored = WEBSITE_REFERENCES.map((ref) => {
+    let score = 0;
+    for (const kw of ref.keywords) {
+      const parts = kw.split(/\s+/);
+      const hit = parts.every((p) => tokens.has(p)) || tokens.has(kw);
+      if (hit) score += 2;
+    }
+    if (category && ref.vertical === category.toLowerCase()) score += 3;
+    return { ref, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const picked = scored.filter((s, i) => s.score > 0 || i === 0).map((s) => s.ref);
+  if (picked.length < k) {
+    for (const ref of WEBSITE_REFERENCES) {
+      if (picked.length >= k) break;
+      if (!picked.includes(ref)) picked.push(ref);
+    }
+  }
+  return picked.slice(0, k);
+}
+
+/** Full, structured snapshot of the reference library (for the admin view). */
+export function getReferenceLibrary() {
+  return {
+    designPrinciples: DESIGN_PRINCIPLES_2026,
+    webPrinciples: WEB_DESIGN_PRINCIPLES_2026,
+    placements: Object.values(PLACEMENT_SPECS),
+    slotContracts: AD_SLOT_CONTRACTS,
+    adArchetypes: REFERENCE_ARCHETYPES,
+    websiteReferences: WEBSITE_REFERENCES,
+    landingPattern: LANDING_PATTERN,
+  };
+}
+
 function placementLine(p: PlacementSpec): string {
   return `${p.name} — ${p.aspectRatio} (${p.dimensions}). Imagery: ${p.imageryNotes} Copy: ${p.copyNorms} Safe zone: ${p.safeZone}`;
 }
@@ -466,6 +631,18 @@ export function buildReferencePlaybook(brief: string, category?: string): string
     `- Overall: ${LANDING_PATTERN.principles}`,
   ].join("\n");
 
+  const webPrinciples = WEB_DESIGN_PRINCIPLES_2026.slice(0, 4)
+    .map((p) => `- ${p}`)
+    .join("\n");
+
+  const site = selectWebsiteReferences(brief, category, 1)[0];
+  const siteRef = site
+    ? `
+
+RELEVANT LANDING-PAGE REFERENCE (adapt the structure & emphasis for THIS product — never copy):
+- ${site.title} (${site.vertical}) — Hero: ${site.heroDevice} Sections: ${site.sections.join(" → ")}. Typography: ${site.typography} Palette: ${site.palette} Why it works: ${site.whyItWorks}`
+    : "";
+
   return `REFERENCE PLAYBOOK (internal — curated 2026 performance archetypes & platform specs).
 Use this to DERIVE principles for THIS product. Never reuse any real brand's name, layout, claims, or copy verbatim; treat the archetypes as patterns, not text to copy.
 
@@ -482,5 +659,8 @@ RELEVANT CREATIVE ARCHETYPES (patterns to adapt, not copy):
 ${archetypes}
 
 HIGH-CONVERTING LANDING-PAGE PATTERN:
-${landing}`;
+${landing}
+
+WEB DESIGN PRINCIPLES (apply to the landing copy & structure):
+${webPrinciples}${siteRef}`;
 }

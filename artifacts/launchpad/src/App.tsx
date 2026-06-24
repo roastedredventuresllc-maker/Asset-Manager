@@ -7,6 +7,7 @@ import Home from "@/pages/home";
 import Campaigns from "@/pages/campaigns";
 import Docs from "@/pages/docs";
 import LandingPlaceholder from "@/pages/landing-placeholder";
+import Admin from "@/pages/admin";
 
 const queryClient = new QueryClient();
 
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/campaigns" component={Campaigns} />
       <Route path="/docs" component={Docs} />
       <Route path="/p/:slug" component={LandingPlaceholder} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

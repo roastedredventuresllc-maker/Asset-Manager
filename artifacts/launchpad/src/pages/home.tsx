@@ -17,6 +17,7 @@ import { resizeImage } from "@/lib/image-upload";
 import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquarePlus } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 export default function Home() {
   const [location, setLocation] = useLocation();
@@ -157,12 +158,20 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
     <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background relative">
       <header className="absolute top-0 left-0 right-0 flex justify-between items-center max-w-[1100px] mx-auto px-6 py-6 w-full">
         <span className="font-sans font-bold text-xl tracking-tighter">LP</span>
-        <a
-          href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/docs`}
-          className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Developers
-        </a>
+        <nav className="flex items-center gap-6">
+          <a
+            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/admin`}
+            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Admin
+          </a>
+          <a
+            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/docs`}
+            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Developers
+          </a>
+        </nav>
       </header>
       <div className="max-w-[800px] w-full mx-auto flex flex-col items-center gap-12 animate-in fade-in duration-700">
         <h1 className="font-serif text-5xl md:text-7xl text-center text-foreground">
@@ -248,65 +257,92 @@ const CAMPAIGN_STEPS = [
 
 function WorkingState() {
   // Time-driven narrative of what the engine is actually doing during the
-  // ~10–15s "generating" phase. The final step intentionally never auto-checks:
-  // it holds in the working state until the backend leaves "generating" and the
-  // router unmounts this screen, so we never claim a step is done before it is.
+  // ~10–15s "generating" phase. The progress rail intentionally holds just
+  // short of full on the final step (and keeps a live shimmer) until the
+  // backend leaves "generating" and the router unmounts this screen — we never
+  // claim the work is done before it is.
   const [active, setActive] = useState(0);
+  const reduce = useReducedMotion();
+  const total = CAMPAIGN_STEPS.length;
 
   useEffect(() => {
     const id = setInterval(() => {
-      setActive((a) => Math.min(a + 1, CAMPAIGN_STEPS.length - 1));
+      setActive((a) => Math.min(a + 1, total - 1));
     }, 2600);
     return () => clearInterval(id);
-  }, []);
+  }, [total]);
+
+  const isLast = active >= total - 1;
+  const pct = isLast ? 92 : Math.round(((active + 1) / total) * 100);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background animate-in fade-in duration-500">
-      <div className="w-full max-w-[440px]">
-        <div className="mb-10 text-center">
-          <h2 className="font-serif text-4xl mb-3">
-            Building your <span className="italic opacity-50">campaign</span>
-          </h2>
-          <p className="font-sans text-sm text-muted-foreground">
-            Great campaigns follow a process — here's yours, running now.
-          </p>
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
+      {!reduce && (
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute w-[520px] h-[520px] rounded-full blur-3xl opacity-[0.07]"
+          style={{
+            background: "radial-gradient(circle at 50% 50%, rgba(17,17,17,1), transparent 65%)",
+          }}
+          animate={{ scale: [1, 1.18, 1], x: [0, 28, 0], y: [0, -22, 0] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+
+      <div className="relative z-10 w-full max-w-[560px] flex flex-col items-center">
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.9 }}
+          className="font-sans text-[11px] uppercase tracking-[3px] text-muted-foreground mb-10 flex items-center gap-2.5"
+        >
+          <motion.span
+            className="w-1.5 h-1.5 rounded-full bg-foreground"
+            animate={reduce ? undefined : { opacity: [1, 0.2, 1] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          />
+          Building your campaign
+        </motion.p>
+
+        <div className="h-[124px] md:h-[136px] w-full flex items-center justify-center text-center mb-12">
+          <AnimatePresence mode="wait">
+            <motion.h2
+              key={active}
+              initial={{ opacity: 0, y: 16, filter: "blur(8px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -16, filter: "blur(8px)" }}
+              transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1] }}
+              className="font-serif text-3xl md:text-[42px] leading-[1.12] max-w-[18ch]"
+            >
+              {CAMPAIGN_STEPS[active]}
+            </motion.h2>
+          </AnimatePresence>
         </div>
 
-        <ol className="flex flex-col gap-1">
-          {CAMPAIGN_STEPS.map((step, i) => {
-            const done = i < active;
-            const isActive = i === active;
-            return (
-              <li
-                key={step}
-                className={`flex items-center gap-4 rounded-xl px-4 py-3 transition-all duration-500 ${
-                  isActive ? "bg-secondary/60" : ""
-                }`}
-              >
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
-                  {done ? (
-                    <CheckCircle2 className="w-5 h-5 text-foreground animate-in zoom-in duration-300" />
-                  ) : isActive ? (
-                    <span className="w-4 h-4 rounded-full border-[1.5px] border-border border-t-foreground animate-spin" />
-                  ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-border" />
-                  )}
-                </span>
-                <span
-                  className={`font-sans text-sm transition-colors duration-500 ${
-                    done
-                      ? "text-muted-foreground"
-                      : isActive
-                        ? "text-foreground font-medium"
-                        : "text-muted-foreground/40"
-                  }`}
-                >
-                  {step}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <div className="w-full max-w-[340px]">
+          <div className="relative h-[3px] w-full rounded-full bg-border overflow-hidden">
+            <motion.div
+              className="absolute left-0 top-0 h-full rounded-full bg-foreground overflow-hidden"
+              initial={{ width: "0%" }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 1.1, ease: [0.2, 0.7, 0.2, 1] }}
+            >
+              {!reduce && (
+                <motion.span
+                  className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+                  animate={{ x: ["-100%", "300%"] }}
+                  transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }}
+                />
+              )}
+            </motion.div>
+          </div>
+          <div className="mt-4 flex items-center justify-between font-sans text-[12px] text-muted-foreground tabular-nums">
+            <span>
+              {String(Math.min(active + 1, total)).padStart(2, "0")} / {String(total).padStart(2, "0")}
+            </span>
+            <span className="opacity-60">Just a few seconds…</span>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,3 +1,1 @@
-- [esbuild externalizes @google/*](esbuild-external-google.md) — any @google/* pkg must be a DIRECT dep of api-server, not just transitive via a workspace lib, or it ERR_MODULE_NOT_FOUND at runtime (build+typecheck still pass).
-- [LaunchPad ad-image generation](ad-image-generation.md) — "Nano Banana" = Gemini 2.5 Flash Image via Replit Gemini integration; primary → gpt-image-1 → SVG; Higgsfield unsupported; upgrade path = gemini-3-pro-image-preview.
-- [Reference library + ad guidance](ad-reference-library.md) — curated refs injected via system prompt (CampaignData schema stays unchanged to avoid codegen ripple); idx0/1/2→placement slots; 3-layer no-text defense on imagePrompts (sanitizeImagePrompt).
+- [LaunchPad dev & landing constraints](launchpad-dev-notes.md) — api-server has no dev watcher (restart workflow after backend edits); landing HTML renders AI palette/copy so escape + sanitizeColor everything; admin auth is a stateless HMAC token.
