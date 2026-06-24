@@ -237,11 +237,77 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
   );
 }
 
+const CAMPAIGN_STEPS = [
+  "Interpreting your market & category",
+  "Studying best-in-class 2026 ad campaigns",
+  "Mapping your ideal audience & positioning",
+  "Writing your channel strategy & budget split",
+  "Crafting three ad concepts — hooks, copy & CTAs",
+  "Art-directing your visuals & landing page",
+];
+
 function WorkingState() {
+  // Time-driven narrative of what the engine is actually doing during the
+  // ~10–15s "generating" phase. The final step intentionally never auto-checks:
+  // it holds in the working state until the backend leaves "generating" and the
+  // router unmounts this screen, so we never claim a step is done before it is.
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setActive((a) => Math.min(a + 1, CAMPAIGN_STEPS.length - 1));
+    }, 2600);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background animate-in fade-in duration-500">
-      <div className="w-12 h-12 rounded-full border-[1px] border-border border-t-foreground animate-spin mb-6"></div>
-      <p className="font-serif italic text-2xl text-muted-foreground">Building your campaign…</p>
+      <div className="w-full max-w-[440px]">
+        <div className="mb-10 text-center">
+          <h2 className="font-serif text-4xl mb-3">
+            Building your <span className="italic opacity-50">campaign</span>
+          </h2>
+          <p className="font-sans text-sm text-muted-foreground">
+            Great campaigns follow a process — here's yours, running now.
+          </p>
+        </div>
+
+        <ol className="flex flex-col gap-1">
+          {CAMPAIGN_STEPS.map((step, i) => {
+            const done = i < active;
+            const isActive = i === active;
+            return (
+              <li
+                key={step}
+                className={`flex items-center gap-4 rounded-xl px-4 py-3 transition-all duration-500 ${
+                  isActive ? "bg-secondary/60" : ""
+                }`}
+              >
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
+                  {done ? (
+                    <CheckCircle2 className="w-5 h-5 text-foreground animate-in zoom-in duration-300" />
+                  ) : isActive ? (
+                    <span className="w-4 h-4 rounded-full border-[1.5px] border-border border-t-foreground animate-spin" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-border" />
+                  )}
+                </span>
+                <span
+                  className={`font-sans text-sm transition-colors duration-500 ${
+                    done
+                      ? "text-muted-foreground"
+                      : isActive
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground/40"
+                  }`}
+                >
+                  {step}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }
