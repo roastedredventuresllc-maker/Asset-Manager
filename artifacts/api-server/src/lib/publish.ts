@@ -69,7 +69,7 @@ export async function publishCampaignToPlatforms(
     const platformBudget = Math.round((opts.dailyBudgetCents * share) / 100);
 
     try {
-      const adPlatform = getAdPlatform(platform);
+      const adPlatform = await getAdPlatform(platform);
       const result = await adPlatform.publishCampaign({
         campaignId,
         brandName: cj.brandName,

@@ -3,55 +3,59 @@ import { logger } from "../lib/logger.js";
 
 const BASE = "https://business-api.tiktok.com/open_api/v1.3";
 
-async function tiktokFetch(path: string, method: string, body?: object): Promise<unknown> {
-  const token = process.env.TIKTOK_ACCESS_TOKEN;
-  if (!token) throw new Error("TIKTOK_ACCESS_TOKEN not set");
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      "Access-Token": token,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`TikTok API error ${res.status}: ${err}`);
-  }
-  const json = await res.json() as { code: number; message: string; data: unknown };
-  if (json.code !== 0) throw new Error(`TikTok API error: ${json.message}`);
-  return json.data;
-}
-
-async function uploadImage(imageUrl: string, advertiserId: string): Promise<string> {
-  const res = await tiktokFetch("/file/image/ad/upload/", "POST", {
-    advertiser_id: advertiserId,
-    upload_type: "UPLOAD_BY_URL",
-    image_url: imageUrl,
-    file_name: `launchpad_${Date.now()}.png`,
-  }) as { image_id: string };
-  if (!res.image_id) throw new Error("Failed to upload image to TikTok");
-  return res.image_id;
-}
+export type TikTokCredentials = Record<string, string | undefined>;
 
 export class TikTokAdPlatform implements AdPlatform {
+  constructor(private creds: TikTokCredentials) {}
+
+  private async fetch(path: string, method: string, body?: object): Promise<unknown> {
+    const token = this.creds.TIKTOK_ACCESS_TOKEN;
+    if (!token) throw new Error("TIKTOK_ACCESS_TOKEN not set");
+
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        "Access-Token": token,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`TikTok API error ${res.status}: ${err}`);
+    }
+    const json = (await res.json()) as { code: number; message: string; data: unknown };
+    if (json.code !== 0) throw new Error(`TikTok API error: ${json.message}`);
+    return json.data;
+  }
+
+  private async uploadImage(imageUrl: string, advertiserId: string): Promise<string> {
+    const res = (await this.fetch("/file/image/ad/upload/", "POST", {
+      advertiser_id: advertiserId,
+      upload_type: "UPLOAD_BY_URL",
+      image_url: imageUrl,
+      file_name: `launchpad_${Date.now()}.png`,
+    })) as { image_id: string };
+    if (!res.image_id) throw new Error("Failed to upload image to TikTok");
+    return res.image_id;
+  }
+
   async publishCampaign(input: PublishInput): Promise<PublishResult> {
-    const bcId = process.env.TIKTOK_BC_ID;
-    const advertiserId = process.env.TIKTOK_ADVERTISER_ID;
+    const bcId = this.creds.TIKTOK_BC_ID;
+    const advertiserId = this.creds.TIKTOK_ADVERTISER_ID;
     if (!bcId || !advertiserId) throw new Error("TIKTOK_BC_ID or TIKTOK_ADVERTISER_ID not set");
 
     // 1. Create campaign
-    const campaignRes = await tiktokFetch("/campaign/create/", "POST", {
+    const campaignRes = (await this.fetch("/campaign/create/", "POST", {
       advertiser_id: advertiserId,
       campaign_name: `LaunchPad — ${input.brandName}`,
       objective_type: "TRAFFIC",
       budget_mode: "BUDGET_MODE_INFINITE",
-    }) as { campaign_id: string };
+    })) as { campaign_id: string };
 
     // 2. Create ad group
-    const adGroupRes = await tiktokFetch("/adgroup/create/", "POST", {
+    const adGroupRes = (await this.fetch("/adgroup/create/", "POST", {
       advertiser_id: advertiserId,
       campaign_id: campaignRes.campaign_id,
       adgroup_name: `${input.brandName} Ad Group`,
@@ -63,7 +67,7 @@ export class TikTokAdPlatform implements AdPlatform {
       optimization_goal: "CLICK",
       billing_event: "CPC",
       targeting_expansion: { expansion_enabled: true },
-    }) as { adgroup_id: string };
+    })) as { adgroup_id: string };
 
     // 3. Create the ad from the primary creative. We generate static images,
     // so the ad format is SINGLE_IMAGE; the image is uploaded first to obtain
@@ -71,15 +75,15 @@ export class TikTokAdPlatform implements AdPlatform {
     const firstAd = input.ads[0];
     if (!firstAd) throw new Error("No ads to publish");
 
-    const identityId = process.env.TIKTOK_IDENTITY_ID;
+    const identityId = this.creds.TIKTOK_IDENTITY_ID;
     if (!identityId) throw new Error("TIKTOK_IDENTITY_ID not set");
 
     let imageId: string | undefined;
     if (firstAd.imageUrl) {
-      imageId = await uploadImage(firstAd.imageUrl, advertiserId);
+      imageId = await this.uploadImage(firstAd.imageUrl, advertiserId);
     }
 
-    const adRes = await tiktokFetch("/ad/create/", "POST", {
+    const adRes = (await this.fetch("/ad/create/", "POST", {
       advertiser_id: advertiserId,
       adgroup_id: adGroupRes.adgroup_id,
       identity_type: "CUSTOMIZED_USER",
@@ -94,7 +98,7 @@ export class TikTokAdPlatform implements AdPlatform {
           ...(imageId ? { image_ids: [imageId] } : {}),
         },
       ],
-    }) as { ad_ids?: string[]; ad_id?: string };
+    })) as { ad_ids?: string[]; ad_id?: string };
 
     const adId = adRes.ad_ids?.[0] ?? adRes.ad_id ?? "";
 
@@ -108,8 +112,8 @@ export class TikTokAdPlatform implements AdPlatform {
   }
 
   async pauseCampaign(externalCampaignId: string): Promise<void> {
-    const advertiserId = process.env.TIKTOK_ADVERTISER_ID;
-    await tiktokFetch("/campaign/status/update/", "POST", {
+    const advertiserId = this.creds.TIKTOK_ADVERTISER_ID;
+    await this.fetch("/campaign/status/update/", "POST", {
       advertiser_id: advertiserId,
       campaign_ids: [externalCampaignId],
       opt_status: "DISABLE",
@@ -118,10 +122,10 @@ export class TikTokAdPlatform implements AdPlatform {
   }
 
   async getMetrics(externalCampaignId: string): Promise<Metrics> {
-    const advertiserId = process.env.TIKTOK_ADVERTISER_ID;
+    const advertiserId = this.creds.TIKTOK_ADVERTISER_ID;
     const today = new Date().toISOString().slice(0, 10);
 
-    const res = await tiktokFetch("/report/integrated/get/", "GET", {
+    const res = (await this.fetch("/report/integrated/get/", "GET", {
       advertiser_id: advertiserId,
       report_type: "BASIC",
       dimensions: ["campaign_id"],
@@ -129,7 +133,7 @@ export class TikTokAdPlatform implements AdPlatform {
       metrics: ["show_cnt", "click_cnt", "spend"],
       start_date: today,
       end_date: today,
-    }) as { list: Array<{ metrics: { show_cnt?: string; click_cnt?: string; spend?: string } }> };
+    })) as { list: Array<{ metrics: { show_cnt?: string; click_cnt?: string; spend?: string } }> };
 
     const row = res.list?.[0]?.metrics ?? {};
     return {

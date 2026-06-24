@@ -411,13 +411,21 @@ function InstagramStories({ ad }: { ad: MockupAd }) {
         <X className="ml-auto h-4 w-4 text-white" />
       </div>
 
-      <div className="absolute inset-x-3 bottom-4 flex flex-col items-center gap-3">
+      <div className="absolute inset-x-3 bottom-14 flex flex-col items-center gap-3">
         <p className="line-clamp-2 text-center font-sans text-[13px] font-semibold leading-snug text-white drop-shadow">
           {ad.hook || ad.brandName}
         </p>
         <div className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 font-sans text-[12px] font-semibold text-neutral-900">
           <ChevronUp className="h-3.5 w-3.5" /> {ad.cta || "Learn more"}
         </div>
+      </div>
+
+      <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
+        <div className="flex-1 truncate rounded-full border border-white/50 px-3 py-1.5 font-sans text-[11px] text-white/70">
+          Send message
+        </div>
+        <Heart className="h-5 w-5 shrink-0 text-white" />
+        <Send className="h-5 w-5 shrink-0 text-white" />
       </div>
     </PhoneFrame>
   );
@@ -462,22 +470,21 @@ function TikTok({ ad }: { ad: MockupAd }) {
         </span>
       </div>
 
-      <div className="absolute bottom-12 left-3 right-14 text-white">
-        <p className="mb-1 font-sans text-[13px] font-semibold leading-none">
-          @{handle(ad.brandName)}
-          <span className="ml-1 rounded-sm bg-white/20 px-1 py-0.5 align-middle text-[9px] uppercase tracking-wide">
-            Sponsored
-          </span>
-        </p>
-        <p className="mb-1.5 line-clamp-2 font-sans text-[12px] leading-snug">
-          {ad.hook || ad.brandName}
-        </p>
-        <p className="flex items-center gap-1.5 font-sans text-[11px]">
-          <Music2 className="h-3 w-3" /> original sound — {handle(ad.brandName)}
-        </p>
-      </div>
-
-      <div className="absolute bottom-3 left-3 right-14">
+      <div className="absolute bottom-4 left-3 right-14 flex flex-col gap-2 text-white">
+        <div>
+          <p className="mb-1 font-sans text-[13px] font-semibold leading-none">
+            @{handle(ad.brandName)}
+            <span className="ml-1 rounded-sm bg-white/20 px-1 py-0.5 align-middle text-[9px] uppercase tracking-wide">
+              Sponsored
+            </span>
+          </p>
+          <p className="mb-1.5 line-clamp-2 font-sans text-[12px] leading-snug">
+            {ad.hook || ad.brandName}
+          </p>
+          <p className="flex items-center gap-1.5 font-sans text-[11px]">
+            <Music2 className="h-3 w-3" /> original sound — {handle(ad.brandName)}
+          </p>
+        </div>
         <div className="flex items-center justify-center gap-1 rounded-md bg-[#fe2c55] py-1.5 font-sans text-[12px] font-semibold text-white">
           {ad.cta || "Learn more"} <ChevronRight className="h-3.5 w-3.5" />
         </div>

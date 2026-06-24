@@ -407,7 +407,7 @@ export async function pauseCampaignById(id: string) {
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
-      const platform = getAdPlatform(pub.platform as "meta" | "tiktok");
+      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
       await platform.pauseCampaign(pub.externalCampaignId);
       await db
         .update(publishesTable)
@@ -447,7 +447,7 @@ export async function getCampaignMetrics(id: string) {
     for (const pub of publishes) {
       if (!pub.externalCampaignId) continue;
       try {
-        const platform = getAdPlatform(pub.platform as "meta" | "tiktok");
+        const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
         const m = await platform.getMetrics(pub.externalCampaignId);
         totalImpressions += m.impressions;
         totalClicks += m.clicks;

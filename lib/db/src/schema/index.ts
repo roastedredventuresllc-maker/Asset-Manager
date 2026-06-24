@@ -7,3 +7,4 @@ export * from "./reference_assets";
 export * from "./publishes";
 export * from "./metrics_snapshots";
 export * from "./jobs";
+export * from "./platform_credentials";

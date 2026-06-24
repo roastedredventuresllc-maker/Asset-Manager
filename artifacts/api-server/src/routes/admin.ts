@@ -9,7 +9,8 @@ import {
   deleteReferenceAsset,
   seedReferenceLibrary,
 } from "../lib/referenceAssets.js";
-import { connectorStatuses, adsMode } from "../ads/connectors.js";
+import { connectorStatuses, adsMode, CONNECTOR_SPECS } from "../ads/connectors.js";
+import { saveCredentials, deleteCredentials } from "../ads/credentials.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -111,8 +112,63 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 // GET /api/admin/connectors — ad-platform connection status, gated.
 // Returns only secret KEY NAMES and boolean presence — never secret values.
-router.get("/connectors", requireAdmin, (_req: Request, res: Response) => {
-  return res.json({ adsMode: adsMode(), connectors: connectorStatuses() });
+router.get("/connectors", requireAdmin, async (_req: Request, res: Response) => {
+  return res.json({ adsMode: adsMode(), connectors: await connectorStatuses() });
+});
+
+// POST /api/admin/connectors/:platform — save credentials for a platform.
+// Values are encrypted at rest. Only declared keys are accepted; blank values
+// are ignored (so editing one field never wipes the others). We never echo the
+// values back, and saving does NOT change ADS_MODE — publishing stays in mock
+// until ADS_MODE is set to "live".
+router.post("/connectors/:platform", requireAdmin, async (req: Request, res: Response) => {
+  const platform = String(req.params.platform);
+  const spec = CONNECTOR_SPECS.find((s) => s.id === platform);
+  if (!spec) return res.status(404).json({ error: "Unknown connector." });
+
+  if (!process.env.ADMIN_PASSWORD) {
+    return res.status(503).json({ error: "Admin password is not configured." });
+  }
+
+  const allowed = [...spec.requiredSecretKeys, ...spec.optionalSecretKeys];
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+  const source = (raw.values && typeof raw.values === "object" ? raw.values : raw) as Record<
+    string,
+    unknown
+  >;
+
+  const incoming: Record<string, string> = {};
+  for (const key of allowed) {
+    const v = source[key];
+    if (typeof v === "string" && v.trim().length > 0) incoming[key] = v.trim();
+  }
+  if (Object.keys(incoming).length === 0) {
+    return res.status(400).json({ error: "Provide at least one credential value to save." });
+  }
+
+  try {
+    await saveCredentials(platform, incoming, allowed);
+    return res.json({ ok: true, adsMode: adsMode(), connectors: await connectorStatuses() });
+  } catch (err) {
+    logger.error({ err, platform }, "Failed to save connector credentials");
+    return res.status(500).json({ error: "Couldn't save credentials." });
+  }
+});
+
+// DELETE /api/admin/connectors/:platform — remove stored credentials for a
+// platform. Credentials set via environment variables are unaffected.
+router.delete("/connectors/:platform", requireAdmin, async (req: Request, res: Response) => {
+  const platform = String(req.params.platform);
+  const spec = CONNECTOR_SPECS.find((s) => s.id === platform);
+  if (!spec) return res.status(404).json({ error: "Unknown connector." });
+
+  try {
+    await deleteCredentials(platform);
+    return res.json({ ok: true, adsMode: adsMode(), connectors: await connectorStatuses() });
+  } catch (err) {
+    logger.error({ err, platform }, "Failed to delete connector credentials");
+    return res.status(500).json({ error: "Couldn't disconnect credentials." });
+  }
 });
 
 // GET /api/admin/reference-library — the curated reference library, gated.

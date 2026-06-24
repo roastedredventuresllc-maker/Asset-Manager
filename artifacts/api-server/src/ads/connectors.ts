@@ -1,13 +1,15 @@
 import type { AdPlatformId } from "./types.js";
+import { credentialState } from "./credentials.js";
 
 /**
  * Static, in-code description of each ad-platform connector. This is the single
  * source of truth the admin "Connectors" UI and the status endpoint both read.
  *
- * Connection is credential-based: an operator adds the required secrets via the
- * Replit Secrets pane (the same secrets the live ad-platform clients consume),
- * and the status endpoint reflects their presence. We never read, return, or log
- * secret VALUES — only whether each key is set.
+ * Connection is credential-based: an operator either enters the required secrets
+ * in the admin Connectors UI (encrypted at rest in `platform_credentials`) or
+ * sets them in the Replit Secrets pane (the same secrets the live ad-platform
+ * clients consume). The status endpoint reflects their presence. We never read,
+ * return, or log secret VALUES — only whether each key is set.
  */
 export interface ConnectorSpec {
   id: AdPlatformId;
@@ -24,6 +26,10 @@ export interface ConnectorStatus extends ConnectorSpec {
   connected: boolean;
   missingKeys: string[];
   optionalPresentKeys: string[];
+  // key names whose values are stored (encrypted) in the DB, never the values
+  storedKeys: string[];
+  // where the connected credentials come from, for the admin UI
+  source: "stored" | "env" | "none";
 }
 
 export const CONNECTOR_SPECS: ConnectorSpec[] = [
@@ -112,29 +118,25 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
   },
 ];
 
-function hasEnv(key: string): boolean {
-  const v = process.env[key];
-  return typeof v === "string" && v.trim().length > 0;
-}
-
 /** Current ad-publishing mode. Defaults to the safe "mock" mode. */
 export function adsMode(): string {
   return process.env.ADS_MODE ?? "mock";
 }
 
 /**
- * Compute live connection status for every connector from the presence of its
- * required secrets. Returns only key NAMES and booleans — never values.
+ * Compute connection status for every connector from its stored (encrypted, in
+ * the DB) and environment credentials. Returns only key NAMES and booleans —
+ * never secret values.
  */
-export function connectorStatuses(): ConnectorStatus[] {
-  return CONNECTOR_SPECS.map((spec) => {
-    const missingKeys = spec.requiredSecretKeys.filter((k) => !hasEnv(k));
-    const optionalPresentKeys = spec.optionalSecretKeys.filter((k) => hasEnv(k));
-    return {
-      ...spec,
-      connected: missingKeys.length === 0,
-      missingKeys,
-      optionalPresentKeys,
-    };
-  });
+export async function connectorStatuses(): Promise<ConnectorStatus[]> {
+  return Promise.all(
+    CONNECTOR_SPECS.map(async (spec) => {
+      const state = await credentialState(
+        spec.id,
+        spec.requiredSecretKeys,
+        spec.optionalSecretKeys,
+      );
+      return { ...spec, ...state };
+    }),
+  );
 }

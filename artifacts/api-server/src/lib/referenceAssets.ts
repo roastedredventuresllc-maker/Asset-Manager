@@ -295,8 +295,59 @@ export async function recoverStaleAnalyzing(): Promise<void> {
 }
 
 /**
+ * Re-upload any reference image whose stored bytes have gone missing — e.g. an
+ * asset seeded to ephemeral local storage before an object-storage bucket
+ * existed, then lost when the container restarted. Re-fetches the original
+ * curated image from its seed URL and re-uploads it under the SAME key so the
+ * stored imageUrl stays valid. Preserves analysis + status (this restores bytes
+ * only, it never re-indexes). Never throws.
+ */
+export async function recoverMissingReferenceImages(): Promise<void> {
+  let assets: ReferenceAsset[];
+  try {
+    assets = await db.select().from(referenceAssetsTable);
+  } catch {
+    return;
+  }
+  if (assets.length === 0) return;
+
+  const seedByKey = new Map(REFERENCE_SEEDS.map((s) => [s.seedKey, s]));
+  let restored = 0;
+  for (const asset of assets) {
+    const stored = await getAsset(asset.imageKey);
+    if (stored) continue; // bytes already present — nothing to do
+
+    const seed = asset.seedKey ? seedByKey.get(asset.seedKey) : undefined;
+    if (!seed) {
+      logger.warn(
+        { id: asset.id, key: asset.imageKey },
+        "Missing reference image with no seed to recover from",
+      );
+      continue;
+    }
+    const buffer = await fetchImage(seed.imageUrl);
+    if (!buffer) {
+      logger.warn(
+        { id: asset.id, seedKey: asset.seedKey },
+        "Could not re-fetch missing reference image",
+      );
+      continue;
+    }
+    try {
+      const jpeg = await toJpeg(buffer);
+      await uploadBuffer(asset.imageKey, jpeg, "image/jpeg");
+      restored += 1;
+    } catch (err) {
+      logger.error({ err, id: asset.id }, "Failed to re-upload reference image");
+    }
+  }
+  if (restored > 0) logger.info({ restored }, "Recovered missing reference images");
+}
+
+/**
  * Seed the corpus in the background at startup if it's empty, otherwise recover
- * any analyses interrupted by a restart. Never throws.
+ * any analyses interrupted by a restart and re-upload any images whose bytes
+ * went missing (e.g. lost from ephemeral storage). Never throws.
  */
 export async function ensureSeededInBackground(): Promise<void> {
   try {
@@ -307,6 +358,9 @@ export async function ensureSeededInBackground(): Promise<void> {
       );
       return;
     }
+    void recoverMissingReferenceImages().catch((err) =>
+      logger.error({ err }, "Missing reference image recovery failed"),
+    );
     void recoverStaleAnalyzing().catch((err) =>
       logger.error({ err }, "Stale analysis recovery failed"),
     );

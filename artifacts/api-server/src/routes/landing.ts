@@ -21,8 +21,16 @@ router.get("/:slug", async (req, res) => {
   const cj = campaign.campaignJson as {
     brandName: string;
     tagline: string;
+    category?: string;
     palette: string[];
-    landing: { hero: string; sub: string; features: string[]; socialProof: string; cta: string };
+    landing: {
+      hero: string;
+      sub: string;
+      features: string[];
+      socialProof: string;
+      cta: string;
+      faqs?: { q: string; a: string }[];
+    };
   };
 
   const land = cj.landing ?? ({} as typeof cj.landing);
@@ -37,6 +45,79 @@ router.get("/:slug", async (req, res) => {
   const hero = String(land.hero || tagline || brandName || "");
   const sub = String(land.sub || "");
   const socialProof = String(land.socialProof || "");
+  const category = String(cj.category ?? "");
+  const faqs = Array.isArray(land.faqs)
+    ? land.faqs
+        .filter((f) => f && f.q && f.a)
+        .map((f) => ({ q: String(f.q), a: String(f.a) }))
+        .slice(0, 6)
+    : [];
+
+  // Absolute URL of this page, derived through the proxy's forwarding headers,
+  // for the canonical link + structured data. "" when host is unknown.
+  const fwdProto = String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim();
+  const proto = fwdProto || req.protocol || "https";
+  const fwdHost = String(req.headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
+  const host = fwdHost || req.headers.host || "";
+  const canonical = host
+    ? `${proto}://${host}/p/${encodeURIComponent(req.params.slug)}`
+    : "";
+
+  // JSON-LD structured data (AEO). Built as a schema.org @graph and embedded
+  // escaped so AI-authored copy can never break out of the <script> tag.
+  const ldNodes: Record<string, unknown>[] = [
+    {
+      "@type": "Organization",
+      name: brandName,
+      ...(canonical ? { url: canonical } : {}),
+      ...(productImg ? { logo: productImg } : {}),
+      ...(tagline ? { slogan: tagline } : {}),
+    },
+    {
+      "@type": "WebSite",
+      name: brandName,
+      ...(canonical ? { url: canonical } : {}),
+      ...(sub || tagline ? { description: sub || tagline } : {}),
+    },
+    {
+      "@type": "Product",
+      name: brandName,
+      ...(sub || tagline ? { description: sub || tagline } : {}),
+      ...(category ? { category } : {}),
+      ...(productImg ? { image: productImg } : {}),
+      brand: { "@type": "Brand", name: brandName },
+    },
+  ];
+  if (faqs.length) {
+    ldNodes.push({
+      "@type": "FAQPage",
+      mainEntity: faqs.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    });
+  }
+  const jsonLdBlock = `<script type="application/ld+json">${jsonLd({
+    "@context": "https://schema.org",
+    "@graph": ldNodes,
+  })}</script>`;
+
+  const faqSection = faqs.length
+    ? `<section class="faq" id="faq">
+        <p class="eyebrow reveal"><span class="dot"></span>Questions</p>
+        <div class="faq-list">
+          ${faqs
+            .map(
+              (f) => `<details class="faq-item reveal">
+              <summary>${escHtml(f.q)}</summary>
+              <p>${escHtml(f.a)}</p>
+            </details>`,
+            )
+            .join("")}
+        </div>
+      </section>`
+    : "";
 
   const heroVisual = productImg
     ? `<div class="hero-visual reveal"><div class="halo"></div><img src="${escHtml(productImg)}" alt="${escAttr(cj.brandName)}"/></div>`
@@ -82,7 +163,10 @@ router.get("/:slug", async (req, res) => {
   <meta property="og:title" content="${escAttr(cj.brandName)} — ${escAttr(cj.tagline ?? "")}"/>
   <meta property="og:description" content="${escAttr(sub)}"/>
   <meta property="og:type" content="website"/>
+  ${canonical ? `<meta property="og:url" content="${escAttr(canonical)}"/>` : ""}
   ${productImg ? `<meta property="og:image" content="${escAttr(productImg)}"/>` : ""}
+  ${canonical ? `<link rel="canonical" href="${escAttr(canonical)}"/>` : ""}
+  <meta name="robots" content="index,follow,max-image-preview:large"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -141,6 +225,16 @@ router.get("/:slug", async (req, res) => {
     .statement{margin:90px 0;text-align:center}
     .statement-text{font-family:'Instrument Serif',serif;font-style:italic;font-size:clamp(30px,5vw,60px);line-height:1.18;opacity:.85;max-width:18ch;margin:0 auto}
 
+    /* faq */
+    .faq{padding:50px 0 20px}
+    .faq-list{margin-top:36px;border-top:1px solid var(--line)}
+    .faq-item{border-bottom:1px solid var(--line)}
+    .faq-item summary{font-family:'Instrument Serif',serif;font-size:clamp(20px,2.6vw,28px);line-height:1.3;padding:26px 40px 26px 0;cursor:pointer;list-style:none;position:relative}
+    .faq-item summary::-webkit-details-marker{display:none}
+    .faq-item summary::after{content:'+';position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:26px;opacity:.4;transition:opacity .2s}
+    .faq-item[open] summary::after{content:'–'}
+    .faq-item p{font-size:16px;line-height:1.6;opacity:.66;max-width:66ch;padding:0 0 28px}
+
     /* closing CTA */
     .closing{margin:90px 24px 0;border-radius:32px;background:var(--ink);color:var(--canvas);text-align:center;padding:clamp(64px,9vw,120px) 24px}
     .closing h2{font-family:'Instrument Serif',serif;font-size:clamp(34px,5.4vw,68px);line-height:1.05;margin-bottom:14px}
@@ -173,6 +267,7 @@ router.get("/:slug", async (req, res) => {
     }
     @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
   </style>
+  ${jsonLdBlock}
 </head>
 <body>
   <nav id="nav">
@@ -201,6 +296,8 @@ router.get("/:slug", async (req, res) => {
   </main>
 
   ${productImg ? `<div class="wrap">${demoBand}</div>` : `<div class="wrap">${demoBand}</div>`}
+
+  ${faqSection ? `<div class="wrap">${faqSection}</div>` : ""}
 
   <section class="closing" id="cta">
     <h2>${escHtml(cj.tagline || hero)}</h2>
@@ -275,6 +372,21 @@ function escHtml(str: string): string {
 /** Same as escHtml — explicit name for attribute contexts. */
 function escAttr(str: string): string {
   return escHtml(str);
+}
+
+/**
+ * Serialise a value for safe embedding inside a
+ * <script type="application/ld+json"> tag. JSON.stringify handles JSON
+ * escaping; we additionally escape characters that could terminate the script
+ * element or be misread by an HTML parser.
+ */
+function jsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 export default router;

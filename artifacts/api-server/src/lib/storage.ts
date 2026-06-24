@@ -17,6 +17,18 @@ function contentTypeFor(key: string): string {
   return CONTENT_TYPES[extname(key).toLowerCase()] ?? "application/octet-stream";
 }
 
+/**
+ * Construct a Replit Object Storage client bound to the provisioned bucket.
+ * The bucket id is injected via DEFAULT_OBJECT_STORAGE_BUCKET_ID (set when the
+ * bucket is provisioned); without it the client has no default bucket and every
+ * call fails, forcing the ephemeral local fallback.
+ */
+async function objectClient() {
+  const { Client } = await import("@replit/object-storage");
+  const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+  return bucketId ? new Client({ bucketId }) : new Client();
+}
+
 async function saveLocally(key: string, buffer: Buffer): Promise<string> {
   const dir = join(LOCAL_ASSETS_DIR, key.split("/").slice(0, -1).join("/"));
   await mkdir(dir, { recursive: true });
@@ -36,8 +48,7 @@ export async function uploadBuffer(
 ): Promise<string> {
   // Try Replit Object Storage first
   try {
-    const { Client } = await import("@replit/object-storage");
-    const client = new Client();
+    const client = await objectClient();
     void contentType; // Object Storage infers content type from the key
     await client.uploadFromBytes(key, buffer);
     const domain =
@@ -86,8 +97,7 @@ export async function getAsset(
 
   // Replit Object Storage (production with a bucket)
   try {
-    const { Client } = await import("@replit/object-storage");
-    const client = new Client();
+    const client = await objectClient();
     const result = (await client.downloadAsBytes(safeKey)) as {
       ok?: boolean;
       value?: Buffer[] | Buffer;

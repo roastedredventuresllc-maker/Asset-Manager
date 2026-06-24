@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Lock, LogOut, Upload, Trash2, ExternalLink, Loader2, Check, RefreshCw, Plug } from "lucide-react";
+import { Lock, LogOut, Upload, Trash2, ExternalLink, Loader2, Check, RefreshCw, Plug, X } from "lucide-react";
 import { resizeImage } from "../lib/image-upload";
 import { cn } from "@/lib/utils";
 
@@ -93,6 +93,8 @@ interface ConnectorStatus {
   missingKeys: string[];
   optionalSecretKeys: string[];
   optionalPresentKeys: string[];
+  storedKeys: string[];
+  source: "stored" | "env" | "none";
   setupSteps: string[];
   docsUrl: string;
 }
@@ -422,6 +424,7 @@ export default function Admin() {
           loading={connectorsLoading}
           error={connectorsError}
           onRefresh={() => void refetchConnectors()}
+          token={token ?? ""}
         />
 
         <ReferenceExamples
@@ -551,18 +554,21 @@ function ConnectorsSection({
   loading,
   error,
   onRefresh,
+  token,
 }: {
   data: ConnectorsResponse | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  token: string;
 }) {
   return (
     <Section label="Ad platform connectors">
       <div className="-mt-4 mb-8 flex items-start justify-between gap-6 flex-wrap">
         <p className="max-w-2xl font-sans text-sm text-muted-foreground leading-relaxed">
-          The ad networks LaunchPad can publish to. Credentials live only in the server's secrets —
-          they are never entered or stored on this page. A platform needs its secrets connected and{" "}
+          The ad networks LaunchPad can publish to. Enter each platform's credentials below — they're
+          encrypted before they're stored and never shown again — or set them as server secrets. A
+          platform needs its credentials connected and{" "}
           <code className="bg-secondary px-1 rounded text-xs">ADS_MODE</code> set to{" "}
           <code className="bg-secondary px-1 rounded text-xs">live</code> before real campaigns run;
           otherwise everything stays in safe <code className="bg-secondary px-1 rounded text-xs">mock</code>{" "}
@@ -600,7 +606,7 @@ function ConnectorsSection({
       ) : (
         <div className="grid gap-6 md:grid-cols-2 items-start">
           {data.connectors.map((c) => (
-            <ConnectorCard key={c.id} c={c} />
+            <ConnectorCard key={c.id} c={c} token={token} onChanged={onRefresh} />
           ))}
         </div>
       )}
@@ -649,9 +655,100 @@ function SecretChip({ name, present }: { name: string; present: boolean }) {
   );
 }
 
-function ConnectorCard({ c }: { c: ConnectorStatus }) {
+function ConnectorCard({
+  c,
+  token,
+  onChanged,
+}: {
+  c: ConnectorStatus;
+  token: string;
+  onChanged: () => void;
+}) {
+  const required = new Set(c.requiredSecretKeys);
   const missing = new Set(c.missingKeys);
   const optionalPresent = new Set(c.optionalPresentKeys);
+  const stored = new Set(c.storedKeys);
+  const allKeys = [...c.requiredSecretKeys, ...c.optionalSecretKeys];
+
+  const [editing, setEditing] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Show the entry form when the platform isn't connected yet, or when the
+  // operator chose to edit a connected one.
+  const showForm = editing || !c.connected;
+  const storedHere = c.source === "stored";
+
+  const present = (k: string): boolean =>
+    required.has(k) ? !missing.has(k) : optionalPresent.has(k);
+
+  const placeholderFor = (k: string): string =>
+    stored.has(k)
+      ? "Saved — leave blank to keep"
+      : present(k)
+        ? "Set via server environment"
+        : "Enter value";
+
+  const setField = (k: string, v: string) => setValues((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    const payload: Record<string, string> = {};
+    for (const k of allKeys) {
+      const v = values[k];
+      if (typeof v === "string" && v.trim()) payload[k] = v.trim();
+    }
+    if (Object.keys(payload).length === 0) {
+      setErr("Enter at least one value to save.");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/admin/connectors/${c.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({ values: payload }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        setErr(d.error ?? "Couldn't save credentials.");
+        return;
+      }
+      setValues({});
+      setEditing(false);
+      onChanged();
+    } catch {
+      setErr("Network error. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/admin/connectors/${c.id}`, {
+        method: "DELETE",
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        setErr(d.error ?? "Couldn't disconnect.");
+        return;
+      }
+      setValues({});
+      setEditing(false);
+      onChanged();
+    } catch {
+      setErr("Network error. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <article className="bg-card border border-border rounded-2xl p-6 flex flex-col h-full">
       <div className="flex items-start justify-between gap-4 mb-2">
@@ -663,22 +760,40 @@ function ConnectorCard({ c }: { c: ConnectorStatus }) {
       </div>
       <p className="font-sans text-sm text-muted-foreground leading-relaxed mb-1">{c.blurb}</p>
       {c.note && (
-        <p className="font-sans text-xs text-muted-foreground/70 leading-relaxed mb-4">{c.note}</p>
+        <p className="font-sans text-xs text-muted-foreground/70 leading-relaxed mb-3">{c.note}</p>
       )}
 
-      <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mt-3 mb-3">
-        Setup
-      </span>
-      <ol className="flex flex-col gap-3 mb-5">
-        {c.setupSteps.map((s, i) => (
-          <li key={i} className="flex gap-3">
-            <span className="font-serif text-lg opacity-25 leading-none pt-0.5">
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <p className="font-sans text-sm text-foreground/80 leading-relaxed">{s}</p>
-          </li>
-        ))}
-      </ol>
+      {/* When connected, affirm and HIDE the setup instructions. */}
+      {c.connected && (
+        <div className="mt-2 mb-1 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5">
+          <Check className="w-4 h-4 mt-0.5 text-emerald-600 flex-shrink-0" />
+          <p className="font-sans text-sm text-emerald-800 leading-relaxed">
+            Connected and ready.{" "}
+            {storedHere
+              ? "Credentials are stored encrypted on the server."
+              : "Using credentials from the server environment."}
+          </p>
+        </div>
+      )}
+
+      {/* Setup steps only show until the platform is connected. */}
+      {!c.connected && (
+        <>
+          <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mt-3 mb-3">
+            Setup
+          </span>
+          <ol className="flex flex-col gap-3 mb-5">
+            {c.setupSteps.map((s, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="font-serif text-lg opacity-25 leading-none pt-0.5">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <p className="font-sans text-sm text-foreground/80 leading-relaxed">{s}</p>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
 
       <div className="mt-auto pt-4 border-t border-border/60">
         <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mb-2">
@@ -702,6 +817,78 @@ function ConnectorCard({ c }: { c: ConnectorStatus }) {
             </div>
           </>
         )}
+
+        {showForm ? (
+          <div className="mt-5 flex flex-col gap-2.5">
+            {allKeys.map((k) => (
+              <label key={k} className="flex flex-col gap-1">
+                <span className="font-mono text-[11px] text-foreground/70">
+                  {k}
+                  {!required.has(k) && (
+                    <span className="text-muted-foreground/60"> (optional)</span>
+                  )}
+                </span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={values[k] ?? ""}
+                  onChange={(e) => setField(k, e.target.value)}
+                  placeholder={placeholderFor(k)}
+                  className="font-mono text-sm rounded-lg border border-border bg-background px-3 py-2 outline-none focus:border-foreground/40 transition-colors"
+                />
+              </label>
+            ))}
+            {err && <p className="font-sans text-xs text-red-700">{err}</p>}
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => void save()}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 font-sans text-sm rounded-full px-4 py-2 bg-foreground text-background hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {saving ? "Saving…" : "Save credentials"}
+              </button>
+              {c.connected && (
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setValues({});
+                    setErr(null);
+                  }}
+                  className="font-sans text-sm rounded-full px-4 py-2 border border-border hover:bg-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+            <p className="font-sans text-[11px] text-muted-foreground/70 leading-relaxed">
+              Values are encrypted before they're stored and never shown again. Saving does not
+              enable live publishing — campaigns stay in mock mode until ADS_MODE is set to live.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-5 flex items-center gap-2">
+            <button
+              onClick={() => setEditing(true)}
+              className="font-sans text-sm rounded-full px-4 py-2 border border-border hover:bg-secondary transition-colors"
+            >
+              Edit credentials
+            </button>
+            {storedHere && (
+              <button
+                onClick={() => void disconnect()}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 font-sans text-sm rounded-full px-4 py-2 border border-red-500/30 text-red-700 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                Disconnect
+              </button>
+            )}
+          </div>
+        )}
+
+        {err && !showForm && <p className="font-sans text-xs text-red-700 mt-2">{err}</p>}
 
         <a
           href={c.docsUrl}

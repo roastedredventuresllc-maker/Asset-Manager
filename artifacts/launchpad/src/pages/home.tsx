@@ -249,7 +249,6 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
 
 const CAMPAIGN_STEPS = [
   "Interpreting your market & category",
-  "Studying best-in-class 2026 ad campaigns",
   "Mapping your ideal audience & positioning",
   "Writing your channel strategy & budget split",
   "Crafting three ad concepts — hooks, copy & CTAs",
@@ -269,7 +268,7 @@ function WorkingState() {
   useEffect(() => {
     const id = setInterval(() => {
       setActive((a) => Math.min(a + 1, total - 1));
-    }, 2600);
+    }, 3600);
     return () => clearInterval(id);
   }, [total]);
 

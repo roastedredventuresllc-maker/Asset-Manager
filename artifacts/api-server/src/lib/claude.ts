@@ -18,6 +18,7 @@ export interface CampaignLanding {
   features: string[];
   socialProof: string;
   cta: string;
+  faqs?: { q: string; a: string }[];
 }
 
 export interface CampaignData {
@@ -79,7 +80,11 @@ The JSON must match this exact schema:
     "sub": "1–2 sentence subheadline",
     "features": ["feature 1", "feature 2", "feature 3"],
     "socialProof": "one social proof line (e.g. '10,000+ founders trust LaunchPad')",
-    "cta": "call to action for landing page button"
+    "cta": "call to action for landing page button",
+    "faqs": [
+      { "q": "question a prospective customer would realistically ask", "a": "1–3 sentence factual answer" },
+      ... (3–4 FAQs total)
+    ]
   }
 }
 
@@ -89,6 +94,7 @@ Rules:
 - Use distinct creative angles across the 3 ads
 - imagePrompt should be a professional photographer/art director brief — describe the actual scene in detail
 - imagePrompt must describe pure photography only (no text, words, logos, or watermarks — on-brand typography is composited separately)
+- landing.faqs: write 3–4 questions a real prospective customer would ask about THIS product (what it is, who it's for, how it works, what makes it different, how to get started). Answers must be factual, self-contained, and derivable from the product description — NEVER fabricate specific statistics, prices, review counts, ratings, awards, integrations, or customer names. Phrase each answer so it stands alone (it powers answer-engine optimisation).
 
 A REFERENCE PLAYBOOK is appended below. It contains curated 2026 design-forward
 principles, platform placement specs, creative archetypes, and a landing-page
