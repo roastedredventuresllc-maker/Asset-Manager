@@ -9,6 +9,7 @@ import {
   deleteReferenceAsset,
   seedReferenceLibrary,
 } from "../lib/referenceAssets.js";
+import { connectorStatuses, adsMode } from "../ads/connectors.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -107,6 +108,12 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
   return next();
 }
+
+// GET /api/admin/connectors — ad-platform connection status, gated.
+// Returns only secret KEY NAMES and boolean presence — never secret values.
+router.get("/connectors", requireAdmin, (_req: Request, res: Response) => {
+  return res.json({ adsMode: adsMode(), connectors: connectorStatuses() });
+});
 
 // GET /api/admin/reference-library — the curated reference library, gated.
 router.get("/reference-library", requireAdmin, (_req: Request, res: Response) => {

@@ -1,4 +1,4 @@
-import type { AdPlatform, PublishInput, PublishResult, Metrics } from "./types.js";
+import type { AdPlatform, AdPlatformId, PublishInput, PublishResult, Metrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 
 function deterministicNumber(seed: string, min: number, max: number): number {
@@ -13,7 +13,7 @@ function deterministicNumber(seed: string, min: number, max: number): number {
 export class MockAdPlatform implements AdPlatform {
   private platform: string;
 
-  constructor(platform: "meta" | "tiktok") {
+  constructor(platform: AdPlatformId) {
     this.platform = platform;
   }
 

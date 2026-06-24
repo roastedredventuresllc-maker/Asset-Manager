@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Lock, LogOut, Upload, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Lock, LogOut, Upload, Trash2, ExternalLink, Loader2, Check, RefreshCw, Plug } from "lucide-react";
 import { resizeImage } from "../lib/image-upload";
+import { cn } from "@/lib/utils";
 
 const TOKEN_KEY = "lp_admin_token";
 
@@ -82,6 +83,24 @@ interface PlatformMeta {
   label: string;
 }
 
+interface ConnectorStatus {
+  id: string;
+  label: string;
+  blurb: string;
+  note: string | null;
+  connected: boolean;
+  requiredSecretKeys: string[];
+  missingKeys: string[];
+  optionalSecretKeys: string[];
+  optionalPresentKeys: string[];
+  setupSteps: string[];
+  docsUrl: string;
+}
+interface ConnectorsResponse {
+  adsMode: string;
+  connectors: ConnectorStatus[];
+}
+
 function hashHue(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
@@ -101,6 +120,9 @@ export default function Admin() {
   const [assetPlatforms, setAssetPlatforms] = useState<PlatformMeta[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [connectors, setConnectors] = useState<ConnectorsResponse | null>(null);
+  const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [connectorsError, setConnectorsError] = useState<string | null>(null);
 
   const refetchAssets = useCallback(async () => {
     if (!token) return;
@@ -117,6 +139,27 @@ export default function Admin() {
       setAssetPlatforms(data.platforms);
     } catch {
       /* keep previous state */
+    }
+  }, [token]);
+
+  const refetchConnectors = useCallback(async () => {
+    if (!token) return;
+    setConnectorsLoading(true);
+    setConnectorsError(null);
+    try {
+      const res = await fetch("/api/admin/connectors", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) {
+        setConnectorsError("Couldn't load connector status. Try refreshing.");
+        return;
+      }
+      const data = (await res.json()) as ConnectorsResponse;
+      setConnectors(data);
+    } catch {
+      setConnectorsError("Couldn't load connector status. Try refreshing.");
+    } finally {
+      setConnectorsLoading(false);
     }
   }, [token]);
 
@@ -200,8 +243,11 @@ export default function Admin() {
   }, [token]);
 
   useEffect(() => {
-    if (phase === "ready" && token) void refetchAssets();
-  }, [phase, token, refetchAssets]);
+    if (phase === "ready" && token) {
+      void refetchAssets();
+      void refetchConnectors();
+    }
+  }, [phase, token, refetchAssets, refetchConnectors]);
 
   useEffect(() => {
     if (!assets || !token) return;
@@ -371,6 +417,13 @@ export default function Admin() {
           </p>
         </div>
 
+        <ConnectorsSection
+          data={connectors}
+          loading={connectorsLoading}
+          error={connectorsError}
+          onRefresh={() => void refetchConnectors()}
+        />
+
         <ReferenceExamples
           assets={assets}
           platforms={assetPlatforms}
@@ -490,6 +543,176 @@ function PrincipleList({ items }: { items: string[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function ConnectorsSection({
+  data,
+  loading,
+  error,
+  onRefresh,
+}: {
+  data: ConnectorsResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <Section label="Ad platform connectors">
+      <div className="-mt-4 mb-8 flex items-start justify-between gap-6 flex-wrap">
+        <p className="max-w-2xl font-sans text-sm text-muted-foreground leading-relaxed">
+          The ad networks LaunchPad can publish to. Credentials live only in the server's secrets —
+          they are never entered or stored on this page. A platform needs its secrets connected and{" "}
+          <code className="bg-secondary px-1 rounded text-xs">ADS_MODE</code> set to{" "}
+          <code className="bg-secondary px-1 rounded text-xs">live</code> before real campaigns run;
+          otherwise everything stays in safe <code className="bg-secondary px-1 rounded text-xs">mock</code>{" "}
+          simulation.
+        </p>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 font-sans text-sm rounded-full px-4 py-2 border border-border hover:bg-secondary disabled:opacity-50 transition-colors flex-shrink-0"
+        >
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          Refresh status
+        </button>
+      </div>
+
+      {data && (
+        <div className="mb-8 inline-flex items-center gap-2 font-sans text-xs text-muted-foreground bg-secondary/60 border border-border/60 rounded-full px-3.5 py-1.5">
+          <span className="opacity-50 uppercase tracking-[1.5px] text-[10px]">Publishing mode</span>
+          <code className="font-mono text-foreground/80">ADS_MODE={data.adsMode}</code>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-6 font-sans text-sm text-red-700 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
+
+      {data === null ? (
+        error ? null : (
+          <div className="flex items-center gap-2 font-sans text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading connectors…
+          </div>
+        )
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 items-start">
+          {data.connectors.map((c) => (
+            <ConnectorCard key={c.id} c={c} />
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function StatusBadge({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex-shrink-0 inline-flex items-center gap-1.5 text-[11px] font-sans rounded-full px-2.5 py-1 border",
+        connected
+          ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+          : "bg-secondary text-muted-foreground border-border/60",
+      )}
+    >
+      <span
+        className={cn(
+          "w-1.5 h-1.5 rounded-full",
+          connected ? "bg-emerald-500" : "bg-muted-foreground/40",
+        )}
+      />
+      {connected ? "Connected" : "Not connected"}
+    </span>
+  );
+}
+
+function SecretChip({ name, present }: { name: string; present: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border",
+        present
+          ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+          : "bg-secondary text-muted-foreground border-border/60",
+      )}
+    >
+      {present ? (
+        <Check className="w-3 h-3" />
+      ) : (
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+      )}
+      {name}
+    </span>
+  );
+}
+
+function ConnectorCard({ c }: { c: ConnectorStatus }) {
+  const missing = new Set(c.missingKeys);
+  const optionalPresent = new Set(c.optionalPresentKeys);
+  return (
+    <article className="bg-card border border-border rounded-2xl p-6 flex flex-col h-full">
+      <div className="flex items-start justify-between gap-4 mb-2">
+        <h4 className="font-serif text-2xl leading-tight flex items-center gap-2">
+          <Plug className="w-4 h-4 opacity-40" />
+          {c.label}
+        </h4>
+        <StatusBadge connected={c.connected} />
+      </div>
+      <p className="font-sans text-sm text-muted-foreground leading-relaxed mb-1">{c.blurb}</p>
+      {c.note && (
+        <p className="font-sans text-xs text-muted-foreground/70 leading-relaxed mb-4">{c.note}</p>
+      )}
+
+      <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mt-3 mb-3">
+        Setup
+      </span>
+      <ol className="flex flex-col gap-3 mb-5">
+        {c.setupSteps.map((s, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="font-serif text-lg opacity-25 leading-none pt-0.5">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <p className="font-sans text-sm text-foreground/80 leading-relaxed">{s}</p>
+          </li>
+        ))}
+      </ol>
+
+      <div className="mt-auto pt-4 border-t border-border/60">
+        <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mb-2">
+          Required secrets
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {c.requiredSecretKeys.map((k) => (
+            <SecretChip key={k} name={k} present={!missing.has(k)} />
+          ))}
+        </div>
+
+        {c.optionalSecretKeys.length > 0 && (
+          <>
+            <span className="block text-[10px] font-sans uppercase tracking-[1.5px] opacity-40 mt-4 mb-2">
+              Optional
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {c.optionalSecretKeys.map((k) => (
+                <SecretChip key={k} name={k} present={optionalPresent.has(k)} />
+              ))}
+            </div>
+          </>
+        )}
+
+        <a
+          href={c.docsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-1 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Setup docs <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+    </article>
   );
 }
 

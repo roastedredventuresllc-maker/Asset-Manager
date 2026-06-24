@@ -1,3 +1,5 @@
+export type AdPlatformId = "meta" | "tiktok" | "google" | "linkedin";
+
 export interface CampaignAd {
   hook: string;
   body: string;
