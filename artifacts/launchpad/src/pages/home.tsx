@@ -18,6 +18,7 @@ import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquareP
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { InSituAd } from "@/components/ad-mockups";
 
 export default function Home() {
   const [location, setLocation] = useLocation();
@@ -431,36 +432,35 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
         </div>
 
         <div className="mb-24">
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-8">Three Ads</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="flex items-baseline justify-between gap-4 mb-8">
+            <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Three Ads</div>
+            <div className="text-[11px] font-sans text-muted-foreground hidden sm:block">Previewed in-feed — switch platforms on each ad</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-14 items-start">
             {data.ads.map((ad: any, i: number) => {
               const asset = statusRes.adAssets?.find((a: any) => a.idx === i);
+              const placement: "square" | "vertical" = i === 1 ? "vertical" : "square";
               return (
-                <div key={i} className="flex flex-col gap-4 group/ad">
-                  <div className="w-full aspect-square bg-secondary rounded-xl overflow-hidden relative">
-                    {asset?.imageUrl ? (
-                      <img src={asset.imageUrl} className="w-full h-full object-cover animate-in fade-in duration-1000" />
-                    ) : asset?.status === "failed" ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-secondary text-muted-foreground font-sans text-xs">
-                        Image didn't generate
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite] bg-secondary" />
-                    )}
-                    <div className="absolute top-3 right-3 opacity-70 group-hover/ad:opacity-100 transition-opacity">
-                      <FeedbackButton
-                        label="Edit"
-                        disabled={assetsGenerating}
-                        onClick={() =>
-                          setRevisionTarget(`Ad ${i + 1} — the "${ad.angle}" angle (hook: "${ad.hook}")`)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div>
+                <div key={i} className="flex flex-col gap-5">
+                  <InSituAd
+                    brandName={data.brandName}
+                    hook={ad.hook}
+                    body={ad.body}
+                    cta={ad.cta}
+                    accent={(data.palette && data.palette[0]) || ad.gradientHex1}
+                    imageUrl={asset?.imageUrl}
+                    status={asset?.status}
+                    placement={placement}
+                  />
+                  <div className="text-center">
                     <div className="text-[11px] font-sans uppercase tracking-[1px] opacity-50 mb-2">{ad.angle}</div>
-                    <h3 className="font-sans font-bold text-lg leading-tight mb-2">{ad.hook}</h3>
-                    <p className="font-sans text-sm text-muted-foreground leading-relaxed">{ad.body}</p>
+                    <FeedbackButton
+                      label="Edit this ad"
+                      disabled={assetsGenerating}
+                      onClick={() =>
+                        setRevisionTarget(`Ad ${i + 1} — the "${ad.angle}" angle (hook: "${ad.hook}")`)
+                      }
+                    />
                   </div>
                 </div>
               )
