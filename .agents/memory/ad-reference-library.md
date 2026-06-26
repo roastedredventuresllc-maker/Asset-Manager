@@ -61,5 +61,37 @@ placeholders; RAG (not fine-tuning) is how taste improves on the current stack.
 **How to apply:** add curated seeds in `referenceSeed.ts`; keep BOTH guidance
 sources in mind when editing the system prompt. Storage falls back to local FS
 when no object-storage bucket is configured, and `imageUrl` is stored absolute
-(dev-domain) — so the corpus does NOT persist across production deploys until
-object storage is set up.
+(dev-domain) — object storage IS now configured, so the corpus persists.
+
+## Bulk-expanding the corpus (offline curation runbook + gotchas)
+
+To add many real ads at once: imageSearch "<platform> ad examples" → download +
+validate dimensions (magic-byte parser; **`sharp` is NOT importable in the
+code_execution sandbox**) → vision-filter keeping only
+`isAd && isSingleCreative && quality>=3` → dedupe against existing seed
+`imageUrl`s → emit `{seedKey,platform,title,sourceUrl,imageUrl}` entries
+(continue per-platform seedKey numbering) → append to `referenceSeed.ts` →
+restart the api-server workflow (no dev watcher) → admin reseed:
+`POST /api/admin/login {password:$ADMIN_PASSWORD}` → token in `x-admin-token` →
+`POST /api/admin/reference-assets/seed` (idempotent by seedKey) → verify all
+reach `status:"ready"` via `GET /api/admin/reference-assets`. The seed pipeline
+does NOT reject non-ads — it analyses whatever you give it — so the vision gate
+at curation time is what keeps quality up.
+
+**Hard-won gotchas doing the offline vision step:**
+- The Anthropic integration `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `_API_KEY`
+  are **SECRETS** (`viewEnvVars` returns boolean presence only), so the
+  code_execution sandbox CANNOT call the proxy. Run vision/LLM batch work as a
+  **bash `node` script** where `process.env` has the values (raw `fetch` to
+  `${BASE}/v1/messages`, headers `x-api-key` + `anthropic-version:2023-06-01`).
+- The proxy poisons its connection pool under **concurrency ≥2** (requests
+  stall/hang); run **concurrency 1**. A fresh process also has a warmup where the
+  first several calls get rate-limited (429) then it warms through — shuffle the
+  queue across passes so the same items don't always eat the warmup penalty.
+- For long batch runs: the bash tool SIGKILLs foreground commands near its ~120s
+  ceiling (and OOM-kills node when the 3 workflows are running). Launch the job
+  **detached** (`setsid bash -c '… &'`, return immediately) and poll progress
+  with short commands; make the script resumable (persist successes incrementally).
+- **Never** `pkill -f <pattern>` when `<pattern>` also appears in your own bash
+  command's argv (e.g. the script path) — it SIGKILLs your own shell (exit 137,
+  no output). Kill by PID, or split the pattern with quotes.
