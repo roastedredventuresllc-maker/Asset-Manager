@@ -17,6 +17,7 @@ interface GenerateImageJob {
   ad: CampaignAd;
   brandName: string;
   productImageUrl?: string | null;
+  productImageNoBgUrl?: string | null;
 }
 
 // We composite clean, on-brand typography ourselves, so the AI image should be
@@ -108,14 +109,18 @@ async function generateWithGemini(
 async function generateImageBuffer(
   job: GenerateImageJob,
 ): Promise<{ buffer: Buffer; model: string }> {
-  const { ad, idx, productImageUrl } = job;
+  const { ad, idx, productImageUrl, productImageNoBgUrl } = job;
   const portrait = idx === 1;
   const width = 1080;
   const height = portrait ? 1920 : 1080;
   const aspectRatio: AspectRatio = portrait ? "9:16" : "1:1";
 
-  const productBuffer = productImageUrl
-    ? await fetchProductImage(productImageUrl)
+  // Prefer the background-removed PNG (transparent cutout) for the hero ad
+  // so the AI model composites the subject cleanly into the generated scene.
+  // Fall back to the original photo if no-bg processing was unavailable.
+  const heroImageUrl = productImageNoBgUrl ?? productImageUrl;
+  const productBuffer = heroImageUrl
+    ? await fetchProductImage(heroImageUrl)
     : undefined;
 
   // Hero ad (idx 0): if the user uploaded a product photo, build the scene

@@ -8,4 +8,9 @@
 
 export interface ImageUploadResult {
   url: string;
+  /**
+     * Background-removed transparent PNG URL (null if unavailable)
+     * @nullable
+     */
+  noBgUrl?: string | null;
 }

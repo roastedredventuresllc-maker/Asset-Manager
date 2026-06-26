@@ -120,6 +120,7 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
     setIsSubmitting(true);
     setError(null);
     let productImageUrl: string | null = null;
+    let productImageNoBgUrl: string | null = null;
 
     try {
       if (file) {
@@ -132,12 +133,13 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
         if (res.ok) {
           const data = await res.json();
           productImageUrl = data.url;
+          productImageNoBgUrl = data.noBgUrl ?? null;
         }
         // upload failure is non-fatal — we proceed without the image
       }
 
       generateCampaign.mutate(
-        { data: { brief: brief.trim(), productImageUrl } },
+        { data: { brief: brief.trim(), productImageUrl, productImageNoBgUrl } },
         {
           onSuccess: (campaign) => setCampaignId(campaign.id),
           onError: () => {

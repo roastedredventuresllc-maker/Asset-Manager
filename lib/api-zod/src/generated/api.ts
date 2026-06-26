@@ -22,7 +22,8 @@ export const HealthCheckResponse = zod.object({
  */
 export const GenerateCampaignBody = zod.object({
   "brief": zod.string().describe('Founder\'s description of their product'),
-  "productImageUrl": zod.string().nullish().describe('Pre-uploaded product image URL')
+  "productImageUrl": zod.string().nullish().describe('Pre-uploaded product image URL'),
+  "productImageNoBgUrl": zod.string().nullish().describe('Background-removed transparent PNG of the product image')
 })
 
 
@@ -335,7 +336,8 @@ export const UploadProductImageBody = zod.object({
 })
 
 export const UploadProductImageResponse = zod.object({
-  "url": zod.string()
+  "url": zod.string(),
+  "noBgUrl": zod.string().nullish().describe('Background-removed transparent PNG URL (null if unavailable)')
 })
 
 

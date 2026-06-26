@@ -19,12 +19,17 @@ function handleError(err: unknown, res: import("express").Response): void {
 
 // POST /api/campaigns/generate
 router.post("/generate", async (req, res) => {
-  const { brief, productImageUrl } = req.body as {
+  const { brief, productImageUrl, productImageNoBgUrl } = req.body as {
     brief?: string;
     productImageUrl?: string | null;
+    productImageNoBgUrl?: string | null;
   };
   try {
-    const campaign = await svc.createCampaign({ brief: brief ?? "", productImageUrl });
+    const campaign = await svc.createCampaign({
+      brief: brief ?? "",
+      productImageUrl,
+      productImageNoBgUrl,
+    });
     return res.status(201).json(campaign);
   } catch (err) {
     return handleError(err, res);

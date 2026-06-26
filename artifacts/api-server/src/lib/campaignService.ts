@@ -75,6 +75,7 @@ export async function generateCampaignAsync(
   campaignId: string,
   brief: string,
   productImageUrl: string | null,
+  productImageNoBgUrl?: string | null,
 ): Promise<void> {
   try {
     const campaignData = await generateCampaign(brief);
@@ -113,6 +114,7 @@ export async function generateCampaignAsync(
           ad,
           brandName: campaignData.brandName,
           productImageUrl,
+          productImageNoBgUrl: productImageNoBgUrl ?? null,
         },
         status: "pending",
       });
@@ -137,6 +139,7 @@ export async function generateCampaignAsync(
 export async function createCampaign(input: {
   brief: string;
   productImageUrl?: string | null;
+  productImageNoBgUrl?: string | null;
   userId?: string | null;
 }) {
   const brief = input.brief?.trim();
@@ -146,6 +149,7 @@ export async function createCampaign(input: {
 
   const id = generateId("cmp");
   const productImageUrl = input.productImageUrl ?? null;
+  const productImageNoBgUrl = input.productImageNoBgUrl ?? null;
 
   await db.insert(campaignsTable).values({
     id,
@@ -168,7 +172,7 @@ export async function createCampaign(input: {
 
   const campaign = await getCampaignRecord(id);
 
-  generateCampaignAsync(id, brief, productImageUrl).catch((err) => {
+  generateCampaignAsync(id, brief, productImageUrl, productImageNoBgUrl).catch((err) => {
     logger.error({ err, campaignId: id }, "Async campaign generation failed");
   });
 
@@ -280,6 +284,21 @@ export async function reviseCampaignById(id: string, request: string) {
   if (visualChanged) {
     const { jobsTable } = await import("@workspace/db");
 
+    // Recover the no-bg URL from the most recent completed job payload for
+    // this campaign (stored there at generation time). No schema migration needed.
+    let productImageNoBgUrl: string | null = null;
+    const prevJob = await db.query.jobsTable.findFirst({
+      where: and(
+        eq(jobsTable.type, "generate_image"),
+        eq(jobsTable.status, "completed"),
+      ),
+      orderBy: [desc(jobsTable.createdAt)],
+    });
+    const prevPayload = prevJob?.payload as { campaignId?: string; productImageNoBgUrl?: string | null } | null;
+    if (prevPayload?.campaignId === id && prevPayload?.productImageNoBgUrl) {
+      productImageNoBgUrl = prevPayload.productImageNoBgUrl;
+    }
+
     await db
       .update(adAssetsTable)
       .set({ status: "pending", imageUrl: null })
@@ -305,6 +324,7 @@ export async function reviseCampaignById(id: string, request: string) {
           ad,
           brandName: updated.brandName,
           productImageUrl: campaign.productImageUrl,
+          productImageNoBgUrl,
         },
         status: "pending",
       });

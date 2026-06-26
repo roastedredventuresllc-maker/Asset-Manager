@@ -17,6 +17,11 @@ export interface GenerateCampaignInput {
      * @nullable
      */
   productImageUrl?: string | null;
+  /**
+     * Background-removed transparent PNG of the product image
+     * @nullable
+     */
+  productImageNoBgUrl?: string | null;
 }
 
 export interface RevisionInput {
@@ -217,6 +222,11 @@ export interface AuthResult {
 
 export interface ImageUploadResult {
   url: string;
+  /**
+     * Background-removed transparent PNG URL (null if unavailable)
+     * @nullable
+     */
+  noBgUrl?: string | null;
 }
 
 export type ListCampaignsParams = {

@@ -14,4 +14,9 @@ export interface GenerateCampaignInput {
      * @nullable
      */
   productImageUrl?: string | null;
+  /**
+     * Background-removed transparent PNG of the product image
+     * @nullable
+     */
+  productImageNoBgUrl?: string | null;
 }

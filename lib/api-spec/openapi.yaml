@@ -305,6 +305,9 @@ components:
         productImageUrl:
           type: ["string", "null"]
           description: Pre-uploaded product image URL
+        productImageNoBgUrl:
+          type: ["string", "null"]
+          description: Background-removed transparent PNG of the product image
 
     RevisionInput:
       type: object
@@ -554,3 +557,6 @@ components:
       properties:
         url:
           type: string
+        noBgUrl:
+          type: ["string", "null"]
+          description: Background-removed transparent PNG URL (null if unavailable)

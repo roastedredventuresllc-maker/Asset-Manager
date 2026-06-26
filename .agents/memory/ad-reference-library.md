@@ -95,3 +95,24 @@ at curation time is what keeps quality up.
 - **Never** `pkill -f <pattern>` when `<pattern>` also appears in your own bash
   command's argv (e.g. the script path) — it SIGKILLs your own shell (exit 137,
   no output). Kill by PID, or split the pattern with quotes.
+
+## Background removal for product photos
+
+`backgroundRemoval.ts` exports `removeBackground(imageUrl) → Buffer | null`.
+Two-strategy approach:
+1. **fal.ai BRIA RMBG 2.0** — dedicated model, best edge quality; used when
+   `AI_INTEGRATIONS_FAL_API_KEY` / `FAL_KEY` / `FAL_API_KEY` is set.
+2. **Gemini editImage fallback** — always available (existing integration);
+   prompts Gemini to place subject on white, then sharp masks near-white pixels
+   (>240 all channels) → transparent alpha.
+
+`externalApi__falai` (managed billing) is **agent sandbox only** — cannot be
+called from server-side Node code. fal.ai server-side needs explicit credentials
+(`AI_INTEGRATIONS_FAL_*` or `FAL_KEY`); without them the Gemini fallback runs.
+
+The upload route (`POST /api/uploads/product-image`) waits up to 30 s for BG
+removal, then returns `{ url, noBgUrl }` — `noBgUrl` is null on timeout/failure.
+The image pipeline (`imagePipeline.ts`) prefers `productImageNoBgUrl` over
+`productImageUrl` for the hero ad composite (idx 0); other slots ignore it.
+`productImageNoBgUrl` threads through job payloads; revisions recover it from
+the most recent completed job (no DB migration needed).
