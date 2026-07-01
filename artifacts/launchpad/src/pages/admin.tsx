@@ -83,6 +83,10 @@ interface PlatformMeta {
   label: string;
 }
 
+interface SetupStep {
+  text: string;
+  link?: { label: string; url: string };
+}
 interface ConnectorStatus {
   id: string;
   label: string;
@@ -95,7 +99,7 @@ interface ConnectorStatus {
   optionalPresentKeys: string[];
   storedKeys: string[];
   source: "stored" | "env" | "none";
-  setupSteps: string[];
+  setupSteps: SetupStep[];
   docsUrl: string;
 }
 interface ConnectorsResponse {
@@ -788,7 +792,21 @@ function ConnectorCard({
                 <span className="font-serif text-lg opacity-25 leading-none pt-0.5">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <p className="font-sans text-sm text-foreground/80 leading-relaxed">{s}</p>
+                <div className="flex flex-col gap-1.5">
+                  <p className="font-sans text-sm text-foreground/80 leading-relaxed">
+                    {s.text}
+                  </p>
+                  {s.link && (
+                    <a
+                      href={s.link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 self-start font-sans text-xs font-medium text-foreground/70 hover:text-foreground rounded-full border border-border px-2.5 py-1 hover:bg-secondary transition-colors"
+                    >
+                      {s.link.label} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
               </li>
             ))}
           </ol>

@@ -26,3 +26,11 @@ have no Replit integration at all. One credential model works uniformly for all 
   Status only ever exposes key names + presence + source. Admin UI uses blank inputs, never prefills.
 - Live publishing is intentionally scoped to **Meta + TikTok only**; Google/LinkedIn are stubs that
   throw NOT_IMPLEMENTED, and the budget split covers only the implemented platforms.
+- **`META_BUSINESS_ID` is misnamed — it holds the Meta *Ad Account* ID, not the Business ID.** The
+  Meta client uses it directly in `/act_${META_BUSINESS_ID}/...` Marketing API paths. Setup
+  instructions must tell operators to copy the **Ad Account ID** (digits only, from Business
+  Settings → Accounts → Ad Accounts), NOT the Business ID, or live publishing 404s.
+- **Connector `setupSteps` are structured `{ text, link? }` (not plain strings)** in
+  `ads/connectors.ts`; the admin Connectors UI renders each step's optional link as a button. The
+  `/api/admin/connectors` endpoint is hand-typed (plain `res.json`, NOT openapi codegen), so the
+  `ConnectorStatus`/`SetupStep` types must be kept in sync manually between backend and admin.tsx.

@@ -11,6 +11,12 @@ import { credentialState } from "./credentials.js";
  * clients consume). The status endpoint reflects their presence. We never read,
  * return, or log secret VALUES — only whether each key is set.
  */
+/** A single setup instruction, optionally with a direct link to the exact page. */
+export interface SetupStep {
+  text: string;
+  link?: { label: string; url: string };
+}
+
 export interface ConnectorSpec {
   id: AdPlatformId;
   label: string;
@@ -18,7 +24,7 @@ export interface ConnectorSpec {
   note: string | null;
   requiredSecretKeys: string[];
   optionalSecretKeys: string[];
-  setupSteps: string[];
+  setupSteps: SetupStep[];
   docsUrl: string;
 }
 
@@ -46,10 +52,28 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     ],
     optionalSecretKeys: [],
     setupSteps: [
-      "Open business.facebook.com, create or select your Business and note its Ad Account ID (digits only).",
-      "Under Business Settings → Users → System Users, create a system user and generate a token with the ads_management and pages_read_engagement permissions.",
-      "Connect the Facebook Page you advertise from and copy its Page ID.",
-      "Add META_SYSTEM_USER_TOKEN, META_BUSINESS_ID and META_DEFAULT_PAGE_ID in the Replit Secrets pane, then press Refresh status.",
+      {
+        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only) — that's META_BUSINESS_ID.",
+        link: {
+          label: "Open Ad Accounts",
+          url: "https://business.facebook.com/settings/ad-accounts",
+        },
+      },
+      {
+        text: "Under Users → System Users, add a system user and generate a token with the ads_management and pages_read_engagement permissions. That token is META_SYSTEM_USER_TOKEN.",
+        link: {
+          label: "Open System Users",
+          url: "https://business.facebook.com/settings/system-users",
+        },
+      },
+      {
+        text: "Open Pages, click the Page you advertise from, and copy its Page ID — that's META_DEFAULT_PAGE_ID.",
+        link: {
+          label: "Open Pages",
+          url: "https://business.facebook.com/settings/pages",
+        },
+      },
+      { text: "Paste the three values into the fields below and press Save." },
     ],
     docsUrl: "https://developers.facebook.com/docs/marketing-apis/",
   },
@@ -67,10 +91,24 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     ],
     optionalSecretKeys: [],
     setupSteps: [
-      "Apply for the Marketing API at business-api.tiktok.com and create an app.",
-      "Authorize the app for your Business Center and Advertiser account to obtain a long-lived access token.",
-      "Note your Business Center ID, Advertiser ID and a verified Identity ID.",
-      "Add TIKTOK_ACCESS_TOKEN, TIKTOK_BC_ID, TIKTOK_ADVERTISER_ID and TIKTOK_IDENTITY_ID in the Replit Secrets pane, then press Refresh status.",
+      {
+        text: "Create a Marketing API app in the TikTok for Business developer portal.",
+        link: {
+          label: "Open developer portal",
+          url: "https://business-api.tiktok.com/portal",
+        },
+      },
+      {
+        text: "Authorize the app for your Business Center and advertiser account to get a long-lived access token — that's TIKTOK_ACCESS_TOKEN.",
+        link: {
+          label: "Open Business Center",
+          url: "https://business.tiktok.com",
+        },
+      },
+      {
+        text: "In Business Center, copy your Business Center ID (TIKTOK_BC_ID), Advertiser ID (TIKTOK_ADVERTISER_ID) and a verified Identity ID (TIKTOK_IDENTITY_ID).",
+      },
+      { text: "Paste the four values into the fields below and press Save." },
     ],
     docsUrl: "https://business-api.tiktok.com/portal/docs",
   },
@@ -89,10 +127,31 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     ],
     optionalSecretKeys: ["GOOGLE_ADS_LOGIN_CUSTOMER_ID"],
     setupSteps: [
-      "In your Google Ads Manager account, open the API Center and apply for a developer token.",
-      "Create OAuth client credentials in Google Cloud Console and generate a refresh token for the https://www.googleapis.com/auth/adwords scope.",
-      "Note the target Customer ID (and the Manager / login Customer ID if you publish through a manager account).",
-      "Add GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN and GOOGLE_ADS_CUSTOMER_ID in the Replit Secrets pane, then press Refresh status.",
+      {
+        text: "In your Google Ads Manager account, open the API Center and apply for a developer token — that's GOOGLE_ADS_DEVELOPER_TOKEN.",
+        link: {
+          label: "Open API Center",
+          url: "https://ads.google.com/aw/apicenter",
+        },
+      },
+      {
+        text: "In Google Cloud Console, create OAuth client credentials — those are GOOGLE_ADS_CLIENT_ID and GOOGLE_ADS_CLIENT_SECRET.",
+        link: {
+          label: "Open Cloud credentials",
+          url: "https://console.cloud.google.com/apis/credentials",
+        },
+      },
+      {
+        text: "Use the OAuth Playground to generate a refresh token for the AdWords scope — that's GOOGLE_ADS_REFRESH_TOKEN.",
+        link: {
+          label: "Open OAuth Playground",
+          url: "https://developers.google.com/oauthplayground",
+        },
+      },
+      {
+        text: "Copy the target account's Customer ID (GOOGLE_ADS_CUSTOMER_ID). Only if you publish through a manager account, also add its ID as GOOGLE_ADS_LOGIN_CUSTOMER_ID.",
+      },
+      { text: "Paste the values into the fields below and press Save." },
     ],
     docsUrl: "https://developers.google.com/google-ads/api/docs/start",
   },
@@ -109,10 +168,24 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     ],
     optionalSecretKeys: [],
     setupSteps: [
-      "Create an app in the LinkedIn Developer Portal and request Marketing Developer Platform (Advertising API) access.",
-      "Complete OAuth to generate an access token with the r_ads, rw_ads and r_ads_reporting scopes.",
-      "Note your Ad Account ID and the Organization URN you advertise on behalf of.",
-      "Add LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID and LINKEDIN_ORGANIZATION_ID in the Replit Secrets pane, then press Refresh status.",
+      {
+        text: "Create an app in the LinkedIn Developer Portal and request Advertising API access.",
+        link: {
+          label: "Open Developer Portal",
+          url: "https://www.linkedin.com/developers/apps",
+        },
+      },
+      {
+        text: "Complete OAuth to generate an access token with the r_ads, rw_ads and r_ads_reporting scopes — that's LINKEDIN_ACCESS_TOKEN.",
+      },
+      {
+        text: "In Campaign Manager, copy your Ad Account ID (LINKEDIN_AD_ACCOUNT_ID) and the Organization ID you advertise on behalf of (LINKEDIN_ORGANIZATION_ID).",
+        link: {
+          label: "Open Campaign Manager",
+          url: "https://www.linkedin.com/campaignmanager",
+        },
+      },
+      { text: "Paste the three values into the fields below and press Save." },
     ],
     docsUrl: "https://learn.microsoft.com/en-us/linkedin/marketing/",
   },

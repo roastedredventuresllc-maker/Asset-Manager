@@ -622,13 +622,32 @@ function RevisionSheet({ open, onOpenChange, campaignId, campaign, target, asset
   );
 }
 
+function shipErrorMessage(err: unknown): string {
+  const e = err as { status?: number; data?: { error?: string; message?: string } };
+  const code = e?.data?.error;
+  switch (code) {
+    case "stripe_not_configured":
+      return "Payments aren't set up yet, so checkout can't start. Please try again later or contact support.";
+    case "not_generated":
+      return "This campaign is still being prepared. Give it a moment to finish, then try again.";
+    case "not_found":
+      return "We couldn't find this campaign. Try starting a new one.";
+    case "missing_params":
+      return "Please pick a budget and channel split before shipping.";
+  }
+  if (e?.data?.message) return e.data.message;
+  return "Something went wrong starting checkout. Please try again.";
+}
+
 function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: any; onBack: () => void }) {
   const [budget, setBudget] = useState(data.recommendedBudgetPreset === 'scale' ? 20000 : data.recommendedBudgetPreset === 'starter' ? 2500 : 7500);
   const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 50);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [shipError, setShipError] = useState<string | null>(null);
   const publish = usePublishCampaign();
 
   const handleShip = () => {
+    setShipError(null);
     publish.mutate({ 
       id: campaignId, 
       data: { 
@@ -639,7 +658,14 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
       }
     }, {
       onSuccess: (res) => {
-        window.location.href = res.checkoutUrl;
+        if (res?.checkoutUrl) {
+          window.location.href = res.checkoutUrl;
+        } else {
+          setShipError("We couldn't start checkout. Please try again in a moment.");
+        }
+      },
+      onError: (err) => {
+        setShipError(shipErrorMessage(err));
       }
     });
   };
@@ -715,6 +741,12 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
         >
           {publish.isPending ? "Preparing..." : `Ship ${data.brandName}`} <ArrowRight className="w-5 h-5" />
         </button>
+
+        {shipError && (
+          <p className="mt-4 text-center font-sans text-sm text-red-700 max-w-[440px] mx-auto leading-relaxed">
+            {shipError}
+          </p>
+        )}
       </div>
     </div>
   );
