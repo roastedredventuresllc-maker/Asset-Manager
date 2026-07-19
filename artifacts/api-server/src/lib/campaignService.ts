@@ -217,6 +217,7 @@ export async function listCampaignsForUser(userId: string) {
   return Promise.all(
     campaigns.map(async (c) => {
       let spendTodayCents: number | null = null;
+      let lifetimeSpendCents: number | null = null;
       if (c.status === "live" || c.status === "paused") {
         const latest = await db.query.metricsSnapshotsTable.findFirst({
           where: and(
@@ -226,6 +227,7 @@ export async function listCampaignsForUser(userId: string) {
           orderBy: [desc(metricsSnapshotsTable.snapshotAt)],
         });
         spendTodayCents = latest?.spendCents ?? 0;
+        lifetimeSpendCents = await getLifetimeSpendCents(c.id);
       }
       const cj = c.campaignJson as { brandName?: string } | null;
       return {
@@ -233,6 +235,9 @@ export async function listCampaignsForUser(userId: string) {
         brandName: cj?.brandName ?? "Untitled",
         status: c.status,
         spendTodayCents,
+        lifetimeSpendCents,
+        budgetCapCents: c.budgetCapCents ?? null,
+        pausedReason: c.pausedReason ?? null,
         createdAt: c.createdAt.toISOString(),
       };
     }),
@@ -256,10 +261,18 @@ export async function getCampaignStatus(id: string) {
     orderBy: [adAssetsTable.idx],
   });
 
+  const lifetimeSpendCents =
+    campaign.status === "live" || campaign.status === "paused"
+      ? await getLifetimeSpendCents(id)
+      : null;
+
   return {
     id: campaign.id,
     status: campaign.status,
     rejectionReason: campaign.rejectionReason ?? null,
+    pausedReason: campaign.pausedReason ?? null,
+    budgetCapCents: campaign.budgetCapCents ?? null,
+    lifetimeSpendCents,
     campaignData: campaign.campaignJson ?? null,
     adAssets: assets.map((a) => ({
       idx: a.idx,
@@ -466,6 +479,7 @@ export async function pauseCampaignById(
     ),
   });
 
+  const failedPlatforms: string[] = [];
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
@@ -477,7 +491,20 @@ export async function pauseCampaignById(
         .where(eq(publishesTable.id, pub.id));
     } catch (err) {
       logger.error({ err, publishId: pub.id }, "Error pausing platform");
+      failedPlatforms.push(pub.platform);
     }
+  }
+
+  if (failedPlatforms.length > 0) {
+    // Do NOT mark the campaign paused: ads are still running on at least one
+    // platform. Keeping status "live" means the spend guard keeps monitoring
+    // it and will retry the pause on its next tick, so the budget cap stays
+    // enforced even through transient platform API failures.
+    throw new ServiceError(
+      502,
+      "pause_incomplete",
+      `Could not pause on: ${failedPlatforms.join(", ")}. The campaign is still live; it will be retried automatically.`,
+    );
   }
 
   await db
@@ -662,6 +689,12 @@ export async function getCampaignMetrics(id: string) {
   const campaign = await getCampaignRecord(id);
   if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
 
+  const lifetimeSpendCents =
+    campaign.status === "live" || campaign.status === "paused"
+      ? await getLifetimeSpendCents(id)
+      : null;
+  const budgetCapCents = campaign.budgetCapCents ?? null;
+
   if (campaign.status === "live") {
     const publishes = await db.query.publishesTable.findMany({
       where: and(
@@ -692,6 +725,8 @@ export async function getCampaignMetrics(id: string) {
       impressions: totalImpressions,
       clicks: totalClicks,
       spendCents: totalSpendCents,
+      lifetimeSpendCents,
+      budgetCapCents,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -701,6 +736,8 @@ export async function getCampaignMetrics(id: string) {
     impressions: 0,
     clicks: 0,
     spendCents: 0,
+    lifetimeSpendCents,
+    budgetCapCents,
     updatedAt: new Date().toISOString(),
   };
 }

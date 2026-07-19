@@ -42,6 +42,11 @@ export class MockAdPlatform implements AdPlatform {
   }
 
   async pauseCampaign(externalCampaignId: string): Promise<void> {
+    // Test hook: lets mock-mode tests exercise the platform-failure path
+    // (e.g. verifying a campaign is NOT marked paused when a platform call fails).
+    if (externalCampaignId.includes("mockfail")) {
+      throw new Error("[MOCK] simulated platform pause failure");
+    }
     logger.info(
       { platform: this.platform, externalCampaignId },
       "[MOCK] pauseCampaign — would pause on platform API",

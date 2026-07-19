@@ -67,12 +67,19 @@ export default function Campaigns() {
                   <span className="font-serif text-2xl group-hover:opacity-80 transition-opacity">{c.brandName || "Untitled"}</span>
                 </div>
                 <div className="flex items-center gap-8">
+                  {c.lifetimeSpendCents !== undefined && c.lifetimeSpendCents !== null && c.budgetCapCents !== undefined && c.budgetCapCents !== null && (
+                    <span className="font-sans text-sm text-muted-foreground">
+                      ${(c.lifetimeSpendCents / 100).toFixed(2)} of ${(c.budgetCapCents / 100).toFixed(2)}
+                    </span>
+                  )}
                   {c.spendTodayCents !== undefined && c.spendTodayCents !== null && (
                     <span className="font-sans text-sm text-muted-foreground">
                       ${(c.spendTodayCents / 100).toFixed(2)} today
                     </span>
                   )}
-                  <span className="font-sans text-sm capitalize tracking-wider opacity-50">{c.status === 'in_review' ? 'in review' : c.status}</span>
+                  <span className="font-sans text-sm capitalize tracking-wider opacity-50">
+                    {c.status === 'in_review' ? 'in review' : c.status === 'paused' && c.pausedReason === 'budget_cap' ? 'budget spent' : c.status}
+                  </span>
                 </div>
               </button>
             ))}

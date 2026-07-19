@@ -17,6 +17,21 @@ export interface CampaignStatusResponse {
      * @nullable
      */
   rejectionReason?: string | null;
+  /**
+     * Why the campaign is paused ("user" | "admin" | "budget_cap")
+     * @nullable
+     */
+  pausedReason?: string | null;
+  /**
+     * Total spend cap in cents; the campaign auto-pauses when reached
+     * @nullable
+     */
+  budgetCapCents?: number | null;
+  /**
+     * Estimated total spend so far; null unless live or paused
+     * @nullable
+     */
+  lifetimeSpendCents?: number | null;
   /** Populated once generation is complete */
   campaignData?: CampaignData | null;
   adAssets?: AdAsset[];

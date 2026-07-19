@@ -39,6 +39,9 @@ export const ListCampaignsResponseItem = zod.object({
   "brandName": zod.string(),
   "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "spendTodayCents": zod.number().nullish(),
+  "lifetimeSpendCents": zod.number().nullish().describe('Estimated total spend so far; null unless live or paused'),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
+  "pausedReason": zod.string().nullish().describe('Why the campaign is paused (\"user\" | \"admin\" | \"budget_cap\")'),
   "createdAt": zod.string()
 })
 export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
@@ -256,6 +259,8 @@ export const GetCampaignMetricsResponse = zod.object({
   "impressions": zod.number(),
   "clicks": zod.number(),
   "spendCents": zod.number(),
+  "lifetimeSpendCents": zod.number().nullish().describe('Estimated total spend so far; null unless live or paused'),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
   "updatedAt": zod.string()
 })
 
@@ -271,6 +276,9 @@ export const GetCampaignStatusResponse = zod.object({
   "id": zod.string(),
   "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "rejectionReason": zod.string().nullish().describe('Set when the campaign was rejected in review'),
+  "pausedReason": zod.string().nullish().describe('Why the campaign is paused (\"user\" | \"admin\" | \"budget_cap\")'),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
+  "lifetimeSpendCents": zod.number().nullish().describe('Estimated total spend so far; null unless live or paused'),
   "campaignData": zod.union([zod.object({
   "brandName": zod.string(),
   "tagline": zod.string(),

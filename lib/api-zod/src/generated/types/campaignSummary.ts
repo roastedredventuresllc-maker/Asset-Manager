@@ -13,5 +13,20 @@ export interface CampaignSummary {
   status: CampaignSummaryStatus;
   /** @nullable */
   spendTodayCents?: number | null;
+  /**
+     * Estimated total spend so far; null unless live or paused
+     * @nullable
+     */
+  lifetimeSpendCents?: number | null;
+  /**
+     * Total spend cap in cents; the campaign auto-pauses when reached
+     * @nullable
+     */
+  budgetCapCents?: number | null;
+  /**
+     * Why the campaign is paused ("user" | "admin" | "budget_cap")
+     * @nullable
+     */
+  pausedReason?: string | null;
   createdAt: string;
 }

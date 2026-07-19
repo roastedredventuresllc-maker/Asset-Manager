@@ -11,5 +11,15 @@ export interface CampaignMetrics {
   impressions: number;
   clicks: number;
   spendCents: number;
+  /**
+     * Estimated total spend so far; null unless live or paused
+     * @nullable
+     */
+  lifetimeSpendCents?: number | null;
+  /**
+     * Total spend cap in cents; the campaign auto-pauses when reached
+     * @nullable
+     */
+  budgetCapCents?: number | null;
   updatedAt: string;
 }

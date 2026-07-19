@@ -482,6 +482,15 @@ components:
           enum: [draft, generating, ready, publishing, in_review, rejected, live, paused, error]
         spendTodayCents:
           type: ["integer", "null"]
+        lifetimeSpendCents:
+          description: Estimated total spend so far; null unless live or paused
+          type: ["integer", "null"]
+        budgetCapCents:
+          description: Total spend cap in cents; the campaign auto-pauses when reached
+          type: ["integer", "null"]
+        pausedReason:
+          description: Why the campaign is paused ("user" | "admin" | "budget_cap")
+          type: ["string", "null"]
         createdAt:
           type: string
 
@@ -497,6 +506,15 @@ components:
         rejectionReason:
           description: Set when the campaign was rejected in review
           type: ["string", "null"]
+        pausedReason:
+          description: Why the campaign is paused ("user" | "admin" | "budget_cap")
+          type: ["string", "null"]
+        budgetCapCents:
+          description: Total spend cap in cents; the campaign auto-pauses when reached
+          type: ["integer", "null"]
+        lifetimeSpendCents:
+          description: Estimated total spend so far; null unless live or paused
+          type: ["integer", "null"]
         campaignData:
           description: Populated once generation is complete
           oneOf:
@@ -533,6 +551,12 @@ components:
           type: integer
         spendCents:
           type: integer
+        lifetimeSpendCents:
+          description: Estimated total spend so far; null unless live or paused
+          type: ["integer", "null"]
+        budgetCapCents:
+          description: Total spend cap in cents; the campaign auto-pauses when reached
+          type: ["integer", "null"]
         updatedAt:
           type: string
 

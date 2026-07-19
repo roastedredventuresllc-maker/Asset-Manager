@@ -830,7 +830,7 @@ function LiveState({ campaignId, setCampaignId }: { campaignId: string, setCampa
 
   const { data: metrics } = useGetCampaignMetrics(campaignId, {
     query: {
-      enabled: !!campaignId && campaign?.status === 'live',
+      enabled: !!campaignId && (campaign?.status === 'live' || campaign?.status === 'paused'),
       queryKey: getGetCampaignMetricsQueryKey(campaignId),
       refetchInterval: 30000
     }
@@ -847,7 +847,9 @@ function LiveState({ campaignId, setCampaignId }: { campaignId: string, setCampa
         <CheckCircle2 className="w-10 h-10" />
       </div>
       
-      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">{data.brandName} is live.</h1>
+      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">
+        {campaign.status === 'paused' ? `${data.brandName} is paused.` : `${data.brandName} is live.`}
+      </h1>
       
       <a href={`/p/${campaign.landingSlug}`} target="_blank" className="font-sans text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border transition-colors mb-16">
         launchpad.com/p/{campaign.landingSlug}
@@ -867,6 +869,28 @@ function LiveState({ campaignId, setCampaignId }: { campaignId: string, setCampa
           <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Spend Today</div>
         </div>
       </div>
+
+      {metrics?.budgetCapCents != null && (
+        <div className="w-full max-w-sm mb-12 -mt-8">
+          <div className="flex justify-between font-sans text-sm text-muted-foreground mb-2">
+            <span>Total spent</span>
+            <span>
+              ${((metrics.lifetimeSpendCents ?? 0) / 100).toFixed(2)} of ${(metrics.budgetCapCents / 100).toFixed(2)}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-border overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${campaign.pausedReason === 'budget_cap' ? 'bg-orange-400' : 'bg-emerald-500'}`}
+              style={{ width: `${Math.min(100, ((metrics.lifetimeSpendCents ?? 0) / metrics.budgetCapCents) * 100)}%` }}
+            />
+          </div>
+          {campaign.status === 'paused' && campaign.pausedReason === 'budget_cap' && (
+            <p className="font-sans text-sm text-orange-400 mt-3 text-center">
+              Paused — your budget has been fully spent. Contact us to add budget.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-8">
         <button 
