@@ -49,7 +49,7 @@ export class TikTokAdPlatform implements AdPlatform {
     // 1. Create campaign
     const campaignRes = (await this.fetch("/campaign/create/", "POST", {
       advertiser_id: advertiserId,
-      campaign_name: `LaunchPad — ${input.brandName}`,
+      campaign_name: input.campaignName ?? `LaunchPad — ${input.brandName}`,
       objective_type: "TRAFFIC",
       budget_mode: "BUDGET_MODE_INFINITE",
     })) as { campaign_id: string };
@@ -119,6 +119,16 @@ export class TikTokAdPlatform implements AdPlatform {
       opt_status: "DISABLE",
     });
     logger.info({ externalCampaignId }, "TikTok campaign paused");
+  }
+
+  async resumeCampaign(externalCampaignId: string): Promise<void> {
+    const advertiserId = this.creds.TIKTOK_ADVERTISER_ID;
+    await this.fetch("/campaign/status/update/", "POST", {
+      advertiser_id: advertiserId,
+      campaign_ids: [externalCampaignId],
+      opt_status: "ENABLE",
+    });
+    logger.info({ externalCampaignId }, "TikTok campaign resumed");
   }
 
   async getMetrics(externalCampaignId: string): Promise<Metrics> {

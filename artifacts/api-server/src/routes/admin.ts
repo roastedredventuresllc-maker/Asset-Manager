@@ -11,6 +11,17 @@ import {
 } from "../lib/referenceAssets.js";
 import { connectorStatuses, adsMode, CONNECTOR_SPECS } from "../ads/connectors.js";
 import { saveCredentials, deleteCredentials } from "../ads/credentials.js";
+import { db, campaignsTable, usersTable, publishesTable } from "@workspace/db";
+import { desc } from "drizzle-orm";
+import {
+  ServiceError,
+  approveCampaignById,
+  rejectCampaignById,
+  pauseCampaignById,
+  resumeCampaignById,
+  setBudgetCap,
+  getLifetimeSpendCents,
+} from "../lib/campaignService.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -245,6 +256,123 @@ router.post("/reference-assets/seed", requireAdmin, async (_req: Request, res: R
   } catch (err) {
     logger.error({ err }, "Reference seed failed");
     return res.status(500).json({ error: "Seed failed." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Client campaign management (media-agency controls). All client ads run from
+// the house ad accounts, so the admin reviews every campaign before it goes
+// live, and can pause/resume or adjust the spend cap per client at any time.
+// ---------------------------------------------------------------------------
+
+function handleServiceError(res: Response, err: unknown) {
+  if (err instanceof ServiceError) {
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+  logger.error({ err }, "Admin campaign action failed");
+  return res.status(500).json({ error: "Internal error" });
+}
+
+// GET /api/admin/campaigns — full roster: review queue + live/paused/rejected
+router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const campaigns = await db.query.campaignsTable.findMany({
+      orderBy: [desc(campaignsTable.createdAt)],
+    });
+    const users = await db.query.usersTable.findMany();
+    const emailById = new Map(users.map((u) => [u.id, u.email]));
+    const allPublishes = await db.query.publishesTable.findMany();
+
+    const rows = await Promise.all(
+      campaigns.map(async (c) => {
+        const pubs = allPublishes.filter((p) => p.campaignId === c.id);
+        const cj = c.campaignJson as { brandName?: string; tagline?: string } | null;
+        const pending = c.pendingPublishJson as {
+          dailyBudgetCents?: number;
+          metaSharePct?: number;
+          tiktokSharePct?: number;
+        } | null;
+        const hasSpend = c.status === "live" || c.status === "paused";
+        const spendCents = hasSpend ? await getLifetimeSpendCents(c.id) : 0;
+
+        return {
+          id: c.id,
+          brandName: cj?.brandName ?? "Untitled",
+          tagline: cj?.tagline ?? null,
+          brief: c.brief,
+          clientEmail: c.userId ? (emailById.get(c.userId) ?? null) : null,
+          status: c.status,
+          riskFlags: c.riskFlagsJson ?? null,
+          rejectionReason: c.rejectionReason,
+          pausedReason: c.pausedReason,
+          dailyBudgetCents: pending?.dailyBudgetCents ?? null,
+          metaSharePct: pending?.metaSharePct ?? null,
+          tiktokSharePct: pending?.tiktokSharePct ?? null,
+          budgetCapCents: c.budgetCapCents,
+          spendCents,
+          landingSlug: c.landingSlug,
+          platforms: pubs.map((p) => ({ platform: p.platform, status: p.status })),
+          createdAt: c.createdAt.toISOString(),
+        };
+      }),
+    );
+
+    return res.json({ campaigns: rows });
+  } catch (err) {
+    logger.error({ err }, "Admin campaigns list failed");
+    return res.status(500).json({ error: "Couldn't load campaigns." });
+  }
+});
+
+// POST /api/admin/campaigns/:id/approve — publish with the stored checkout options
+router.post("/campaigns/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await approveCampaignById(String(req.params.id));
+    return res.json(result);
+  } catch (err) {
+    return handleServiceError(res, err);
+  }
+});
+
+// POST /api/admin/campaigns/:id/reject — { reason } shown to the client
+router.post("/campaigns/:id/reject", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { reason } = (req.body ?? {}) as { reason?: string };
+    const result = await rejectCampaignById(String(req.params.id), reason ?? "");
+    return res.json(result);
+  } catch (err) {
+    return handleServiceError(res, err);
+  }
+});
+
+// POST /api/admin/campaigns/:id/pause
+router.post("/campaigns/:id/pause", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pauseCampaignById(String(req.params.id), "admin");
+    return res.json(result);
+  } catch (err) {
+    return handleServiceError(res, err);
+  }
+});
+
+// POST /api/admin/campaigns/:id/resume
+router.post("/campaigns/:id/resume", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await resumeCampaignById(String(req.params.id));
+    return res.json(result);
+  } catch (err) {
+    return handleServiceError(res, err);
+  }
+});
+
+// PATCH /api/admin/campaigns/:id/budget-cap — { budgetCapCents }
+router.patch("/campaigns/:id/budget-cap", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { budgetCapCents } = (req.body ?? {}) as { budgetCapCents?: number };
+    const result = await setBudgetCap(String(req.params.id), Number(budgetCapCents));
+    return res.json(result);
+  } catch (err) {
+    return handleServiceError(res, err);
   }
 });
 

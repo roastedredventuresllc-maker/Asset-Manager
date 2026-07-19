@@ -448,7 +448,7 @@ components:
             - type: "null"
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused, error]
+          enum: [draft, generating, ready, publishing, in_review, rejected, live, paused, error]
         landingSlug:
           type: ["string", "null"]
         landingUrl:
@@ -457,6 +457,15 @@ components:
           type: integer
         revisionsAllowed:
           type: integer
+        budgetCapCents:
+          description: Total spend cap in cents; the campaign auto-pauses when reached
+          type: ["integer", "null"]
+        rejectionReason:
+          description: Set when the campaign was rejected in review
+          type: ["string", "null"]
+        pausedReason:
+          description: Why the campaign is paused ("user" | "admin" | "budget_cap")
+          type: ["string", "null"]
         createdAt:
           type: string
 
@@ -470,7 +479,7 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused, error]
+          enum: [draft, generating, ready, publishing, in_review, rejected, live, paused, error]
         spendTodayCents:
           type: ["integer", "null"]
         createdAt:
@@ -484,7 +493,10 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, generating, ready, publishing, live, paused, error]
+          enum: [draft, generating, ready, publishing, in_review, rejected, live, paused, error]
+        rejectionReason:
+          description: Set when the campaign was rejected in review
+          type: ["string", "null"]
         campaignData:
           description: Populated once generation is complete
           oneOf:

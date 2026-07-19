@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { findOrCreateUser, createMagicLink } from "../lib/auth.js";
 import { sendMagicLinkEmail } from "../lib/email.js";
 import { generateId } from "../lib/ids.js";
-import { publishCampaignToPlatforms } from "../lib/publish.js";
+import { runModerationCheck } from "../lib/moderation.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -124,18 +124,41 @@ async function handleCheckoutComplete(
       },
     });
 
-  // 4. Fire publishing pipeline (marks campaign live on success)
-  await publishCampaignToPlatforms(campaignId, {
-    dailyBudgetCents: parseInt(dailyBudgetCents ?? "7500"),
+  // 4. Queue for human review instead of publishing immediately. Ads run from
+  // OUR house ad accounts, so nothing goes live until an admin approves it.
+  // The publish options chosen at checkout are persisted so approval can
+  // publish later with the exact same settings.
+  const dailyBudget = parseInt(dailyBudgetCents ?? "7500");
+  const pendingPublish = {
+    dailyBudgetCents: dailyBudget,
     metaSharePct: parseInt(metaSharePct ?? "60"),
     tiktokSharePct: parseInt(tiktokSharePct ?? "40"),
-  });
+  };
+
+  await db
+    .update(campaignsTable)
+    .set({
+      status: "in_review",
+      pendingPublishJson: pendingPublish,
+      // Default total spend cap: one month at the chosen daily budget. Admin
+      // can adjust it per campaign before or after approval.
+      budgetCapCents: dailyBudget * 30,
+      rejectionReason: null,
+    })
+    .where(eq(campaignsTable.id, campaignId));
+
+  // AI policy pre-check runs in the background; the reviewer sees its flags in
+  // the admin review queue. Never blocks the webhook.
+  void runModerationCheck(campaignId);
 
   // 5. Send magic link email
   const token = await createMagicLink(userId);
   await sendMagicLinkEmail(email, token);
 
-  logger.info({ userId, campaignId, email }, "Checkout complete — campaign live");
+  logger.info(
+    { userId, campaignId, email },
+    "Checkout complete — campaign queued for review",
+  );
 }
 
 export default router;

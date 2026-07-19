@@ -48,6 +48,13 @@ export class MockAdPlatform implements AdPlatform {
     );
   }
 
+  async resumeCampaign(externalCampaignId: string): Promise<void> {
+    logger.info(
+      { platform: this.platform, externalCampaignId },
+      "[MOCK] resumeCampaign — would reactivate on platform API",
+    );
+  }
+
   async getMetrics(externalCampaignId: string): Promise<Metrics> {
     // Deterministic incrementing metrics seeded by campaign id
     const seed = externalCampaignId + Date.now().toString().slice(0, -4);

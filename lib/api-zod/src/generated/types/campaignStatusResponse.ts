@@ -12,6 +12,11 @@ import type { CampaignStatusResponseStatus } from './campaignStatusResponseStatu
 export interface CampaignStatusResponse {
   id: string;
   status: CampaignStatusResponseStatus;
+  /**
+     * Set when the campaign was rejected in review
+     * @nullable
+     */
+  rejectionReason?: string | null;
   /** Populated once generation is complete */
   campaignData?: CampaignData | null;
   adAssets?: AdAsset[];

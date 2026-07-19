@@ -14,6 +14,8 @@ export const CampaignStatusResponseStatus = {
   generating: 'generating',
   ready: 'ready',
   publishing: 'publishing',
+  in_review: 'in_review',
+  rejected: 'rejected',
   live: 'live',
   paused: 'paused',
   error: 'error',

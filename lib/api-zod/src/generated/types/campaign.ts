@@ -24,5 +24,20 @@ export interface Campaign {
   landingUrl?: string | null;
   revisionsUsed?: number;
   revisionsAllowed?: number;
+  /**
+     * Total spend cap in cents; the campaign auto-pauses when reached
+     * @nullable
+     */
+  budgetCapCents?: number | null;
+  /**
+     * Set when the campaign was rejected in review
+     * @nullable
+     */
+  rejectionReason?: string | null;
+  /**
+     * Why the campaign is paused ("user" | "admin" | "budget_cap")
+     * @nullable
+     */
+  pausedReason?: string | null;
   createdAt: string;
 }

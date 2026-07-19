@@ -19,6 +19,10 @@ export class LinkedInAdPlatform implements AdPlatform {
     throw new Error(NOT_IMPLEMENTED);
   }
 
+  async resumeCampaign(_externalCampaignId: string): Promise<void> {
+    throw new Error(NOT_IMPLEMENTED);
+  }
+
   async getMetrics(_externalCampaignId: string): Promise<Metrics> {
     throw new Error(NOT_IMPLEMENTED);
   }

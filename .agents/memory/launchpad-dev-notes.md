@@ -8,6 +8,11 @@ The `artifacts/api-server` dev workflow runs `build && start` (esbuild bundle, t
 **Why:** the dev script is `NODE_ENV=development && pnpm run build && pnpm run start` — no nodemon/tsx watch.
 **How to apply:** after editing anything under `artifacts/api-server/src`, restart the workflow `artifacts/api-server: API Server` before curl/e2e testing, or changes won't be live. The launchpad (Vite) frontend DOES hot-reload, so frontend-only edits need no restart.
 
+## One-off TS scripts against api-server code (no tsx installed)
+To run a single api-server function ad hoc (e.g. exercising a service directly), bundle a tiny entry with esbuild instead of tsx: `npx esbuild tmp.ts --bundle --platform=node --format=esm --external:pino --external:pino-pretty --outfile=tmp.mjs` then `node tmp.mjs`.
+**Why:** tsx isn't installed; `--packages=external` fails because @workspace libs resolve to TS source; bundling everything works if pino/pino-pretty stay external (the real build needs a pino esbuild plugin, a one-off doesn't).
+**How to apply:** add a `--banner:js` that recreates `require` for CJS interop; delete the temp files afterward.
+
 ## Test the api-server in-container (mTLS proxy)
 Curl at `http://localhost:8080` from inside the container. Hitting it via `$REPLIT_DEV_DOMAIN` from a shell fails — the preview proxy uses mTLS. The browser preview reaches it through path routing (`/api`, `/p`).
 

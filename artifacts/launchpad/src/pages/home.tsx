@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resizeImage } from "@/lib/image-upload";
-import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquarePlus } from "lucide-react";
+import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquarePlus, Clock, XCircle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -39,7 +39,9 @@ export default function Home() {
   }, [campaignId]);
 
   if (successUrlParam === "true" && campaignId) {
-    return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
+    // After checkout the campaign enters the review queue (it is NOT live
+    // yet) — route through the status router so the right screen shows.
+    return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} postCheckout />;
   }
 
   if (!campaignId) {
@@ -49,7 +51,7 @@ export default function Home() {
   return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} />;
 }
 
-function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: string, setCampaignId: (id: string | null) => void }) {
+function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { campaignId: string, setCampaignId: (id: string | null) => void, postCheckout?: boolean }) {
   const { data: statusRes } = useGetCampaignStatus(campaignId, {
     query: {
       enabled: !!campaignId,
@@ -66,6 +68,10 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
         );
         if (data.status === "generating" || data.status === "publishing") return 2000;
         if (assetsPending) return 2000;
+        // Right after checkout, keep polling until the Stripe webhook flips
+        // the campaign into the review queue (or an admin action moves it on).
+        if (postCheckout && data.status === "ready") return 2000;
+        if (data.status === "in_review") return 15000;
         return false;
       },
     },
@@ -81,12 +87,74 @@ function ActiveCampaignRouter({ campaignId, setCampaignId }: { campaignId: strin
     return <ErrorState setCampaignId={setCampaignId} />;
   }
 
+  if (statusRes.status === "in_review") {
+    return <ReviewState setCampaignId={setCampaignId} />;
+  }
+
+  if (statusRes.status === "rejected") {
+    return <RejectedState reason={statusRes.rejectionReason ?? null} setCampaignId={setCampaignId} />;
+  }
+
   if (statusRes.status === "live" || statusRes.status === "paused") {
     return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
   }
 
+  if (postCheckout && statusRes.status === "ready") {
+    // Payment done but the webhook hasn't landed yet — show a holding screen
+    // instead of dropping back into the editing view.
+    return <WorkingState />;
+  }
+
   // Ready or Draft or Publishing
   return <BriefingState campaignId={campaignId} setCampaignId={setCampaignId} statusRes={statusRes} />;
+}
+
+function ReviewState({ setCampaignId }: { setCampaignId: (id: string | null) => void }) {
+  return (
+    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-6 animate-in fade-in duration-1000">
+      <div className="flex items-center justify-center w-20 h-20 bg-amber-500/10 text-amber-500 rounded-full mb-8">
+        <Clock className="w-10 h-10" />
+      </div>
+      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">In review.</h1>
+      <p className="font-sans text-muted-foreground text-center max-w-md mb-16 leading-relaxed">
+        Payment received. Our team gives every campaign a quick review before
+        it goes live — usually within a few hours. We'll email you as soon as
+        your ads are running.
+      </p>
+      <button
+        onClick={() => setCampaignId(null)}
+        className="font-sans text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
+      >
+        Launch another <ArrowRight className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function RejectedState({ reason, setCampaignId }: { reason: string | null, setCampaignId: (id: string | null) => void }) {
+  return (
+    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-6 animate-in fade-in duration-1000">
+      <div className="flex items-center justify-center w-20 h-20 bg-red-500/10 text-red-500 rounded-full mb-8">
+        <XCircle className="w-10 h-10" />
+      </div>
+      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">Not approved.</h1>
+      <p className="font-sans text-muted-foreground text-center max-w-md mb-6 leading-relaxed">
+        This campaign didn't pass our review, so your ads were not published.
+      </p>
+      {reason && (
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-6 mb-16">
+          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-2">Reviewer note</div>
+          <p className="font-sans text-sm leading-relaxed">{reason}</p>
+        </div>
+      )}
+      <button
+        onClick={() => setCampaignId(null)}
+        className="font-sans text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
+      >
+        Start over <ArrowRight className="w-4 h-4" />
+      </button>
+    </div>
+  );
 }
 
 function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) {

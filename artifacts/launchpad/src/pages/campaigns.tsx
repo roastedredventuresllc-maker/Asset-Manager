@@ -27,8 +27,10 @@ export default function Campaigns() {
     switch (status) {
       case 'draft': return 'bg-gray-300';
       case 'generating': return 'bg-yellow-400';
+      case 'in_review': return 'bg-amber-400';
+      case 'rejected': return 'bg-red-500';
       case 'live': return 'bg-emerald-500';
-      case 'paused': return 'bg-red-500';
+      case 'paused': return 'bg-orange-400';
       default: return 'bg-gray-300';
     }
   };
@@ -70,7 +72,7 @@ export default function Campaigns() {
                       ${(c.spendTodayCents / 100).toFixed(2)} today
                     </span>
                   )}
-                  <span className="font-sans text-sm capitalize tracking-wider opacity-50">{c.status}</span>
+                  <span className="font-sans text-sm capitalize tracking-wider opacity-50">{c.status === 'in_review' ? 'in review' : c.status}</span>
                 </div>
               </button>
             ))}

@@ -21,6 +21,13 @@ export interface AudienceSpec {
 export interface PublishInput {
   campaignId: string;
   brandName: string;
+  /**
+   * Full campaign name used on the ad platform. In the house-account model all
+   * client campaigns live in one ad account, so this carries a per-client
+   * prefix (e.g. "LP · jane · cmp_abc — Acme") for clean reporting/filtering.
+   * Falls back to a brandName-based name when absent.
+   */
+  campaignName?: string;
   tagline: string;
   landingUrl: string;
   dailyBudgetCents: number;
@@ -44,5 +51,6 @@ export interface Metrics {
 export interface AdPlatform {
   publishCampaign(input: PublishInput): Promise<PublishResult>;
   pauseCampaign(externalCampaignId: string): Promise<void>;
+  resumeCampaign(externalCampaignId: string): Promise<void>;
   getMetrics(externalCampaignId: string): Promise<Metrics>;
 }

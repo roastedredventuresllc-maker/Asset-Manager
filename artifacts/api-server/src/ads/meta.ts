@@ -45,7 +45,7 @@ export class MetaAdPlatform implements AdPlatform {
 
     // 1. Create campaign
     const campaignRes = (await this.fetch(`/act_${adAccountId}/campaigns`, "POST", {
-      name: `LaunchPad — ${input.brandName}`,
+      name: input.campaignName ?? `LaunchPad — ${input.brandName}`,
       objective: "OUTCOME_TRAFFIC",
       status: "ACTIVE",
     })) as { id: string };
@@ -109,6 +109,11 @@ export class MetaAdPlatform implements AdPlatform {
   async pauseCampaign(externalCampaignId: string): Promise<void> {
     await this.fetch(`/${externalCampaignId}`, "POST", { status: "PAUSED" });
     logger.info({ externalCampaignId }, "Meta campaign paused");
+  }
+
+  async resumeCampaign(externalCampaignId: string): Promise<void> {
+    await this.fetch(`/${externalCampaignId}`, "POST", { status: "ACTIVE" });
+    logger.info({ externalCampaignId }, "Meta campaign resumed");
   }
 
   async getMetrics(externalCampaignId: string): Promise<Metrics> {

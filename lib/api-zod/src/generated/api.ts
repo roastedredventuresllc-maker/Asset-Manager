@@ -37,7 +37,7 @@ export const ListCampaignsQueryParams = zod.object({
 export const ListCampaignsResponseItem = zod.object({
   "id": zod.string(),
   "brandName": zod.string(),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "spendTodayCents": zod.number().nullish(),
   "createdAt": zod.string()
 })
@@ -91,11 +91,14 @@ export const GetCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
   "revisionsAllowed": zod.number().optional(),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
+  "rejectionReason": zod.string().nullish().describe('Set when the campaign was rejected in review'),
+  "pausedReason": zod.string().nullish().describe('Why the campaign is paused (\"user\" | \"admin\" | \"budget_cap\")'),
   "createdAt": zod.string()
 })
 
@@ -151,11 +154,14 @@ export const ReviseCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
   "revisionsAllowed": zod.number().optional(),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
+  "rejectionReason": zod.string().nullish().describe('Set when the campaign was rejected in review'),
+  "pausedReason": zod.string().nullish().describe('Why the campaign is paused (\"user\" | \"admin\" | \"budget_cap\")'),
   "createdAt": zod.string()
 })
 
@@ -226,11 +232,14 @@ export const PauseCampaignResponse = zod.object({
   "cta": zod.string()
 })
 }),zod.null()]).optional().describe('Full AI-generated campaign JSON'),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
   "landingSlug": zod.string().nullish(),
   "landingUrl": zod.string().nullish(),
   "revisionsUsed": zod.number().optional(),
   "revisionsAllowed": zod.number().optional(),
+  "budgetCapCents": zod.number().nullish().describe('Total spend cap in cents; the campaign auto-pauses when reached'),
+  "rejectionReason": zod.string().nullish().describe('Set when the campaign was rejected in review'),
+  "pausedReason": zod.string().nullish().describe('Why the campaign is paused (\"user\" | \"admin\" | \"budget_cap\")'),
   "createdAt": zod.string()
 })
 
@@ -260,7 +269,8 @@ export const GetCampaignStatusParams = zod.object({
 
 export const GetCampaignStatusResponse = zod.object({
   "id": zod.string(),
-  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'live', 'paused', 'error']),
+  "status": zod.enum(['draft', 'generating', 'ready', 'publishing', 'in_review', 'rejected', 'live', 'paused', 'error']),
+  "rejectionReason": zod.string().nullish().describe('Set when the campaign was rejected in review'),
   "campaignData": zod.union([zod.object({
   "brandName": zod.string(),
   "tagline": zod.string(),

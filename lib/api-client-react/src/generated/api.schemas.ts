@@ -111,6 +111,8 @@ export const CampaignStatus = {
   generating: 'generating',
   ready: 'ready',
   publishing: 'publishing',
+  in_review: 'in_review',
+  rejected: 'rejected',
   live: 'live',
   paused: 'paused',
   error: 'error',
@@ -132,6 +134,21 @@ export interface Campaign {
   landingUrl?: string | null;
   revisionsUsed?: number;
   revisionsAllowed?: number;
+  /**
+     * Total spend cap in cents; the campaign auto-pauses when reached
+     * @nullable
+     */
+  budgetCapCents?: number | null;
+  /**
+     * Set when the campaign was rejected in review
+     * @nullable
+     */
+  rejectionReason?: string | null;
+  /**
+     * Why the campaign is paused ("user" | "admin" | "budget_cap")
+     * @nullable
+     */
+  pausedReason?: string | null;
   createdAt: string;
 }
 
@@ -143,6 +160,8 @@ export const CampaignSummaryStatus = {
   generating: 'generating',
   ready: 'ready',
   publishing: 'publishing',
+  in_review: 'in_review',
+  rejected: 'rejected',
   live: 'live',
   paused: 'paused',
   error: 'error',
@@ -165,6 +184,8 @@ export const CampaignStatusResponseStatus = {
   generating: 'generating',
   ready: 'ready',
   publishing: 'publishing',
+  in_review: 'in_review',
+  rejected: 'rejected',
   live: 'live',
   paused: 'paused',
   error: 'error',
@@ -192,6 +213,11 @@ export interface AdAsset {
 export interface CampaignStatusResponse {
   id: string;
   status: CampaignStatusResponseStatus;
+  /**
+     * Set when the campaign was rejected in review
+     * @nullable
+     */
+  rejectionReason?: string | null;
   /** Populated once generation is complete */
   campaignData?: CampaignData | null;
   adAssets?: AdAsset[];

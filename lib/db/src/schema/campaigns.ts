@@ -8,10 +8,16 @@ export const campaignsTable = pgTable("campaigns", {
   brief: text("brief").notNull(),
   productImageUrl: text("product_image_url"),
   campaignJson: jsonb("campaign_json"), // AI-generated CampaignData object
-  status: text("status").notNull().default("draft"), // draft | generating | ready | publishing | live | paused | error
+  status: text("status").notNull().default("draft"), // draft | generating | ready | publishing | in_review | rejected | live | paused | error
   landingSlug: text("landing_slug"),
   revisionsUsed: integer("revisions_used").notNull().default(0),
   revisionsAllowed: integer("revisions_allowed").notNull().default(3),
+  // Media-agency guardrails (house-account model)
+  budgetCapCents: integer("budget_cap_cents"), // total spend cap; auto-pause when reached
+  pendingPublishJson: jsonb("pending_publish_json"), // publish options stored at checkout, used on admin approval
+  riskFlagsJson: jsonb("risk_flags_json"), // AI moderation pre-check result
+  rejectionReason: text("rejection_reason"), // set when an admin rejects the campaign
+  pausedReason: text("paused_reason"), // "budget_cap" | "admin" | "user"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -1,4 +1,4 @@
-import { db, campaignsTable, publishesTable, adAssetsTable } from "@workspace/db";
+import { db, campaignsTable, publishesTable, adAssetsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAdPlatform } from "../ads/index.js";
 import { generateId } from "./ids.js";
@@ -49,6 +49,22 @@ export async function publishCampaignToPlatforms(
     ? `https://${domain}/p/${campaign.landingSlug}`
     : `https://${domain}`;
 
+  // House-account model: every client campaign lives in OUR ad accounts, so
+  // platform-side campaign names carry a per-client tag for clean filtering
+  // and reporting inside Meta/TikTok ads managers.
+  let clientTag = "anon";
+  if (campaign.userId) {
+    const user = await db.query.usersTable.findFirst({
+      where: eq(usersTable.id, campaign.userId),
+    });
+    const emailLocal = user?.email
+      ?.split("@")[0]
+      ?.replace(/[^a-zA-Z0-9._-]/g, "")
+      .slice(0, 24);
+    clientTag = emailLocal || campaign.userId.slice(0, 12);
+  }
+  const platformCampaignName = `LP · ${clientTag} · ${campaignId} — ${cj.brandName}`;
+
   // Attach generated image URLs to each ad so platforms can use them.
   const assets = await db.query.adAssetsTable.findMany({
     where: eq(adAssetsTable.campaignId, campaignId),
@@ -73,6 +89,7 @@ export async function publishCampaignToPlatforms(
       const result = await adPlatform.publishCampaign({
         campaignId,
         brandName: cj.brandName,
+        campaignName: platformCampaignName,
         tagline: cj.tagline ?? "",
         landingUrl,
         dailyBudgetCents: platformBudget,
@@ -105,7 +122,7 @@ export async function publishCampaignToPlatforms(
   if (live) {
     await db
       .update(campaignsTable)
-      .set({ status: "live" })
+      .set({ status: "live", pausedReason: null })
       .where(eq(campaignsTable.id, campaignId));
   }
 

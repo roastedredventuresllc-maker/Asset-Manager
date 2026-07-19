@@ -5,10 +5,11 @@ import {
   publishesTable,
   metricsSnapshotsTable,
 } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "./claude.js";
 import { generateId, generateSlug } from "./ids.js";
 import { getAdPlatform } from "../ads/index.js";
+import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
 import { logger } from "./logger.js";
 
 /**
@@ -54,8 +55,35 @@ export function toCampaignResponse(campaign: CampaignRecord) {
       : null,
     revisionsUsed: campaign.revisionsUsed,
     revisionsAllowed: campaign.revisionsAllowed,
+    budgetCapCents: campaign.budgetCapCents ?? null,
+    rejectionReason: campaign.rejectionReason ?? null,
+    pausedReason: campaign.pausedReason ?? null,
     createdAt: campaign.createdAt.toISOString(),
   };
+}
+
+/**
+ * Estimate lifetime spend for a campaign from its metrics snapshots. Platform
+ * metrics report "today so far", so lifetime spend = sum over days of the
+ * daily maximum observed on the "total" snapshot row.
+ *
+ * Known limitation: days are bucketed by snapshot time in UTC while ad
+ * platforms reset "today" in the ad account's timezone. If those differ, the
+ * estimate can briefly undercount right after the platform's daily reset, so
+ * the cap is best-effort, not to-the-cent.
+ */
+export async function getLifetimeSpendCents(campaignId: string): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT COALESCE(SUM(day_max), 0)::int AS lifetime
+    FROM (
+      SELECT date_trunc('day', snapshot_at) AS day, MAX(spend_cents) AS day_max
+      FROM metrics_snapshots
+      WHERE campaign_id = ${campaignId} AND platform = 'total'
+      GROUP BY 1
+    ) daily
+  `);
+  const row = (result.rows?.[0] ?? {}) as { lifetime?: number };
+  return row.lifetime ?? 0;
 }
 
 /** Fetch the raw campaign row, or null if it does not exist. */
@@ -189,7 +217,7 @@ export async function listCampaignsForUser(userId: string) {
   return Promise.all(
     campaigns.map(async (c) => {
       let spendTodayCents: number | null = null;
-      if (c.status === "live") {
+      if (c.status === "live" || c.status === "paused") {
         const latest = await db.query.metricsSnapshotsTable.findFirst({
           where: and(
             eq(metricsSnapshotsTable.campaignId, c.id),
@@ -231,6 +259,7 @@ export async function getCampaignStatus(id: string) {
   return {
     id: campaign.id,
     status: campaign.status,
+    rejectionReason: campaign.rejectionReason ?? null,
     campaignData: campaign.campaignJson ?? null,
     adAssets: assets.map((a) => ({
       idx: a.idx,
@@ -412,10 +441,23 @@ export async function publishCampaignById(
   return { checkoutUrl: session.url };
 }
 
-/** Pause a live campaign across all platforms it was published to. */
-export async function pauseCampaignById(id: string) {
+/**
+ * Pause a live campaign across all platforms it was published to. `reason`
+ * records who/what paused it: "user" (client), "admin", or "budget_cap"
+ * (automatic spend guard).
+ */
+export async function pauseCampaignById(
+  id: string,
+  reason: "user" | "admin" | "budget_cap" = "user",
+) {
   const campaign = await getCampaignRecord(id);
   if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  if (campaign.status !== "live") {
+    // Guard the status machine: pausing anything that isn't live (e.g. a
+    // campaign sitting in the review queue) would strand it in a state with
+    // no publishes to resume and no way back into review.
+    throw new ServiceError(409, "not_live", "Only live campaigns can be paused");
+  }
 
   const publishes = await db.query.publishesTable.findMany({
     where: and(
@@ -440,7 +482,175 @@ export async function pauseCampaignById(id: string) {
 
   await db
     .update(campaignsTable)
-    .set({ status: "paused" })
+    .set({ status: "paused", pausedReason: reason })
+    .where(eq(campaignsTable.id, id));
+
+  const fresh = await getCampaignRecord(id);
+  return toCampaignResponse(fresh!);
+}
+
+/**
+ * Resume a paused campaign: reactivate every paused publish on its platform,
+ * then mark the campaign live again. Refuses to resume a campaign that was
+ * auto-paused for hitting its budget cap unless the cap has since been raised.
+ */
+export async function resumeCampaignById(id: string) {
+  const campaign = await getCampaignRecord(id);
+  if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  if (campaign.status !== "paused") {
+    throw new ServiceError(409, "not_paused", "Only paused campaigns can be resumed");
+  }
+
+  if (campaign.budgetCapCents != null) {
+    const spent = await getLifetimeSpendCents(id);
+    if (spent >= campaign.budgetCapCents) {
+      throw new ServiceError(
+        409,
+        "budget_cap_reached",
+        "Spend has reached the budget cap. Raise the cap before resuming.",
+      );
+    }
+  }
+
+  const publishes = await db.query.publishesTable.findMany({
+    where: and(
+      eq(publishesTable.campaignId, id),
+      eq(publishesTable.status, "paused"),
+    ),
+  });
+  if (publishes.length === 0) {
+    throw new ServiceError(409, "nothing_to_resume", "No paused platform publishes found");
+  }
+
+  let resumed = 0;
+  for (const pub of publishes) {
+    if (!pub.externalCampaignId) continue;
+    try {
+      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
+      await platform.resumeCampaign(pub.externalCampaignId);
+      await db
+        .update(publishesTable)
+        .set({ status: "active" })
+        .where(eq(publishesTable.id, pub.id));
+      resumed += 1;
+    } catch (err) {
+      logger.error({ err, publishId: pub.id }, "Error resuming platform");
+    }
+  }
+
+  if (resumed === 0) {
+    throw new ServiceError(502, "resume_failed", "Could not resume on any platform");
+  }
+
+  await db
+    .update(campaignsTable)
+    .set({ status: "live", pausedReason: null })
+    .where(eq(campaignsTable.id, id));
+
+  const fresh = await getCampaignRecord(id);
+  return toCampaignResponse(fresh!);
+}
+
+/**
+ * Admin approval: publish a reviewed campaign to the ad platforms using the
+ * options the client chose at checkout (persisted on the campaign row by the
+ * Stripe webhook). Marks the campaign live on success.
+ */
+export async function approveCampaignById(id: string) {
+  const campaign = await getCampaignRecord(id);
+  if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  if (campaign.status !== "in_review") {
+    throw new ServiceError(
+      409,
+      "not_in_review",
+      `Campaign is "${campaign.status}", not in review`,
+    );
+  }
+
+  const opts = campaign.pendingPublishJson as PublishOptions | null;
+  if (!opts?.dailyBudgetCents) {
+    throw new ServiceError(
+      400,
+      "missing_publish_options",
+      "No stored publish options — cannot approve",
+    );
+  }
+
+  // Atomic compare-and-set to a transitional status so two concurrent
+  // approvals (e.g. two admin tabs) can't both publish and create duplicate
+  // real-money campaigns on the ad platforms.
+  const claimed = await db
+    .update(campaignsTable)
+    .set({ status: "publishing" })
+    .where(and(eq(campaignsTable.id, id), eq(campaignsTable.status, "in_review")))
+    .returning({ id: campaignsTable.id });
+  if (claimed.length === 0) {
+    throw new ServiceError(409, "not_in_review", "Campaign is no longer in review");
+  }
+
+  try {
+    const { live, outcomes } = await publishCampaignToPlatforms(id, opts);
+    if (!live) {
+      // Put it back in the queue so the admin can retry after fixing the issue.
+      await db
+        .update(campaignsTable)
+        .set({ status: "in_review" })
+        .where(and(eq(campaignsTable.id, id), eq(campaignsTable.status, "publishing")));
+      const errors = outcomes.map((o) => `${o.platform}: ${o.error ?? "failed"}`).join("; ");
+      throw new ServiceError(502, "publish_failed", `Publishing failed — ${errors}`);
+    }
+
+    const fresh = await getCampaignRecord(id);
+    return { campaign: toCampaignResponse(fresh!), outcomes };
+  } catch (err) {
+    if (!(err instanceof ServiceError)) {
+      await db
+        .update(campaignsTable)
+        .set({ status: "in_review" })
+        .where(and(eq(campaignsTable.id, id), eq(campaignsTable.status, "publishing")));
+    }
+    throw err;
+  }
+}
+
+/** Admin rejection: campaign never goes live; the reason is shown to the client. */
+export async function rejectCampaignById(id: string, reason: string) {
+  const trimmed = reason?.trim();
+  if (!trimmed) {
+    throw new ServiceError(400, "missing_reason", "A rejection reason is required");
+  }
+
+  const campaign = await getCampaignRecord(id);
+  if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  if (campaign.status !== "in_review") {
+    throw new ServiceError(
+      409,
+      "not_in_review",
+      `Campaign is "${campaign.status}", not in review`,
+    );
+  }
+
+  await db
+    .update(campaignsTable)
+    .set({ status: "rejected", rejectionReason: trimmed })
+    .where(eq(campaignsTable.id, id));
+
+  const fresh = await getCampaignRecord(id);
+  return toCampaignResponse(fresh!);
+}
+
+/** Admin: set or raise/lower the total spend cap for a campaign. */
+export async function setBudgetCap(id: string, budgetCapCents: number) {
+  if (!Number.isInteger(budgetCapCents) || budgetCapCents <= 0) {
+    throw new ServiceError(400, "invalid_cap", "budgetCapCents must be a positive integer");
+  }
+
+  const campaign = await getCampaignRecord(id);
+  if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+
+  await db
+    .update(campaignsTable)
+    .set({ budgetCapCents })
     .where(eq(campaignsTable.id, id));
 
   const fresh = await getCampaignRecord(id);

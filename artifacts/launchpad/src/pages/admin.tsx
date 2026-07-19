@@ -423,6 +423,8 @@ export default function Admin() {
           </p>
         </div>
 
+        <CampaignsSection token={token ?? ""} />
+
         <ConnectorsSection
           data={connectors}
           loading={connectorsLoading}
@@ -550,6 +552,372 @@ function PrincipleList({ items }: { items: string[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+interface AdminRiskFlags {
+  riskLevel: "low" | "medium" | "high" | "unknown";
+  flags: { code: string; detail: string }[];
+  summary: string;
+  checkedAt?: string;
+  error?: string;
+}
+
+interface AdminCampaignRow {
+  id: string;
+  brandName: string;
+  tagline: string | null;
+  brief: string;
+  clientEmail: string | null;
+  status: string;
+  riskFlags: AdminRiskFlags | null;
+  rejectionReason: string | null;
+  pausedReason: string | null;
+  dailyBudgetCents: number | null;
+  metaSharePct: number | null;
+  tiktokSharePct: number | null;
+  budgetCapCents: number | null;
+  spendCents: number;
+  landingSlug: string | null;
+  platforms: { platform: string; status: string }[];
+  createdAt: string;
+}
+
+const dollars = (cents: number | null | undefined) =>
+  cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+
+function CampaignsSection({ token }: { token: string }) {
+  const [rows, setRows] = useState<AdminCampaignRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/campaigns", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+      const data = (await res.json()) as { campaigns: AdminCampaignRow[] };
+      setRows(data.campaigns);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load campaigns");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const act = async (id: string, path: string, body?: object) => {
+    setBusyId(id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/campaigns/${id}/${path}`, {
+        method: path === "budget-cap" ? "PATCH" : "POST",
+        headers: { "x-admin-token": token, "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || `Action failed (${res.status})`);
+      }
+      await load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reject = (id: string) => {
+    const reason = window.prompt(
+      "Rejection reason (shown to the client):",
+      "",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setActionError("A rejection reason is required.");
+      return;
+    }
+    void act(id, "reject", { reason: reason.trim() });
+  };
+
+  const editCap = (row: AdminCampaignRow) => {
+    const current = row.budgetCapCents != null ? (row.budgetCapCents / 100).toFixed(2) : "";
+    const input = window.prompt("Total spend cap in dollars:", current);
+    if (input === null) return;
+    const parsed = Math.round(parseFloat(input) * 100);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setActionError("Enter a valid dollar amount.");
+      return;
+    }
+    void act(row.id, "budget-cap", { budgetCapCents: parsed });
+  };
+
+  const reviewQueue = (rows ?? []).filter((r) => r.status === "in_review");
+  const roster = (rows ?? []).filter((r) =>
+    ["live", "paused", "rejected"].includes(r.status),
+  );
+
+  return (
+    <Section label="Client campaigns">
+      <div className="flex items-center justify-between mb-6 -mt-4">
+        <p className="font-sans text-sm text-muted-foreground">
+          Every campaign runs from the house ad accounts — nothing goes live
+          without approval, and spend caps auto-pause overruns.
+        </p>
+        <button
+          onClick={() => void load()}
+          className="inline-flex items-center gap-1.5 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+        >
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /> Refresh
+        </button>
+      </div>
+
+      {actionError && (
+        <p className="font-sans text-sm text-red-500 mb-4">{actionError}</p>
+      )}
+      {error && <p className="font-sans text-sm text-red-500 mb-4">{error}</p>}
+
+      {loading && !rows ? (
+        <div className="flex justify-center p-10">
+          <span className="w-6 h-6 rounded-full border-2 border-border border-t-foreground animate-spin" />
+        </div>
+      ) : (
+        <>
+          <h3 className="font-sans text-[11px] uppercase tracking-[2px] text-muted-foreground mb-4">
+            Review queue {reviewQueue.length > 0 && `· ${reviewQueue.length}`}
+          </h3>
+          {reviewQueue.length === 0 ? (
+            <p className="font-sans text-sm text-muted-foreground mb-10">
+              Nothing waiting for review.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4 mb-10">
+              {reviewQueue.map((row) => (
+                <AdminCampaignCard
+                  key={row.id}
+                  row={row}
+                  busy={busyId === row.id}
+                  onApprove={() => void act(row.id, "approve")}
+                  onReject={() => reject(row.id)}
+                  onPause={() => void act(row.id, "pause")}
+                  onResume={() => void act(row.id, "resume")}
+                  onEditCap={() => editCap(row)}
+                />
+              ))}
+            </div>
+          )}
+
+          <h3 className="font-sans text-[11px] uppercase tracking-[2px] text-muted-foreground mb-4">
+            Roster {roster.length > 0 && `· ${roster.length}`}
+          </h3>
+          {roster.length === 0 ? (
+            <p className="font-sans text-sm text-muted-foreground">
+              No live, paused or rejected campaigns yet.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {roster.map((row) => (
+                <AdminCampaignCard
+                  key={row.id}
+                  row={row}
+                  busy={busyId === row.id}
+                  onApprove={() => void act(row.id, "approve")}
+                  onReject={() => reject(row.id)}
+                  onPause={() => void act(row.id, "pause")}
+                  onResume={() => void act(row.id, "resume")}
+                  onEditCap={() => editCap(row)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+function RiskBadge({ risk }: { risk: AdminRiskFlags | null }) {
+  if (!risk) {
+    return (
+      <span className="text-[11px] font-sans rounded-full px-2.5 py-1 bg-secondary text-muted-foreground">
+        risk: pending
+      </span>
+    );
+  }
+  const tone =
+    risk.riskLevel === "low"
+      ? "bg-emerald-500/10 text-emerald-600"
+      : risk.riskLevel === "medium"
+        ? "bg-amber-500/10 text-amber-600"
+        : risk.riskLevel === "high"
+          ? "bg-red-500/10 text-red-600"
+          : "bg-secondary text-muted-foreground";
+  return (
+    <span className={cn("text-[11px] font-sans rounded-full px-2.5 py-1", tone)}>
+      risk: {risk.riskLevel}
+    </span>
+  );
+}
+
+function AdminStatusBadge({ status, pausedReason }: { status: string; pausedReason: string | null }) {
+  const tone =
+    status === "live"
+      ? "bg-emerald-500/10 text-emerald-600"
+      : status === "in_review"
+        ? "bg-amber-500/10 text-amber-600"
+        : status === "rejected"
+          ? "bg-red-500/10 text-red-600"
+          : status === "paused"
+            ? "bg-orange-500/10 text-orange-600"
+            : "bg-secondary text-muted-foreground";
+  const label =
+    status === "in_review"
+      ? "in review"
+      : status === "paused" && pausedReason === "budget_cap"
+        ? "paused · cap hit"
+        : status === "paused" && pausedReason
+          ? `paused · ${pausedReason}`
+          : status;
+  return (
+    <span className={cn("text-[11px] font-sans rounded-full px-2.5 py-1", tone)}>{label}</span>
+  );
+}
+
+function AdminCampaignCard({
+  row,
+  busy,
+  onApprove,
+  onReject,
+  onPause,
+  onResume,
+  onEditCap,
+}: {
+  row: AdminCampaignRow;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onEditCap: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const risk = row.riskFlags;
+
+  const btn =
+    "font-sans text-sm px-4 py-2 rounded-xl border border-border hover:border-foreground/40 transition-colors disabled:opacity-40";
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            <h4 className="font-serif text-2xl leading-tight">{row.brandName}</h4>
+            <AdminStatusBadge status={row.status} pausedReason={row.pausedReason} />
+            {(row.status === "in_review" || row.status === "rejected") && (
+              <RiskBadge risk={risk} />
+            )}
+          </div>
+          <p className="font-sans text-xs text-muted-foreground">
+            {row.clientEmail ?? "no client email"} ·{" "}
+            {new Date(row.createdAt).toLocaleDateString()}
+            {row.platforms.length > 0 &&
+              ` · ${row.platforms.map((p) => `${p.platform}:${p.status}`).join(" ")}`}
+          </p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div className="font-sans text-sm">
+            {dollars(row.dailyBudgetCents)}/day · cap {dollars(row.budgetCapCents)}
+          </div>
+          <div className="font-sans text-xs text-muted-foreground">
+            spent {dollars(row.spendCents)}
+          </div>
+        </div>
+      </div>
+
+      {risk && (risk.summary || risk.flags.length > 0) && row.status === "in_review" && (
+        <div className="mt-4 bg-secondary/50 rounded-xl p-4">
+          {risk.summary && (
+            <p className="font-sans text-sm leading-relaxed mb-2">{risk.summary}</p>
+          )}
+          {risk.flags.map((f, i) => (
+            <p key={i} className="font-sans text-xs text-muted-foreground leading-relaxed">
+              <span className="uppercase tracking-wider">{f.code}</span> — {f.detail}
+            </p>
+          ))}
+          {risk.error && (
+            <p className="font-sans text-xs text-red-500 mt-1">
+              Automated check failed: {risk.error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {row.status === "rejected" && row.rejectionReason && (
+        <p className="mt-3 font-sans text-sm text-red-500">
+          Rejected: {row.rejectionReason}
+        </p>
+      )}
+
+      <div className="mt-4 flex items-center gap-3 flex-wrap">
+        {row.status === "in_review" && (
+          <>
+            <button
+              disabled={busy}
+              onClick={onApprove}
+              className="font-sans text-sm px-4 py-2 rounded-xl bg-foreground text-background hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {busy ? "Working…" : "Approve & publish"}
+            </button>
+            <button disabled={busy} onClick={onReject} className={btn}>
+              Reject
+            </button>
+          </>
+        )}
+        {row.status === "live" && (
+          <button disabled={busy} onClick={onPause} className={btn}>
+            {busy ? "Working…" : "Pause"}
+          </button>
+        )}
+        {row.status === "paused" && (
+          <button disabled={busy} onClick={onResume} className={btn}>
+            {busy ? "Working…" : "Resume"}
+          </button>
+        )}
+        <button disabled={busy} onClick={onEditCap} className={btn}>
+          Edit cap
+        </button>
+        {row.landingSlug && (
+          <a
+            href={`/p/${row.landingSlug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Landing <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors ml-auto"
+        >
+          {expanded ? "Hide brief" : "View brief"}
+        </button>
+      </div>
+
+      {expanded && (
+        <p className="mt-4 font-sans text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap border-t border-border pt-4">
+          {row.brief}
+        </p>
+      )}
+    </div>
   );
 }
 
