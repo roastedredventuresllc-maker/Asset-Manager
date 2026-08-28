@@ -15,7 +15,7 @@
       "root": "artifacts/api-server",
       "framework": "express",
       "entrypoint": "src/app.ts",
-      "installCommand": "cd ../.. && pnpm install --frozen-lockfile && sh -c 'if [ -n \"$DATABASE_URL\" ] || [ -n \"$POSTGRES_URL\" ]; then pnpm --filter @workspace/db run push; fi'",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile --prod=false && sh -c 'if [ -n \"$DATABASE_URL\" ] || [ -n \"$POSTGRES_URL\" ]; then pnpm --filter @workspace/db run push; fi'",
       "functions": {
         "src/app.ts": {
           "maxDuration": 300
