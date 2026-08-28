@@ -26,7 +26,7 @@ export const xai: OpenAI = new Proxy({} as OpenAI, {
   },
 });
 
-export { isXaiConfigured, resolveXaiAuth, resolveXaiModel } from "./auth";
+export { isXaiConfigured, resolveXaiAuth, resolveXaiModel, resolveImagineModel } from "./auth";
 
 /**
  * Chat completion constrained to a JSON object. The founder brief is the

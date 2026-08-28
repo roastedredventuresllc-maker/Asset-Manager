@@ -57,6 +57,12 @@ test("index.ts does not statically import the DB/worker graph", () => {
   assert.equal(/from ["']\.\/lib\/referenceAssets/.test(src), false);
 });
 
+test("worker does not retry generate_image (one Imagine + one gpt-image-2 already ran)", () => {
+  const src = readFileSync(join(here, "lib/worker.ts"), "utf8");
+  assert.match(src, /failNow/);
+  assert.match(src, /generate_image/);
+});
+
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {
   const app = express();
   app.use("/api", healthRouter);

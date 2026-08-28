@@ -55,10 +55,13 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
         logger.error({ err, jobId: job.id }, "Job processing failed");
+        // Image jobs already ran Imagine once + gpt-image-2 once. Do not retry.
+        const failNow =
+          job.type === "generate_image" || job.attempts + 1 >= MAX_ATTEMPTS;
         await db
           .update(jobsTable)
           .set({
-            status: job.attempts + 1 >= MAX_ATTEMPTS ? JOB_STATUS.failed : JOB_STATUS.pending,
+            status: failNow ? JOB_STATUS.failed : JOB_STATUS.pending,
             lastError: error,
           })
           .where(eq(jobsTable.id, job.id));

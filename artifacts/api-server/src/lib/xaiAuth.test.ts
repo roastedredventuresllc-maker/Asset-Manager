@@ -4,8 +4,10 @@ import {
   isXaiConfigured,
   resolveXaiAuth,
   resolveXaiModel,
+  resolveImagineModel,
   DEFAULT_GATEWAY_BASE_URL,
   DEFAULT_GATEWAY_MODEL,
+  DEFAULT_GATEWAY_IMAGINE_MODEL,
   DEFAULT_XAI_BASE_URL,
   DEFAULT_XAI_MODEL,
 } from "@workspace/integrations-xai";
@@ -18,7 +20,7 @@ const KEYS = [
   "AI_INTEGRATIONS_XAI_API_KEY",
   "XAI_BASE_URL",
   "AI_INTEGRATIONS_XAI_BASE_URL",
-  "XAI_MODEL",
+  "GROK_IMAGINE_MODEL",
 ] as const;
 
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
@@ -95,6 +97,19 @@ test("bare XAI_MODEL is prefixed for Gateway", () => {
     },
     () => {
       assert.equal(resolveXaiModel(), "xai/grok-4.6");
+    },
+  );
+});
+
+test("Imagine model is Gateway GA id by default", () => {
+  withEnv(
+    {
+      AI_GATEWAY_API_KEY: "gw-key",
+      GROK_IMAGINE_MODEL: undefined,
+    },
+    () => {
+      assert.equal(resolveImagineModel(), DEFAULT_GATEWAY_IMAGINE_MODEL);
+      assert.equal(DEFAULT_GATEWAY_IMAGINE_MODEL, "xai/grok-imagine-image");
     },
   );
 });

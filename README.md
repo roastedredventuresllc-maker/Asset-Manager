@@ -87,7 +87,7 @@ Optional names (same as `.env.example`): `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FA
 
 `ADS_MODE=mock` (the default) makes publishing work end-to-end without spending:
 - Campaign copy: Grok writes generate + revise from the founder prompt when AI Gateway (or `XAI_API_KEY`) is configured. No Anthropic key required.
-- Image generation uses `gemini-3-pro-image-preview`, then `gpt-image-1`. If both miss, the job **fails** — a branded gradient is not an ad
+- Image generation uses Grok Imagine (`xai/grok-imagine-image`) then `gpt-image-2`. If both miss or fail Craft lock, the job **fails** — a branded gradient is not an ad. Never Gemini.
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`
 
@@ -227,7 +227,7 @@ Generate also drains pending image jobs in the same invocation. Add `CRON_SECRET
 - **Host**: Vercel Services — one project, rewrites `/api` and `/p` to Express
 - **Database**: PostgreSQL + Drizzle ORM (`DATABASE_URL`, Neon-compatible)
 - **AI copy**: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Writes generate + revise from the founder prompt.
-- **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
+- **Image gen**: Grok Imagine (`xai/grok-imagine-image`) then `gpt-image-2`. Fail-closed Craft lock — a branded gradient is not an ad. Type is composited in designed negative space after the mute plate passes. Never Gemini.
 - **Storage**: Vercel Blob on Vercel (`BLOB_READ_WRITE_TOKEN` required — fail-closed, no `/tmp`). Off Vercel: Replit Object Storage fallback, then local `/tmp/launchpad-assets`. Public URLs are relative `/api/assets/...`
 - **Payments**: Stripe Checkout + subscriptions + metered usage
 - **Ads**: Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
@@ -235,7 +235,7 @@ Generate also drains pending image jobs in the same invocation. Add `CRON_SECRET
 
 ### Data flow
 1. User describes the product → `POST /api/campaigns/generate` → Grok writes campaign JSON from that prompt → image jobs enqueued
-2. Frontend polls `GET /api/campaigns/:id/status` until copy is ready; images finish as background jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
+2. Frontend polls `GET /api/campaigns/:id/status` until copy is ready; images finish as background jobs (Grok Imagine then `gpt-image-2`, fail-closed)
 3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
 4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` webhook → claim campaign, set `in_review` + `pendingPublishJson` (does **not** auto-publish)

@@ -7,16 +7,16 @@ import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
 import { uploadBuffer } from "./storage.js";
 import { compositeAdImage } from "./imageComposite.js";
-import { reencodeToPng, EDIT_MIME } from "./imageMime.js";
+import { reencodeToPng } from "./imageMime.js";
 import { resolveFetchableUrl } from "./assetUrl.js";
 import {
   buildCraftPrompt,
-  rejectIfFlatGradient,
-  rejectIfNotAPhotograph,
+  assertCraftPlate,
   slotForIndex,
   ImageGenerationFailed,
   CraftReject,
-  GEMINI_IMAGE_MODEL,
+  GROK_IMAGINE_MODEL,
+  GPT_IMAGE_FALLBACK_MODEL,
   type AdSlot,
 } from "./craft.js";
 import type { CampaignAd } from "../ads/types.js";
@@ -32,12 +32,12 @@ export interface GenerateImageJob {
 }
 
 export interface ImageGenerators {
-  generateWithGemini: (
+  generateWithImagine: (
     prompt: string,
     slot: AdSlot,
     productPng?: Buffer,
   ) => Promise<Buffer | null>;
-  generateWithOpenAI: (
+  generateWithGptImage2: (
     prompt: string,
     slot: AdSlot,
     productPng?: Buffer,
@@ -55,7 +55,6 @@ async function fetchProductImage(url: string): Promise<Buffer | undefined> {
       return undefined;
     }
     const input = Buffer.from(await res.arrayBuffer());
-    // JPEG/PNG trap: uploads are JPEG. Edit calls declare PNG. Re-encode.
     return await reencodeToPng(input);
   } catch (err) {
     logger.warn(
@@ -74,29 +73,30 @@ function safeHost(url: string): string {
   }
 }
 
-async function defaultGemini(
+function imagineAspect(slot: AdSlot): "4:5" | "9:16" {
+  return slot.aspectRatio === "9:16" ? "9:16" : "4:5";
+}
+
+async function defaultImagine(
   prompt: string,
   slot: AdSlot,
   productPng?: Buffer,
 ): Promise<Buffer | null> {
   try {
-    const gemini = await import("@workspace/integrations-gemini-ai/image");
-    if (!gemini.isGeminiImageConfigured()) return null;
+    const xai = await import("@workspace/integrations-xai");
+    if (!xai.isImagineConfigured()) return null;
+    const aspect = imagineAspect(slot);
     if (productPng) {
-      return await gemini.editImage(
-        prompt,
-        { data: productPng, mimeType: EDIT_MIME },
-        slot.aspectRatio,
-      );
+      return await xai.editImagineImage(prompt, productPng, aspect);
     }
-    return await gemini.generateImage(prompt, slot.aspectRatio);
+    return await xai.generateImagineImage(prompt, aspect);
   } catch (err) {
-    logger.warn({ err, model: GEMINI_IMAGE_MODEL }, "Gemini image generation missed");
+    logger.warn({ err, model: GROK_IMAGINE_MODEL }, "Grok Imagine missed");
     return null;
   }
 }
 
-async function defaultOpenAI(
+async function defaultGptImage2(
   prompt: string,
   slot: AdSlot,
   productPng?: Buffer,
@@ -116,19 +116,34 @@ async function defaultOpenAI(
     const portrait = slot.aspectRatio === "9:16" || slot.aspectRatio === "4:5";
     return await openai.generateImageBuffer(prompt, portrait ? "1024x1536" : "1024x1024");
   } catch (err) {
-    logger.warn({ err }, "gpt-image-1 generation missed");
+    logger.warn({ err, model: GPT_IMAGE_FALLBACK_MODEL }, "gpt-image-2 missed");
     return null;
   }
 }
 
 export const defaultImageGenerators: ImageGenerators = {
-  generateWithGemini: defaultGemini,
-  generateWithOpenAI: defaultOpenAI,
+  generateWithImagine: defaultImagine,
+  generateWithGptImage2: defaultGptImage2,
 };
+
+async function acceptOrNull(
+  raw: Buffer | null,
+  label: string,
+): Promise<Buffer | null> {
+  if (!raw) return null;
+  try {
+    await assertCraftPlate(raw);
+    return raw;
+  } catch (err) {
+    logger.warn({ err, label }, "Craft lock rejected plate");
+    return null;
+  }
+}
 
 /**
  * Generate one campaign ad photograph. Fail-closed:
- * Gemini miss → gpt-image-1 → FAILED. Never an SVG/gradient.
+ * Grok Imagine once → if miss or Craft reject, one NEW gpt-image-2 plate → FAILED.
+ * Never Gemini. Never SVG/gradient. Never composite type over a rejected plate.
  */
 export async function generateImageBuffer(
   job: GenerateImageJob,
@@ -138,6 +153,7 @@ export async function generateImageBuffer(
   const heroImageUrl = job.productImageNoBgUrl ?? job.productImageUrl;
   const productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
   const hasProductPhoto = !!productPng;
+  const founderPng = hasProductPhoto ? productPng : undefined;
 
   const prompt = buildCraftPrompt({
     ad: job.ad,
@@ -146,37 +162,35 @@ export async function generateImageBuffer(
     hasProductPhoto,
   });
 
-  let raw: Buffer | null = null;
-  let model = "";
-
-  raw = await generators.generateWithGemini(
-    prompt,
-    slot,
-    hasProductPhoto ? productPng : undefined,
+  let raw = await acceptOrNull(
+    await generators.generateWithImagine(prompt, slot, founderPng),
+    GROK_IMAGINE_MODEL,
   );
-  if (raw) {
-    model = hasProductPhoto
-      ? `${GEMINI_IMAGE_MODEL}-edit`
-      : GEMINI_IMAGE_MODEL;
-  }
+  let model = raw
+    ? hasProductPhoto
+      ? `${GROK_IMAGINE_MODEL}-edit`
+      : GROK_IMAGINE_MODEL
+    : "";
 
   if (!raw) {
-    raw = await generators.generateWithOpenAI(
-      prompt,
-      slot,
-      hasProductPhoto ? productPng : undefined,
+    // NEW plate. Founder product photo is allowed as reference.
+    // The rejected Imagine buffer is not passed — not a rescue/inpaint.
+    raw = await acceptOrNull(
+      await generators.generateWithGptImage2(prompt, slot, founderPng),
+      GPT_IMAGE_FALLBACK_MODEL,
     );
-    if (raw) model = hasProductPhoto ? "gpt-image-1-edit" : "gpt-image-1";
+    if (raw) {
+      model = hasProductPhoto
+        ? `${GPT_IMAGE_FALLBACK_MODEL}-edit`
+        : GPT_IMAGE_FALLBACK_MODEL;
+    }
   }
 
   if (!raw) {
     throw new ImageGenerationFailed(
-      "Generation failed. Gemini and gpt-image-1 both missed. A branded gradient is not an ad.",
+      "Generation failed. Grok Imagine and gpt-image-2 both missed or were Craft-rejected. A branded gradient is not an ad.",
     );
   }
-
-  rejectIfNotAPhotograph(raw);
-  await rejectIfFlatGradient(raw);
 
   const finalBuffer = await compositeAdImage({
     ad: job.ad,

@@ -11,6 +11,10 @@ export const DEFAULT_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 export const DEFAULT_XAI_MODEL = "grok-4.6";
 /** AI Gateway slug for the same Grok model. */
 export const DEFAULT_GATEWAY_MODEL = "xai/grok-4.6";
+/** Current GA Grok Imagine stills id on AI Gateway. */
+export const DEFAULT_GATEWAY_IMAGINE_MODEL = "xai/grok-imagine-image";
+/** Direct xAI Imagine id when hitting api.x.ai. */
+export const DEFAULT_XAI_IMAGINE_MODEL = "grok-imagine-image";
 
 export type XaiAuth = {
   apiKey: string;
@@ -70,4 +74,19 @@ export function resolveXaiModel(): string {
     return named;
   }
   return auth?.via === "gateway" ? DEFAULT_GATEWAY_MODEL : DEFAULT_XAI_MODEL;
+}
+
+/** Grok Imagine stills. Override with GROK_IMAGINE_MODEL if a preview id is required. */
+export function resolveImagineModel(): string {
+  const named = process.env.GROK_IMAGINE_MODEL?.trim();
+  const auth = resolveXaiAuth();
+  if (named && named.length > 0) {
+    if (auth?.via === "gateway" && !named.includes("/")) {
+      return `xai/${named}`;
+    }
+    return named;
+  }
+  return auth?.via === "gateway"
+    ? DEFAULT_GATEWAY_IMAGINE_MODEL
+    : DEFAULT_XAI_IMAGINE_MODEL;
 }

@@ -7,8 +7,7 @@
  * - kill_on_sight_svg_gradient.png     (the thing we refuse)
  * - campaign_ad_{hero,context,tight_crop}_*.png
  *
- * Live models: gpt-image-1 if OPENAI_API_KEY is set. Never calls
- * gemini-3-pro-image-preview in this run (CEO spend freeze).
+ * Live models: gpt-image-2 if Gateway/OPENAI is set. Never calls Gemini.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -142,8 +141,8 @@ async function main() {
         ad: ads[0],
       },
       {
-        generateWithGemini: async () => null,
-        generateWithOpenAI: async () => null,
+        generateWithImagine: async () => null,
+        generateWithGptImage2: async () => null,
       },
     );
   } catch (err) {
@@ -152,8 +151,7 @@ async function main() {
   if (!failedClosed) throw new Error("expected ImageGenerationFailed when both models miss");
 
   // 4. Three-slot campaign through the real compositor + reject rules.
-  //    Prefer gpt-image-1 when OPENAI_API_KEY is present. Never call
-  //    gemini-3-pro-image-preview here (CEO spend freeze).
+  //    Prefer gpt-image-2 when configured. Never call Gemini.
   const useLiveOpenAI = isOpenAIImageConfigured();
   for (const idx of [0, 1, 2] as const) {
     const slot = slotForIndex(idx);
@@ -175,8 +173,8 @@ async function main() {
         slot.aspectRatio === "9:16" ? "1024x1536" : "1024x1536",
       );
       const result = await generateImageBuffer(job, {
-        generateWithGemini: async () => null,
-        generateWithOpenAI: async () => generated,
+        generateWithImagine: async () => null,
+        generateWithGptImage2: async () => generated,
       });
       source = result.buffer;
       model = result.model;
@@ -185,8 +183,8 @@ async function main() {
       // with empty top third, then the real compositor. Not a Gemini call.
       const framed = await frameProductInLowerBand(pngForEdit, slot.width, slot.height);
       const result = await generateImageBuffer(job, {
-        generateWithGemini: async () => framed,
-        generateWithOpenAI: async () => null,
+        generateWithImagine: async () => framed,
+        generateWithGptImage2: async () => null,
       });
       source = result.buffer;
       model = "photograph_composite_not_a_model_call";
@@ -207,11 +205,12 @@ async function main() {
     join(OUT, "image_pipeline_proof_framed.json"),
     JSON.stringify(
       {
-        geminiImageModel: "gemini-3-pro-image-preview",
+        grokImagineModel: "xai/grok-imagine-image",
+        gptImageModel: "gpt-image-2",
         geminiConfigured: isGeminiImageConfigured(),
         openaiConfigured: isOpenAIImageConfigured(),
-        invokedGemini3ProImagePreview: false,
-        usedGptImage1: useLiveOpenAI,
+        invokedGemini: false,
+        usedGptImage2: useLiveOpenAI,
         editMime: EDIT_MIME,
         jpegUploadMagic: detectImageMime(jpegUpload),
         pngEditMagic: detectImageMime(pngForEdit),

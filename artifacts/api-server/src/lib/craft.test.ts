@@ -7,7 +7,8 @@ import {
   rejectIfNotAPhotograph,
   slotForIndex,
   CraftReject,
-  GEMINI_IMAGE_MODEL,
+  GROK_IMAGINE_MODEL,
+  GPT_IMAGE_FALLBACK_MODEL,
   wordCount,
 } from "./craft.js";
 import type { CampaignAd } from "../ads/types.js";
@@ -22,8 +23,9 @@ const ad: CampaignAd = {
   gradientHex2: "#222222",
 };
 
-test("quality path model is gemini-3-pro-image-preview", () => {
-  assert.equal(GEMINI_IMAGE_MODEL, "gemini-3-pro-image-preview");
+test("quality path is Grok Imagine then gpt-image-2, never Gemini", () => {
+  assert.equal(GROK_IMAGINE_MODEL, "xai/grok-imagine-image");
+  assert.equal(GPT_IMAGE_FALLBACK_MODEL, "gpt-image-2");
 });
 
 test("three ads are one campaign: hero, context, tight crop on 4:5 and 9:16", () => {
@@ -57,6 +59,8 @@ test("craft prompt encodes mute model, their product, and campaign coherence", (
   assert.match(prompt, /ONE campaign/i);
   assert.match(prompt, /contact shadow/i);
   assert.match(prompt, /neon void/i);
+  assert.match(prompt, /teal-orange/i);
+  assert.match(prompt, /window/i);
 });
 
 test("SVG markup is kill-on-sight", () => {
