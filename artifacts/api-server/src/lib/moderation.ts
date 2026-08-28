@@ -1,4 +1,4 @@
-import { anthropic as client } from "@workspace/integrations-anthropic-ai";
+import { grokJsonChat, parseJsonObject } from "@workspace/integrations-xai";
 import { db, campaignsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger.js";
@@ -72,18 +72,13 @@ async function analyzeCampaignRisk(
   brief: string,
   cj: CampaignData,
 ): Promise<Omit<RiskReport, "checkedAt">> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 1024,
+  const text = await grokJsonChat({
     system: MODERATION_SYSTEM,
-    messages: [
-      { role: "user", content: `Campaign to review:\n${campaignForReview(brief, cj)}` },
-    ],
+    user: `Campaign to review:\n${campaignForReview(brief, cj)}`,
+    maxTokens: 1024,
+    temperature: 0.2,
   });
-
-  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-  const jsonText = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
-  const parsed = JSON.parse(jsonText) as {
+  const parsed = parseJsonObject(text) as {
     riskLevel?: string;
     flags?: Array<{ code?: string; detail?: string }>;
     summary?: string;

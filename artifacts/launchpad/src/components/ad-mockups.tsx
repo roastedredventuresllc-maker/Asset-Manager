@@ -137,21 +137,16 @@ function MediaFill({ ad }: { ad: MockupAd }) {
   }
   if (ad.status === "failed") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-neutral-200 px-4 text-center font-sans text-[12px] font-medium text-neutral-700">
+      <div className="absolute inset-0 flex items-center justify-center bg-[#1c1915] px-4 text-center font-serif text-[13px] text-[#c4b8a8]">
         Generation failed
       </div>
     );
   }
   return (
-    <div
-      className="absolute inset-0 animate-pulse"
-      style={{
-        background: `linear-gradient(135deg, ${ad.accent}, ${ad.accent}44)`,
-      }}
-    >
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-sans text-[10px] uppercase tracking-[2px] text-white/70">
-          Generating…
+    <div className="absolute inset-0 bg-[#1c1915]">
+      <div className="absolute inset-x-0 top-0 h-[32%] flex items-end justify-center px-4 pb-2">
+        <span className="font-serif text-[15px] leading-tight text-[#ede6dc] text-center">
+          {ad.hook}
         </span>
       </div>
     </div>

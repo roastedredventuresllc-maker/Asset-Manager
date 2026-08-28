@@ -89,8 +89,8 @@ export async function getCampaignRecord(
 }
 
 /**
- * Background generation: calls Claude, persists the campaign JSON, then
- * enqueues image-generation jobs. Fire-and-forget from the caller.
+ * Background generation: Grok writes campaign JSON from the founder brief,
+ * then image-generation jobs are enqueued. Fire-and-forget from the caller.
  */
 export async function generateCampaignAsync(
   campaignId: string,
@@ -99,7 +99,9 @@ export async function generateCampaignAsync(
   productImageNoBgUrl?: string | null,
 ): Promise<void> {
   try {
-    const campaignData = await generateCampaign(brief);
+    const campaignData = await generateCampaign(brief, {
+      hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
+    });
     const landingSlug = generateSlug(campaignData.brandName);
 
     await db

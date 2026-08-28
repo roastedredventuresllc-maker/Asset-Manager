@@ -196,6 +196,9 @@ importers:
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../../lib/integrations-openai-ai-server
+      '@workspace/integrations-xai':
+        specifier: workspace:*
+        version: link:../../lib/integrations-xai
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -713,6 +716,16 @@ importers:
       p-retry:
         specifier: ^7.1.1
         version: 7.1.1
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
+
+  lib/integrations-xai:
+    dependencies:
+      openai:
+        specifier: ^6.27.0
+        version: 6.44.0(ws@8.21.0)(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
