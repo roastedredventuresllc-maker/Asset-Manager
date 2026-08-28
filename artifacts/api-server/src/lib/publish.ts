@@ -4,6 +4,7 @@ import { getAdPlatform } from "../ads/index.js";
 import { generateId } from "./ids.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
+import { publicOrigin } from "./assetUrl.js";
 import type { CampaignData } from "./claude.js";
 
 export interface PublishOptions {
@@ -18,14 +19,6 @@ export interface PublishOutcome {
   ok: boolean;
   externalCampaignId?: string;
   error?: string;
-}
-
-function resolveDomain(): string {
-  return (
-    process.env.REPLIT_DEV_DOMAIN ??
-    process.env.REPLIT_DOMAINS?.split(",")[0] ??
-    "localhost:3000"
-  );
 }
 
 /**
@@ -46,10 +39,10 @@ export async function publishCampaignToPlatforms(
   }
 
   const cj = campaign.campaignJson as CampaignData;
-  const domain = resolveDomain();
+  const origin = publicOrigin();
   const landingUrl = campaign.landingSlug
-    ? `https://${domain}/p/${campaign.landingSlug}`
-    : `https://${domain}`;
+    ? `${origin}/p/${campaign.landingSlug}`
+    : origin;
 
   // House-account model: every client campaign lives in OUR ad accounts, so
   // platform-side campaign names carry a per-client tag for clean filtering

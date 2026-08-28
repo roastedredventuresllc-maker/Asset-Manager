@@ -8,6 +8,7 @@ import { logger } from "./logger.js";
 import { uploadBuffer } from "./storage.js";
 import { compositeAdImage } from "./imageComposite.js";
 import { reencodeToPng, EDIT_MIME } from "./imageMime.js";
+import { resolveFetchableUrl } from "./assetUrl.js";
 import {
   buildCraftPrompt,
   rejectIfFlatGradient,
@@ -45,7 +46,7 @@ export interface ImageGenerators {
 
 async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(resolveFetchableUrl(url));
     if (!res.ok) {
       logger.warn(
         { status: res.status, host: safeHost(url) },

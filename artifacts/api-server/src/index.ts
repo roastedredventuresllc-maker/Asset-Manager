@@ -1,10 +1,11 @@
+import "./loadEnv";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startWorkerLoop } from "./lib/worker";
 import { startSpendGuardLoop } from "./lib/spendGuard";
 import { ensureSeededInBackground } from "./lib/referenceAssets";
 
-const rawPort = process.env["PORT"] ?? "8080";
+const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {

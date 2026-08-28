@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "DATABASE_URL=${DATABASE_URL:-postgres://launchpad:launchpad@127.0.0.1:5432/launchpad} tsx --test src/lib/craft.test.ts src/lib/imageMime.test.ts src/lib/imagePipeline.test.ts src/lib/channelSplit.test.ts src/lib/geminiImport.test.ts src/ads/connectors.test.ts"
+    "test": "DATABASE_URL=${DATABASE_URL:-postgres://launchpad:launchpad@127.0.0.1:5432/launchpad} tsx --test src/lib/craft.test.ts src/lib/imageMime.test.ts src/lib/imagePipeline.test.ts src/lib/channelSplit.test.ts src/lib/geminiImport.test.ts src/lib/assetUrl.test.ts src/ads/connectors.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",

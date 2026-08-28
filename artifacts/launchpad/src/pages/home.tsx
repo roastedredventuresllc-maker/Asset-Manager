@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
 import {
   useGenerateCampaign,
   useGetCampaignStatus,
@@ -20,35 +19,59 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { InSituAd } from "@/components/ad-mockups";
 
+const POST_CHECKOUT_KEY = "launchpad_post_checkout";
+
 export default function Home() {
-  const [location, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const successUrlParam = searchParams.get("success");
   const urlCampaignId = searchParams.get("campaignId");
 
-  const [campaignId, setCampaignId] = useState<string | null>(
+  const [campaignId, setCampaignIdState] = useState<string | null>(
     urlCampaignId || localStorage.getItem("launchpad_campaign_id")
   );
+
+  const [postCheckout, setPostCheckout] = useState(() => {
+    if (successUrlParam === "true") return true;
+    const stored = localStorage.getItem(POST_CHECKOUT_KEY);
+    const id = urlCampaignId || localStorage.getItem("launchpad_campaign_id");
+    return !!id && stored === id;
+  });
 
   useEffect(() => {
     if (campaignId) {
       localStorage.setItem("launchpad_campaign_id", campaignId);
     } else {
       localStorage.removeItem("launchpad_campaign_id");
+      localStorage.removeItem(POST_CHECKOUT_KEY);
     }
   }, [campaignId]);
 
-  if (successUrlParam === "true" && campaignId) {
-    // After checkout the campaign enters the review queue (it is NOT live
-    // yet) — route through the status router so the right screen shows.
-    return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} postCheckout />;
-  }
+  useEffect(() => {
+    if (successUrlParam === "true" && campaignId) {
+      localStorage.setItem(POST_CHECKOUT_KEY, campaignId);
+      setPostCheckout(true);
+    }
+  }, [successUrlParam, campaignId]);
+
+  const setCampaignId = (id: string | null) => {
+    if (!id) {
+      localStorage.removeItem(POST_CHECKOUT_KEY);
+      setPostCheckout(false);
+    }
+    setCampaignIdState(id);
+  };
 
   if (!campaignId) {
     return <InputState setCampaignId={setCampaignId} />;
   }
 
-  return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} />;
+  return (
+    <ActiveCampaignRouter
+      campaignId={campaignId}
+      setCampaignId={setCampaignId}
+      postCheckout={postCheckout || successUrlParam === "true"}
+    />
+  );
 }
 
 function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { campaignId: string, setCampaignId: (id: string | null) => void, postCheckout?: boolean }) {
@@ -91,6 +114,12 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <ReviewState setCampaignId={setCampaignId} />;
   }
 
+  if (postCheckout && (statusRes.status === "publishing" || statusRes.status === "ready")) {
+    // Paid checkout landed us here. Webhook may still be flipping
+    // publishing → in_review. Never drop back into the ship UI.
+    return <ReviewState setCampaignId={setCampaignId} />;
+  }
+
   if (statusRes.status === "rejected") {
     return <RejectedState reason={statusRes.rejectionReason ?? null} setCampaignId={setCampaignId} />;
   }
@@ -99,13 +128,7 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
   }
 
-  if (postCheckout && statusRes.status === "ready") {
-    // Payment done but the webhook hasn't landed yet — show a holding screen
-    // instead of dropping back into the editing view.
-    return <WorkingState />;
-  }
-
-  // Ready or Draft or Publishing
+  // Ready or Draft (or publishing without a paid-checkout return)
   return <BriefingState campaignId={campaignId} setCampaignId={setCampaignId} statusRes={statusRes} />;
 }
 

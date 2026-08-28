@@ -12,6 +12,7 @@ import { getAdPlatform } from "../ads/index.js";
 import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
+import { publicOrigin } from "./assetUrl.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -33,16 +34,8 @@ export class ServiceError extends Error {
 
 type CampaignRecord = typeof campaignsTable.$inferSelect;
 
-function appDomain(): string {
-  return (
-    process.env.REPLIT_DEV_DOMAIN ??
-    process.env.REPLIT_DOMAINS?.split(",")[0] ??
-    "localhost:3000"
-  );
-}
-
 export function toCampaignResponse(campaign: CampaignRecord) {
-  const domain = appDomain();
+  const origin = publicOrigin();
   return {
     id: campaign.id,
     userId: campaign.userId,
@@ -51,9 +44,7 @@ export function toCampaignResponse(campaign: CampaignRecord) {
     campaignData: campaign.campaignJson ?? null,
     status: campaign.status,
     landingSlug: campaign.landingSlug,
-    landingUrl: campaign.landingSlug
-      ? `https://${domain}/p/${campaign.landingSlug}`
-      : null,
+    landingUrl: campaign.landingSlug ? `${origin}/p/${campaign.landingSlug}` : null,
     revisionsUsed: campaign.revisionsUsed,
     revisionsAllowed: campaign.revisionsAllowed,
     budgetCapCents: campaign.budgetCapCents ?? null,
@@ -327,18 +318,22 @@ export async function reviseCampaignById(id: string, request: string) {
   if (visualChanged) {
     const { jobsTable } = await import("@workspace/db");
 
-    // Recover the no-bg URL from the most recent completed job payload for
-    // this campaign (stored there at generation time). No schema migration needed.
+    // Recover the no-bg URL from the most recent *done* job payload for
+    // this campaign. The worker writes status "done" (not "completed").
     let productImageNoBgUrl: string | null = null;
     const prevJob = await db.query.jobsTable.findFirst({
       where: and(
         eq(jobsTable.type, "generate_image"),
         eq(jobsTable.status, "done"),
+        sql`${jobsTable.payload}->>'campaignId' = ${id}`,
       ),
       orderBy: [desc(jobsTable.createdAt)],
     });
-    const prevPayload = prevJob?.payload as { campaignId?: string; productImageNoBgUrl?: string | null } | null;
-    if (prevPayload?.campaignId === id && prevPayload?.productImageNoBgUrl) {
+    const prevPayload = prevJob?.payload as {
+      campaignId?: string;
+      productImageNoBgUrl?: string | null;
+    } | null;
+    if (prevPayload?.productImageNoBgUrl) {
       productImageNoBgUrl = prevPayload.productImageNoBgUrl;
     }
 
@@ -419,7 +414,7 @@ export async function publishCampaignById(
 
   const cj = campaign.campaignJson as { brandName?: string };
   const brandName = cj.brandName ?? "LaunchPad Campaign";
-  const domain = appDomain();
+  const origin = publicOrigin();
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -445,8 +440,8 @@ export async function publishCampaignById(
       tiktokSharePct: String(tiktokSharePct),
       googleSharePct: String(resolveGoogleSharePct(metaSharePct, tiktokSharePct, googleSharePct)),
     },
-    success_url: successUrl ?? `https://${domain}/?success=true&campaignId=${id}`,
-    cancel_url: `https://${domain}/?campaignId=${id}`,
+    success_url: successUrl ?? `${origin}/?success=true&campaignId=${id}`,
+    cancel_url: `${origin}/?campaignId=${id}`,
   });
 
   await db

@@ -13,11 +13,12 @@ pnpm install
 
 ### 2. Configure secrets
 
-All secrets are set in Replit Secrets (the padlock icon in the sidebar). The app boots with only `ANTHROPIC_API_KEY` set — everything else is optional until you go live.
+Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy needs `ANTHROPIC_API_KEY` (or the Replit `AI_INTEGRATIONS_ANTHROPIC_*` names). Everything else is optional until you go live.
 
 | Secret | Required | Where to get it |
 |--------|----------|-----------------|
-| `ANTHROPIC_API_KEY` | **Yes** (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `DATABASE_URL` | **Yes** (API boot) | Postgres connection string |
+| `ANTHROPIC_API_KEY` | **Yes** for copy (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) | [console.anthropic.com](https://console.anthropic.com) → API Keys |
 | `GEMINI_API_KEY` | For photoreal ads (or `AI_INTEGRATIONS_GEMINI_API_KEY`) | [aistudio.google.com](https://aistudio.google.com) → API keys. Quality path is `gemini-3-pro-image-preview`. |
 | `OPENAI_API_KEY` | Fallback images (or `AI_INTEGRATIONS_OPENAI_API_KEY`) | [platform.openai.com](https://platform.openai.com) → API keys |
 | `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — background removal only |
@@ -41,10 +42,17 @@ All secrets are set in Replit Secrets (the padlock icon in the sidebar). The app
 
 ### 3. Environment variables
 
-Set in Replit Secrets or `.env`:
+Copy `.env.example` to `.env` in the repo root. Names match the code. The API loads `.env` on boot if present (existing env/Replit Secrets win). Vite reads the same file (`envDir` = repo root).
+
 ```
 ADS_MODE=mock   # "mock" (default) | "live"
+API_PORT=8080
+PUBLIC_APP_URL=http://localhost:5173
 ```
+
+`ADMIN_PASSWORD` is required for `/admin`. Without it, admin login returns 503.
+
+Local Stripe return: success URL is `PUBLIC_APP_URL/?success=true&campaignId=...`. If the webhook has not flipped status yet, Home still shows ReviewState (not the ship UI).
 
 ### 4. Push database schema
 ```bash
@@ -53,12 +61,14 @@ pnpm --filter @workspace/db run push
 
 ### 5. Run the app
 ```bash
-# API server (port assigned automatically)
+# API server (API_PORT, default 8080). Loads repo-root .env.
 pnpm --filter @workspace/api-server run dev
 
-# Frontend (port assigned automatically)
+# Frontend (5173 locally; proxies /api to the API)
 pnpm --filter @workspace/launchpad run dev
 ```
+
+Local asset URLs are relative `/api/assets/...` (browser + Vite proxy). Do not expect `https://localhost`.
 
 ---
 
@@ -95,12 +105,20 @@ In the Stripe Dashboard → Products, create:
 
 ### Webhook
 
-Add a webhook endpoint at `https://your-domain.replit.app/api/webhooks/stripe` listening to:
+Checkout does **not** publish ads. `checkout.session.completed` claims the campaign, stores `pendingPublishJson`, and sets status `in_review`. An admin approves in `/admin` before anything is sent to Meta/TikTok/Google.
+
+Locally, Stripe cannot reach your machine unless you forward events:
+
+```bash
+stripe listen --forward-to localhost:8080/api/webhooks/stripe
+```
+
+Copy the `whsec_...` signing secret into `STRIPE_WEBHOOK_SECRET`. Without this, status stays `publishing` after pay.
+
+Deployed endpoint: `https://your-domain/api/webhooks/stripe` listening to:
 - `checkout.session.completed`
 - `invoice.paid`
 - `customer.subscription.deleted`
-
-Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
@@ -192,11 +210,12 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 
 ### Data flow
 1. User describes product → `POST /api/campaigns/generate` → Claude generates JSON → image jobs enqueued
-2. Frontend polls `GET /api/campaigns/:id/status` every 3s until `status=ready`
-3. Image worker (`POST /api/jobs/worker`) pulls pending jobs, calls fal.ai, composites with sharp, stores in Object Storage
-4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout
-5. `checkout.session.completed` webhook → create user account, claim campaign, fire platform publish, send magic link
-6. Frontend polls metrics every 30s
+2. Frontend polls `GET /api/campaigns/:id/status` until copy is ready; images finish as background jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
+3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
+4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
+5. `checkout.session.completed` webhook → claim campaign, set `in_review` + `pendingPublishJson` (does **not** auto-publish)
+6. Admin approves in `/admin` (`ADMIN_PASSWORD`) → house-account publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
+7. Frontend shows ReviewState after paid checkout; LiveState after admin approval
 
 ### Landing pages
 Served at `/p/:slug` — server-rendered HTML from stored campaign JSON. Zero DNS, live instantly on publish.

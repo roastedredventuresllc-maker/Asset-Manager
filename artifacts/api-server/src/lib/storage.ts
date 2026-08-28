@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import { publicAssetUrl, resolveFetchableUrl } from "./assetUrl.js";
 import { writeFile, mkdir, readFile } from "fs/promises";
 import { join, normalize, extname } from "path";
 
@@ -33,12 +34,7 @@ async function saveLocally(key: string, buffer: Buffer): Promise<string> {
   const dir = join(LOCAL_ASSETS_DIR, key.split("/").slice(0, -1).join("/"));
   await mkdir(dir, { recursive: true });
   await writeFile(join(LOCAL_ASSETS_DIR, key), buffer);
-  // Serve via /api/assets/:key route
-  const domain =
-    process.env.REPLIT_DEV_DOMAIN ??
-    process.env.REPLIT_DOMAINS?.split(",")[0] ??
-    "localhost:8080";
-  return `https://${domain}/api/assets/${key}`;
+  return publicAssetUrl(key);
 }
 
 export async function uploadBuffer(
@@ -51,11 +47,7 @@ export async function uploadBuffer(
     const client = await objectClient();
     void contentType; // Object Storage infers content type from the key
     await client.uploadFromBytes(key, buffer);
-    const domain =
-      process.env.REPLIT_DEV_DOMAIN ??
-      process.env.REPLIT_DOMAINS?.split(",")[0] ??
-      "localhost:8080";
-    return `https://${domain}/api/assets/${key}`;
+    return publicAssetUrl(key);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn({ msg }, "Object storage unavailable — falling back to local filesystem");
@@ -66,7 +58,7 @@ export async function uploadBuffer(
 }
 
 export async function uploadFromUrl(key: string, url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetch(resolveFetchableUrl(url));
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
   const contentType = res.headers.get("content-type") ?? "image/png";
