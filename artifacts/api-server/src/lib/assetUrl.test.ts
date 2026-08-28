@@ -55,7 +55,7 @@ test("local asset URLs are relative http paths, not https://localhost", () => {
   );
 });
 
-test("PUBLIC_APP_URL wins for Stripe/browser origin; fetches still hit the API", () => {
+test("PUBLIC_APP_URL wins for Stripe/browser origin; local assets stay relative", () => {
   withEnv(
     {
       PUBLIC_APP_URL: "http://localhost:5173",
@@ -67,14 +67,29 @@ test("PUBLIC_APP_URL wins for Stripe/browser origin; fetches still hit the API",
     },
     () => {
       assert.equal(publicOrigin(), "http://localhost:5173");
-      assert.equal(
-        publicAssetUrl("ad-images/x/0.png"),
-        "http://localhost:5173/api/assets/ad-images/x/0.png",
-      );
+      assert.equal(publicAssetUrl("ad-images/x/0.png"), "/api/assets/ad-images/x/0.png");
       assert.equal(
         resolveFetchableUrl("/api/assets/ad-images/x/0.png"),
         "http://127.0.0.1:8080/api/assets/ad-images/x/0.png",
       );
+    },
+  );
+});
+
+test("https://localhost is never used for asset URLs", () => {
+  withEnv(
+    {
+      PUBLIC_APP_URL: "https://localhost:8080",
+      REPLIT_DEV_DOMAIN: undefined,
+      REPLIT_DOMAINS: undefined,
+      PORT: "8080",
+      API_PORT: undefined,
+      VITE_DEV_PORT: undefined,
+    },
+    () => {
+      const url = publicAssetUrl("ad-images/x/0.png");
+      assert.equal(url, "/api/assets/ad-images/x/0.png");
+      assert.ok(!url.includes("https://localhost"));
     },
   );
 });

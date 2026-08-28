@@ -66,7 +66,7 @@ The experience is one page that evolves through states:
 ## Secrets required (NAMES only)
 
 - `DATABASE_URL` — API will not boot without it
-- `ANTHROPIC_API_KEY` (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + optional `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`)
+- `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
 - `ADMIN_PASSWORD` — `/admin` + encrypted connectors

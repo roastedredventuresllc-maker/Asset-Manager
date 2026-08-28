@@ -13,6 +13,7 @@ import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
 import { publicOrigin } from "./assetUrl.js";
+import { JOB_STATUS } from "./jobStatus.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -136,7 +137,7 @@ export async function generateCampaignAsync(
           productImageUrl,
           productImageNoBgUrl: productImageNoBgUrl ?? null,
         },
-        status: "pending",
+        status: JOB_STATUS.pending,
       });
     }
 
@@ -318,13 +319,13 @@ export async function reviseCampaignById(id: string, request: string) {
   if (visualChanged) {
     const { jobsTable } = await import("@workspace/db");
 
-    // Recover the no-bg URL from the most recent *done* job payload for
-    // this campaign. The worker writes status "done" (not "completed").
+    // Recover the no-bg URL from the most recent done job payload for
+    // this campaign. Same enum the worker writes (JOB_STATUS.done).
     let productImageNoBgUrl: string | null = null;
     const prevJob = await db.query.jobsTable.findFirst({
       where: and(
         eq(jobsTable.type, "generate_image"),
-        eq(jobsTable.status, "done"),
+        eq(jobsTable.status, JOB_STATUS.done),
         sql`${jobsTable.payload}->>'campaignId' = ${id}`,
       ),
       orderBy: [desc(jobsTable.createdAt)],
@@ -364,7 +365,7 @@ export async function reviseCampaignById(id: string, request: string) {
           productImageUrl: campaign.productImageUrl,
           productImageNoBgUrl,
         },
-        status: "pending",
+        status: JOB_STATUS.pending,
       });
     }
   }

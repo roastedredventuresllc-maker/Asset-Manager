@@ -13,12 +13,15 @@ pnpm install
 
 ### 2. Configure secrets
 
-Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy needs `ANTHROPIC_API_KEY` (or the Replit `AI_INTEGRATIONS_ANTHROPIC_*` names). Everything else is optional until you go live.
+Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy needs `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (and `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`). Everything else is optional until you go live.
 
 | Secret | Required | Where to get it |
 |--------|----------|-----------------|
 | `DATABASE_URL` | **Yes** (API boot) | Postgres connection string |
-| `ANTHROPIC_API_KEY` | **Yes** for copy (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `PORT` | API listen (Vite on Replit too) | Local default 8080 for the API if unset |
+| `BASE_PATH` | Vite base | Local default `/` if unset |
+| `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | **Yes** for copy | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` | With Anthropic key | `https://api.anthropic.com` if unset |
 | `GEMINI_API_KEY` | For photoreal ads (or `AI_INTEGRATIONS_GEMINI_API_KEY`) | [aistudio.google.com](https://aistudio.google.com) → API keys. Quality path is `gemini-3-pro-image-preview`. |
 | `OPENAI_API_KEY` | Fallback images (or `AI_INTEGRATIONS_OPENAI_API_KEY`) | [platform.openai.com](https://platform.openai.com) → API keys |
 | `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — background removal only |
@@ -42,17 +45,15 @@ Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not
 
 ### 3. Environment variables
 
-Copy `.env.example` to `.env` in the repo root. Names match the code. The API loads `.env` on boot if present (existing env/Replit Secrets win). Vite reads the same file (`envDir` = repo root).
+Copy `.env.example` to `.env` in the repo root. Names only — no values in the example except `ADS_MODE=mock`. The API loads `.env` on boot if present (existing env/Replit Secrets win). Vite reads the same file (`envDir` = repo root).
 
 ```
-ADS_MODE=mock   # "mock" (default) | "live"
-API_PORT=8080
-PUBLIC_APP_URL=http://localhost:5173
+ADS_MODE=mock
 ```
 
 `ADMIN_PASSWORD` is required for `/admin`. Without it, admin login returns 503.
 
-Local Stripe return: success URL is `PUBLIC_APP_URL/?success=true&campaignId=...`. If the webhook has not flipped status yet, Home still shows ReviewState (not the ship UI).
+Local Stripe return uses `PUBLIC_APP_URL` if set, otherwise Vite (`http://127.0.0.1:5173`). If the webhook has not flipped status yet, Home still shows ReviewState (not the ship UI) while status is `publishing`.
 
 ### 4. Push database schema
 ```bash
@@ -75,7 +76,7 @@ Local asset URLs are relative `/api/assets/...` (browser + Vite proxy). Do not e
 ## Mock Mode vs Live Mode
 
 `ADS_MODE=mock` (the default) makes publishing work end-to-end without spending:
-- Campaign generation via Claude works when `ANTHROPIC_API_KEY` (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) is set
+- Campaign generation via Claude works when `AI_INTEGRATIONS_ANTHROPIC_API_KEY` is set
 - Image generation uses `gemini-3-pro-image-preview`, then `gpt-image-1`. If both miss, the job **fails** — a branded gradient is not an ad
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`

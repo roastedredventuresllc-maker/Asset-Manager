@@ -2,6 +2,7 @@ import { db, jobsTable } from "@workspace/db";
 import { eq, and, lte } from "drizzle-orm";
 import { processImageJob } from "./imagePipeline.js";
 import { logger } from "./logger.js";
+import { JOB_STATUS } from "./jobStatus.js";
 
 const MAX_ATTEMPTS = 2;
 
@@ -18,7 +19,7 @@ export interface WorkerResult {
 export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
   const pendingJobs = await db.query.jobsTable.findMany({
     where: and(
-      eq(jobsTable.status, "pending"),
+      eq(jobsTable.status, JOB_STATUS.pending),
       lte(jobsTable.attempts, MAX_ATTEMPTS),
     ),
     limit,
@@ -31,7 +32,7 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
     pendingJobs.map(async (job): Promise<"succeeded" | "failed"> => {
       await db
         .update(jobsTable)
-        .set({ status: "processing", attempts: job.attempts + 1 })
+        .set({ status: JOB_STATUS.processing, attempts: job.attempts + 1 })
         .where(eq(jobsTable.id, job.id));
 
       try {
@@ -40,7 +41,7 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
           await processImageJob(payload);
           await db
             .update(jobsTable)
-            .set({ status: "done" })
+            .set({ status: JOB_STATUS.done })
             .where(eq(jobsTable.id, job.id));
           return "succeeded";
         }
@@ -48,7 +49,7 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
         logger.warn({ jobType: job.type }, "Unknown job type");
         await db
           .update(jobsTable)
-          .set({ status: "failed", lastError: "Unknown job type" })
+          .set({ status: JOB_STATUS.failed, lastError: "Unknown job type" })
           .where(eq(jobsTable.id, job.id));
         return "failed";
       } catch (err) {
@@ -57,7 +58,7 @@ export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
         await db
           .update(jobsTable)
           .set({
-            status: job.attempts + 1 >= MAX_ATTEMPTS ? "failed" : "pending",
+            status: job.attempts + 1 >= MAX_ATTEMPTS ? JOB_STATUS.failed : JOB_STATUS.pending,
             lastError: error,
           })
           .where(eq(jobsTable.id, job.id));

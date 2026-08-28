@@ -114,9 +114,13 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <ReviewState setCampaignId={setCampaignId} />;
   }
 
-  if (postCheckout && (statusRes.status === "publishing" || statusRes.status === "ready")) {
-    // Paid checkout landed us here. Webhook may still be flipping
-    // publishing → in_review. Never drop back into the ship UI.
+  if (statusRes.status === "publishing") {
+    // Checkout session exists. Webhook may not have flipped in_review yet.
+    // Never drop back into BriefingState / the ship UI.
+    return <ReviewState setCampaignId={setCampaignId} />;
+  }
+
+  if (postCheckout && statusRes.status === "ready") {
     return <ReviewState setCampaignId={setCampaignId} />;
   }
 
@@ -128,7 +132,7 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
   }
 
-  // Ready or Draft (or publishing without a paid-checkout return)
+  // Ready or Draft
   return <BriefingState campaignId={campaignId} setCampaignId={setCampaignId} statusRes={statusRes} />;
 }
 
@@ -447,7 +451,7 @@ function ErrorState({ setCampaignId }: { setCampaignId: (id: string | null) => v
       <p className="font-serif text-3xl mb-3">Something went wrong</p>
       <p className="font-sans text-muted-foreground text-sm mb-8 text-center max-w-xs">
         The AI couldn't generate your campaign. Make sure the server has a valid{" "}
-        <code className="bg-secondary px-1 rounded text-xs">ANTHROPIC_API_KEY</code> and try again.
+        <code className="bg-secondary px-1 rounded text-xs">AI_INTEGRATIONS_ANTHROPIC_API_KEY</code> and try again.
       </p>
       <button
         onClick={() => setCampaignId(null)}

@@ -34,10 +34,24 @@ export function publicOrigin(): string {
 
 export function publicAssetUrl(key: string): string {
   const path = `/api/assets/${key.replace(/^\/+/, "")}`;
-  if (process.env.PUBLIC_APP_URL || replitHost()) {
-    return `${publicOrigin()}${path}`;
+  const host = replitHost();
+  if (host) return `https://${host}${path}`;
+  const fromEnv = process.env.PUBLIC_APP_URL?.replace(/\/$/, "");
+  // Localhost (any scheme/port) must stay relative so the Vite proxy can serve
+  // it. Never https://localhost — TLS + wrong port vs Vite 5173.
+  if (fromEnv && !isLoopbackOrigin(fromEnv)) {
+    return `${fromEnv}${path}`;
   }
   return path;
+}
+
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin.includes("://") ? origin : `http://${origin}`);
+    return u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return /localhost|127\.0\.0\.1/i.test(origin);
+  }
 }
 
 export function resolveFetchableUrl(url: string): string {
