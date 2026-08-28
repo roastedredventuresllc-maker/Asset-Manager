@@ -24,6 +24,9 @@
     },
     {
       "path": "../../lib/integrations-gemini-ai"
+    },
+    {
+      "path": "../../lib/integrations-xai"
     }
   ]
 }

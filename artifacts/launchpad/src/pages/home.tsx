@@ -13,11 +13,10 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resizeImage } from "@/lib/image-upload";
-import { Paperclip, Send, ArrowRight, ArrowLeft, CheckCircle2, X, MessageSquarePlus, Clock, XCircle } from "lucide-react";
+import { ArrowRight, ArrowLeft } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { InSituAd } from "@/components/ad-mockups";
+import { CampaignBoard, beatForIndex } from "@/components/campaign-board";
 
 const POST_CHECKOUT_KEY = "launchpad_post_checkout";
 
@@ -27,7 +26,7 @@ export default function Home() {
   const urlCampaignId = searchParams.get("campaignId");
 
   const [campaignId, setCampaignIdState] = useState<string | null>(
-    urlCampaignId || localStorage.getItem("launchpad_campaign_id")
+    urlCampaignId || localStorage.getItem("launchpad_campaign_id"),
   );
 
   const [postCheckout, setPostCheckout] = useState(() => {
@@ -74,7 +73,15 @@ export default function Home() {
   );
 }
 
-function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { campaignId: string, setCampaignId: (id: string | null) => void, postCheckout?: boolean }) {
+function ActiveCampaignRouter({
+  campaignId,
+  setCampaignId,
+  postCheckout,
+}: {
+  campaignId: string;
+  setCampaignId: (id: string | null) => void;
+  postCheckout?: boolean;
+}) {
   const { data: statusRes } = useGetCampaignStatus(campaignId, {
     query: {
       enabled: !!campaignId,
@@ -82,17 +89,11 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return 2000;
-        // The campaign flips to "ready" before the ad images finish (they are
-        // generated as background jobs after the copy is ready). Keep polling
-        // while generating OR while any asset is still pending/processing, so
-        // the UI swaps the shimmer for the real images instead of freezing.
         const assetsPending = (data.adAssets ?? []).some(
           (a) => a.status !== "done" && a.status !== "failed",
         );
         if (data.status === "generating" || data.status === "publishing") return 2000;
         if (assetsPending) return 2000;
-        // Right after checkout, keep polling until the Stripe webhook flips
-        // the campaign into the review queue (or an admin action moves it on).
         if (postCheckout && data.status === "ready") return 2000;
         if (data.status === "in_review") return 15000;
         return false;
@@ -115,8 +116,6 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
   }
 
   if (statusRes.status === "publishing") {
-    // Checkout session exists. Webhook may not have flipped in_review yet.
-    // Never drop back into BriefingState / the ship UI.
     return <ReviewState setCampaignId={setCampaignId} />;
   }
 
@@ -125,63 +124,37 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
   }
 
   if (statusRes.status === "rejected") {
-    return <RejectedState reason={statusRes.rejectionReason ?? null} setCampaignId={setCampaignId} />;
+    return (
+      <RejectedState
+        reason={statusRes.rejectionReason ?? null}
+        setCampaignId={setCampaignId}
+      />
+    );
   }
 
   if (statusRes.status === "live" || statusRes.status === "paused") {
     return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
   }
 
-  // Ready or Draft
-  return <BriefingState campaignId={campaignId} setCampaignId={setCampaignId} statusRes={statusRes} />;
-}
-
-function ReviewState({ setCampaignId }: { setCampaignId: (id: string | null) => void }) {
   return (
-    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-6 animate-in fade-in duration-1000">
-      <div className="flex items-center justify-center w-20 h-20 bg-amber-500/10 text-amber-500 rounded-full mb-8">
-        <Clock className="w-10 h-10" />
-      </div>
-      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">In review.</h1>
-      <p className="font-sans text-muted-foreground text-center max-w-md mb-16 leading-relaxed">
-        Payment received. Our team gives every campaign a quick review before
-        it goes live — usually within a few hours. We'll email you as soon as
-        your ads are running.
-      </p>
-      <button
-        onClick={() => setCampaignId(null)}
-        className="font-sans text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
-      >
-        Launch another <ArrowRight className="w-4 h-4" />
-      </button>
-    </div>
+    <BriefingState
+      campaignId={campaignId}
+      setCampaignId={setCampaignId}
+      statusRes={statusRes}
+    />
   );
 }
 
-function RejectedState({ reason, setCampaignId }: { reason: string | null, setCampaignId: (id: string | null) => void }) {
-  return (
-    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-6 animate-in fade-in duration-1000">
-      <div className="flex items-center justify-center w-20 h-20 bg-red-500/10 text-red-500 rounded-full mb-8">
-        <XCircle className="w-10 h-10" />
-      </div>
-      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">Not approved.</h1>
-      <p className="font-sans text-muted-foreground text-center max-w-md mb-6 leading-relaxed">
-        This campaign didn't pass our review, so your ads were not published.
-      </p>
-      {reason && (
-        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-6 mb-16">
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-2">Reviewer note</div>
-          <p className="font-sans text-sm leading-relaxed">{reason}</p>
-        </div>
-      )}
-      <button
-        onClick={() => setCampaignId(null)}
-        className="font-sans text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
-      >
-        Start over <ArrowRight className="w-4 h-4" />
+function Mark({ onClick }: { onClick?: () => void }) {
+  const className = "font-serif italic text-[17px] text-[#ede6dc]/70 hover:text-[#ede6dc] transition-colors";
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        LaunchPad
       </button>
-    </div>
-  );
+    );
+  }
+  return <span className={className}>LaunchPad</span>;
 }
 
 function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) {
@@ -197,21 +170,17 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
     const selected = e.target.files?.[0] ?? null;
     setFile(selected);
     if (selected) {
-      const url = URL.createObjectURL(selected);
-      setPreview(url);
+      setPreview(URL.createObjectURL(selected));
     } else {
       setPreview(null);
     }
   };
 
-  const removeFile = () => {
-    setFile(null);
-    setPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
   const handleSubmit = async () => {
-    if (!brief.trim()) { setError("Add a description first."); return; }
+    if (!brief.trim()) {
+      setError("Say what you sell.");
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     let productImageUrl: string | null = null;
@@ -230,7 +199,6 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
           productImageUrl = data.url;
           productImageNoBgUrl = data.noBgUrl ?? null;
         }
-        // upload failure is non-fatal — we proceed without the image
       }
 
       generateCampaign.mutate(
@@ -238,14 +206,14 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
         {
           onSuccess: (campaign) => setCampaignId(campaign.id),
           onError: () => {
-            setError("Something went wrong. Try again.");
+            setError("We couldn't start. Try again.");
             setIsSubmitting(false);
           },
           onSettled: () => setIsSubmitting(false),
-        }
+        },
       );
     } catch {
-      setError("Something went wrong. Try again.");
+      setError("We couldn't start. Try again.");
       setIsSubmitting(false);
     }
   };
@@ -253,193 +221,89 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
   const isPending = isSubmitting || generateCampaign.isPending;
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background relative">
-      <header className="absolute top-0 left-0 right-0 flex justify-between items-center max-w-[1100px] mx-auto px-6 py-6 w-full">
-        <span className="font-sans font-bold text-xl tracking-tighter">LP</span>
-        <nav className="flex items-center gap-6">
-          <a
-            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/admin`}
-            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Admin
-          </a>
-          <a
-            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/docs`}
-            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Developers
-          </a>
-        </nav>
-      </header>
-      <div className="max-w-[800px] w-full mx-auto flex flex-col items-center gap-12 animate-in fade-in duration-700">
-        <h1 className="font-serif text-5xl md:text-7xl text-center text-foreground">
-          What are you <span className="italic opacity-50">launching?</span>
-        </h1>
-
-        <div className="w-full flex flex-col gap-2">
-          <div className="w-full bg-card rounded-2xl p-2 shadow-sm border border-border flex flex-col focus-within:ring-1 focus-within:ring-ring transition-all">
-            <textarea
-              value={brief}
-              onChange={(e) => { setBrief(e.target.value); setError(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-              placeholder="Describe your product..."
-              className="w-full min-h-[120px] resize-none bg-transparent outline-none p-4 text-lg font-sans placeholder:text-muted-foreground"
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark />
+      </div>
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24">
+        <div className="max-w-[42rem]">
+          <h1 className="font-serif text-[clamp(2.75rem,8vw,5.5rem)] leading-[0.95] text-foreground">
+            What do you sell.
+          </h1>
+          <textarea
+            value={brief}
+            onChange={(e) => {
+              setBrief(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSubmit();
+              }
+            }}
+            placeholder="The product, who it’s for, why it exists."
+            className="mt-10 w-full min-h-[7.5rem] resize-none bg-transparent border-0 rounded-none outline-none px-0 py-0 font-serif text-[1.35rem] md:text-[1.65rem] leading-snug placeholder:text-[#ede6dc]/28"
+            autoFocus
+          />
+          <div className="mt-8 flex flex-wrap items-baseline gap-x-8 gap-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFileChange}
             />
-
-            {preview && (
-              <div className="px-4 pb-2">
-                <div className="relative inline-flex items-center gap-2 bg-secondary rounded-xl pr-2 overflow-hidden">
-                  <img src={preview} alt="Product" className="h-12 w-12 object-cover rounded-lg" />
-                  <span className="font-sans text-xs text-muted-foreground max-w-[160px] truncate">{file?.name}</span>
-                  <button
-                    type="button"
-                    onClick={removeFile}
-                    className="p-1 hover:bg-border rounded-full transition-colors flex-shrink-0"
-                  >
-                    <X className="w-3 h-3 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center px-4 pb-2 pt-1">
-              <label className="cursor-pointer p-2 hover:bg-secondary rounded-full transition-colors" title="Attach product image">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleFileChange}
-                />
-                <Paperclip className={`w-5 h-5 ${file ? "text-foreground" : "text-muted-foreground"}`} />
-              </label>
+            {preview ? (
               <button
-                onClick={handleSubmit}
-                disabled={isPending}
-                className="bg-foreground text-background p-3 rounded-full hover:opacity-90 disabled:opacity-50 transition-opacity"
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  setPreview(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="flex items-center gap-3 font-serif italic text-[15px] text-[#b9aea0]"
               >
-                <Send className="w-5 h-5" />
+                <img src={preview} alt="" className="h-9 w-9 object-cover" />
+                Take the photo off
               </button>
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-center font-sans text-sm text-red-500">{error}</p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-3">
-          {["A fitness app for busy parents", "An AI writing tool", "A sustainable clothing brand", "A SaaS invoicing tool"].map((chip) => (
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="font-serif italic text-[15px] text-[#6e675e] hover:text-[#ede6dc] transition-colors"
+              >
+                A photo of it, if you have one
+              </button>
+            )}
             <button
-              key={chip}
-              onClick={() => { setBrief(chip); setError(null); }}
-              className="text-sm font-sans text-muted-foreground bg-secondary/50 hover:bg-secondary px-4 py-2 rounded-full transition-colors border border-border/50"
+              type="button"
+              onClick={() => void handleSubmit()}
+              disabled={isPending}
+              className="font-serif text-[18px] text-foreground hover:opacity-70 disabled:opacity-40 transition-opacity"
             >
-              {chip}
+              {isPending ? "Writing…" : "Write it →"}
             </button>
-          ))}
+          </div>
+          {error && (
+            <p className="mt-6 font-serif text-[15px] text-[#c4a090]">{error}</p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-const CAMPAIGN_STEPS = [
-  "Interpreting your market & category",
-  "Mapping your ideal audience & positioning",
-  "Writing your channel strategy & budget split",
-  "Crafting three ad concepts — hooks, copy & CTAs",
-  "Art-directing your visuals & landing page",
-];
-
 function WorkingState() {
-  // Time-driven narrative of what the engine is actually doing during the
-  // ~10–15s "generating" phase. The progress rail intentionally holds just
-  // short of full on the final step (and keeps a live shimmer) until the
-  // backend leaves "generating" and the router unmounts this screen — we never
-  // claim the work is done before it is.
-  const [active, setActive] = useState(0);
-  const reduce = useReducedMotion();
-  const total = CAMPAIGN_STEPS.length;
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setActive((a) => Math.min(a + 1, total - 1));
-    }, 3600);
-    return () => clearInterval(id);
-  }, [total]);
-
-  const isLast = active >= total - 1;
-  const pct = isLast ? 92 : Math.round(((active + 1) / total) * 100);
-
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
-      {!reduce && (
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute w-[520px] h-[520px] rounded-full blur-3xl opacity-[0.07]"
-          style={{
-            background: "radial-gradient(circle at 50% 50%, rgba(17,17,17,1), transparent 65%)",
-          }}
-          animate={{ scale: [1, 1.18, 1], x: [0, 28, 0], y: [0, -22, 0] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-        />
-      )}
-
-      <div className="relative z-10 w-full max-w-[560px] flex flex-col items-center">
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.9 }}
-          className="font-sans text-[11px] uppercase tracking-[3px] text-muted-foreground mb-10 flex items-center gap-2.5"
-        >
-          <motion.span
-            className="w-1.5 h-1.5 rounded-full bg-foreground"
-            animate={reduce ? undefined : { opacity: [1, 0.2, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-          />
-          Building your campaign
-        </motion.p>
-
-        <div className="h-[124px] md:h-[136px] w-full flex items-center justify-center text-center mb-12">
-          <AnimatePresence mode="wait">
-            <motion.h2
-              key={active}
-              initial={{ opacity: 0, y: 16, filter: "blur(8px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -16, filter: "blur(8px)" }}
-              transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1] }}
-              className="font-serif text-3xl md:text-[42px] leading-[1.12] max-w-[18ch]"
-            >
-              {CAMPAIGN_STEPS[active]}
-            </motion.h2>
-          </AnimatePresence>
-        </div>
-
-        <div className="w-full max-w-[340px]">
-          <div className="relative h-[3px] w-full rounded-full bg-border overflow-hidden">
-            <motion.div
-              className="absolute left-0 top-0 h-full rounded-full bg-foreground overflow-hidden"
-              initial={{ width: "0%" }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 1.1, ease: [0.2, 0.7, 0.2, 1] }}
-            >
-              {!reduce && (
-                <motion.span
-                  className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent"
-                  animate={{ x: ["-100%", "300%"] }}
-                  transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }}
-                />
-              )}
-            </motion.div>
-          </div>
-          <div className="mt-4 flex items-center justify-between font-sans text-[12px] text-muted-foreground tabular-nums">
-            <span>
-              {String(Math.min(active + 1, total)).padStart(2, "0")} / {String(total).padStart(2, "0")}
-            </span>
-            <span className="opacity-60">Just a few seconds…</span>
-          </div>
-        </div>
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark />
+      </div>
+      <div className="flex-1 flex items-center px-6 md:px-10 pb-24">
+        <p className="font-serif text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] text-foreground max-w-[14ch]">
+          Writing the campaign.
+        </p>
       </div>
     </div>
   );
@@ -447,44 +311,115 @@ function WorkingState() {
 
 function ErrorState({ setCampaignId }: { setCampaignId: (id: string | null) => void }) {
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background animate-in fade-in duration-500">
-      <p className="font-serif text-3xl mb-3">Something went wrong</p>
-      <p className="font-sans text-muted-foreground text-sm mb-8 text-center max-w-xs">
-        The AI couldn't generate your campaign. Make sure the server has a valid{" "}
-        <code className="bg-secondary px-1 rounded text-xs">AI_INTEGRATIONS_ANTHROPIC_API_KEY</code> and try again.
-      </p>
-      <button
-        onClick={() => setCampaignId(null)}
-        className="bg-foreground text-background px-6 py-3 rounded-full font-sans text-sm hover:opacity-90 transition-opacity"
-      >
-        Try again
-      </button>
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark onClick={() => setCampaignId(null)} />
+      </div>
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24 max-w-[36rem]">
+        <h1 className="font-serif text-[clamp(2.4rem,6vw,4rem)] leading-[1.05]">
+          We couldn’t write it.
+        </h1>
+        <p className="mt-6 font-serif text-[1.15rem] text-[#b9aea0] leading-relaxed">
+          The campaign didn’t come back. Nothing ran. Try again from the prompt.
+        </p>
+        <button
+          type="button"
+          onClick={() => setCampaignId(null)}
+          className="mt-10 self-start font-serif text-[17px] border-b border-[#ede6dc]/40 pb-0.5 hover:border-[#ede6dc]"
+        >
+          Start over
+        </button>
+      </div>
     </div>
   );
 }
 
-function FeedbackButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+function ReviewState({ setCampaignId }: { setCampaignId: (id: string | null) => void }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-full bg-background/80 backdrop-blur border border-border px-3 py-1.5 text-xs font-sans text-muted-foreground hover:text-foreground hover:border-foreground/40 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border"
-    >
-      <MessageSquarePlus className="w-3.5 h-3.5" />
-      {label}
-    </button>
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark onClick={() => setCampaignId(null)} />
+      </div>
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24 max-w-[36rem]">
+        <h1 className="font-serif text-[clamp(2.4rem,6vw,4.5rem)] leading-[1.02]">
+          In review.
+        </h1>
+        <p className="mt-6 font-serif text-[1.15rem] text-[#b9aea0] leading-relaxed">
+          Paid. A person looks at the boards before anything goes live.
+        </p>
+        <button
+          type="button"
+          onClick={() => setCampaignId(null)}
+          className="mt-12 self-start font-serif text-[17px] text-[#8a8176] hover:text-[#ede6dc]"
+        >
+          Another product
+        </button>
+      </div>
+    </div>
   );
 }
 
-function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: string, setCampaignId: (id: string | null) => void, statusRes: any }) {
+function RejectedState({
+  reason,
+  setCampaignId,
+}: {
+  reason: string | null;
+  setCampaignId: (id: string | null) => void;
+}) {
+  return (
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark onClick={() => setCampaignId(null)} />
+      </div>
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24 max-w-[36rem]">
+        <h1 className="font-serif text-[clamp(2.4rem,6vw,4.5rem)] leading-[1.02]">
+          Not approved.
+        </h1>
+        <p className="mt-6 font-serif text-[1.15rem] text-[#b9aea0] leading-relaxed">
+          It didn’t pass review. The ads were not published.
+        </p>
+        {reason ? (
+          <p className="mt-8 font-serif text-[1.05rem] leading-relaxed text-[#ede6dc]/80">
+            {reason}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setCampaignId(null)}
+          className="mt-12 self-start font-serif text-[17px] border-b border-[#ede6dc]/40 pb-0.5"
+        >
+          Start over
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BriefingState({
+  campaignId,
+  setCampaignId,
+  statusRes,
+}: {
+  campaignId: string;
+  setCampaignId: (id: string | null) => void;
+  statusRes: {
+    campaignData?: {
+      brandName?: string;
+      tagline?: string;
+      ads?: Array<{ hook?: string; body?: string; cta?: string; angle?: string }>;
+      landing?: { hero?: string; sub?: string; cta?: string };
+    } | null;
+    adAssets?: Array<{ idx: number; imageUrl?: string | null; status?: string | null }>;
+  };
+}) {
   const [revisionTarget, setRevisionTarget] = useState<string | null>(null);
   const [showLaunch, setShowLaunch] = useState(false);
 
   const { data: campaign } = useGetCampaign(campaignId, {
     query: {
       enabled: !!campaignId,
-      queryKey: getGetCampaignQueryKey(campaignId)
-    }
+      queryKey: getGetCampaignQueryKey(campaignId),
+    },
   });
 
   const data = statusRes.campaignData || campaign?.campaignData;
@@ -492,128 +427,168 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
   if (!data) return <WorkingState />;
 
   if (showLaunch) {
-    return <LaunchPage campaignId={campaignId} data={data} onBack={() => setShowLaunch(false)} />;
+    return (
+      <LaunchPage campaignId={campaignId} data={data} onBack={() => setShowLaunch(false)} />
+    );
   }
 
   const assetsGenerating = (statusRes.adAssets ?? []).some(
-    (a: any) => a.status !== "done" && a.status !== "failed",
+    (a) => a.status !== "done" && a.status !== "failed",
   );
-  const assetsFailed = (statusRes.adAssets ?? []).some(
-    (a: any) => a.status === "failed",
-  );
+  const assetsFailed = (statusRes.adAssets ?? []).some((a) => a.status === "failed");
+  const ads = data.ads ?? [];
+  const landing = data.landing;
+  const openBoard = (target: string) => {
+    if (assetsGenerating) return;
+    setRevisionTarget(target);
+  };
 
   return (
-    <div className="min-h-[100dvh] bg-background pb-32 animate-in fade-in duration-1000">
-      <div className="p-6">
-        <button 
-          onClick={() => setCampaignId(null)}
-          className="font-sans font-bold text-xl tracking-tighter hover:opacity-70 transition-opacity"
+    <div className="min-h-[100dvh] bg-background pb-28">
+      <div className="px-6 pt-8 md:px-10 flex items-baseline justify-between gap-4">
+        <Mark onClick={() => setCampaignId(null)} />
+        <button
+          type="button"
+          onClick={() => setRevisionTarget("the overall campaign")}
+          disabled={assetsGenerating}
+          className="font-serif italic text-[16px] text-[#6e675e] hover:text-[#ede6dc] disabled:opacity-40"
         >
-          LP
+          What’s off
         </button>
       </div>
 
-      <div className="max-w-[1100px] mx-auto px-6">
-        <div className="text-center mt-12 mb-6">
-          <h1 className="font-serif text-7xl md:text-[88px] leading-none mb-4">{data.brandName}</h1>
-          <p className="font-serif italic text-2xl text-muted-foreground">{data.tagline}</p>
-        </div>
-        <div className="flex justify-center mb-24">
-          <FeedbackButton
-            label="Tweak name or tagline"
-            disabled={assetsGenerating}
-            onClick={() =>
-              setRevisionTarget(
-                `the brand name & tagline (currently "${data.brandName}" — "${data.tagline}")`,
-              )
-            }
-          />
-        </div>
+      <div className="px-6 md:px-10 mt-14 mb-12 max-w-[80rem]">
+        <button
+          type="button"
+          disabled={assetsGenerating}
+          onClick={() =>
+            openBoard(
+              `the brand name & tagline (currently "${data.brandName}" — "${data.tagline}")`,
+            )
+          }
+          className="text-left disabled:opacity-70"
+        >
+          <h1 className="font-serif text-[clamp(2.8rem,8vw,6.5rem)] leading-[0.92] text-foreground">
+            {data.brandName}
+          </h1>
+          <p className="mt-4 font-serif italic text-[clamp(1.2rem,2.4vw,1.75rem)] text-[#c4b8a8] max-w-[28ch]">
+            {data.tagline}
+          </p>
+        </button>
+      </div>
 
-        <div className="mb-24">
-          <div className="flex items-baseline justify-between gap-4 mb-8">
-            <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Three Ads</div>
-            <div className="text-[11px] font-sans text-muted-foreground hidden sm:block">Previewed in-feed — switch platforms on each ad</div>
-          </div>
-          {assetsFailed && (
-            <p className="mb-8 text-center font-sans text-sm text-red-700">
-              Generation failed. A branded gradient is not an ad — retry from the start.
+      {assetsFailed && (
+        <p className="px-6 md:px-10 mb-10 font-serif text-[16px] text-[#c4a090] max-w-[36rem]">
+          Generation failed. Photography did not come back. Copy is on the table; those frames are not ads.
+        </p>
+      )}
+
+      {/* Art director's table: one family, three different prints — not a card gallery. */}
+      <div className="px-6 md:px-10 max-w-[80rem]">
+        <div className="flex flex-col md:flex-row md:items-end gap-10 md:gap-8 lg:gap-12">
+          {ads[0] ? (
+            <div className="md:w-[46%] md:flex-none">
+              <CampaignBoard
+                beat={beatForIndex(0)}
+                hook={ads[0].hook ?? ""}
+                imageUrl={statusRes.adAssets?.find((a) => a.idx === 0)?.imageUrl}
+                status={statusRes.adAssets?.find((a) => a.idx === 0)?.status}
+                onOpen={
+                  assetsGenerating
+                    ? undefined
+                    : () => openBoard(`the hero board (hook: "${ads[0].hook}")`)
+                }
+              />
+            </div>
+          ) : null}
+          {ads[1] ? (
+            <div className="w-[58%] max-w-[280px] md:w-[22%] md:max-w-none md:flex-none">
+              <CampaignBoard
+                beat={beatForIndex(1)}
+                hook={ads[1].hook ?? ""}
+                imageUrl={statusRes.adAssets?.find((a) => a.idx === 1)?.imageUrl}
+                status={statusRes.adAssets?.find((a) => a.idx === 1)?.status}
+                onOpen={
+                  assetsGenerating
+                    ? undefined
+                    : () => openBoard(`the in-use board (hook: "${ads[1].hook}")`)
+                }
+              />
+            </div>
+          ) : null}
+          {ads[2] ? (
+            <div className="w-[70%] max-w-[340px] md:w-[28%] md:max-w-none md:flex-none md:mb-16">
+              <CampaignBoard
+                beat={beatForIndex(2)}
+                hook={ads[2].hook ?? ""}
+                imageUrl={statusRes.adAssets?.find((a) => a.idx === 2)?.imageUrl}
+                status={statusRes.adAssets?.find((a) => a.idx === 2)?.status}
+                onOpen={
+                  assetsGenerating
+                    ? undefined
+                    : () => openBoard(`the close board (hook: "${ads[2].hook}")`)
+                }
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {landing ? (
+        <div className="px-6 md:px-10 mt-20 max-w-[40rem]">
+          <button
+            type="button"
+            disabled={assetsGenerating}
+            onClick={() => openBoard("the landing page")}
+            className="text-left disabled:opacity-70"
+          >
+            <p className="font-serif text-[clamp(1.8rem,3.5vw,2.6rem)] leading-[1.15] text-foreground">
+              {landing.hero}
             </p>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-14 items-start">
-            {data.ads.map((ad: any, i: number) => {
-              const asset = statusRes.adAssets?.find((a: any) => a.idx === i);
-              const placement: "portrait" | "vertical" = i === 1 ? "vertical" : "portrait";
-              return (
-                <div key={i} className="flex flex-col gap-5">
-                  <InSituAd
-                    brandName={data.brandName}
-                    hook={ad.hook}
-                    body={ad.body}
-                    cta={ad.cta}
-                    accent={(data.palette && data.palette[0]) || ad.gradientHex1}
-                    imageUrl={asset?.imageUrl}
-                    status={asset?.status}
-                    placement={placement}
-                  />
-                  <div className="text-center">
-                    <div className="text-[11px] font-sans uppercase tracking-[1px] opacity-50 mb-2">{ad.angle}</div>
-                    <FeedbackButton
-                      label="Edit this ad"
-                      disabled={assetsGenerating}
-                      onClick={() =>
-                        setRevisionTarget(`Ad ${i + 1} — the "${ad.angle}" angle (hook: "${ad.hook}")`)
-                      }
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="mb-24">
-          <div className="flex items-center justify-between mb-8">
-            <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Landing Page</div>
-            <FeedbackButton
-              label="Edit landing page"
-              disabled={assetsGenerating}
-              onClick={() => setRevisionTarget("the landing page")}
-            />
-          </div>
-          <div className="w-full h-[600px] rounded-2xl overflow-hidden border border-border shadow-sm">
-            {campaign?.landingSlug ? (
-               <iframe src={`/p/${campaign.landingSlug}`} className="w-full h-full border-none" />
-            ) : (
-               <div className="w-full h-full bg-secondary flex items-center justify-center text-muted-foreground font-sans text-sm">Building page...</div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-6">
-          <button 
-            onClick={() => setShowLaunch(true)}
-            disabled={assetsGenerating || assetsFailed}
-            className="bg-foreground text-background px-8 py-4 rounded-full font-sans font-medium text-lg flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {assetsGenerating ? "Finishing images…" : assetsFailed ? "Generation failed" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
+            {landing.sub ? (
+              <p className="mt-4 font-serif text-[1.15rem] leading-relaxed text-[#c4b8a8]">
+                {landing.sub}
+              </p>
+            ) : null}
+            {landing.cta ? (
+              <p className="mt-5 font-serif italic text-[16px] text-[#ede6dc]/80">{landing.cta}</p>
+            ) : null}
           </button>
-          
-          <button 
-            onClick={() => setRevisionTarget("the overall campaign")}
-            disabled={assetsGenerating}
-            className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Something's off? Give overall feedback
-          </button>
+          {campaign?.landingSlug ? (
+            <a
+              href={`/p/${campaign.landingSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
+            >
+              The live page
+            </a>
+          ) : null}
         </div>
+      ) : null}
+
+      <div className="px-6 md:px-10 mt-16">
+        <button
+          type="button"
+          onClick={() => setShowLaunch(true)}
+          disabled={assetsGenerating || assetsFailed}
+          className="font-serif text-[1.35rem] text-foreground disabled:opacity-35 disabled:cursor-not-allowed"
+        >
+          {assetsGenerating
+            ? "Photography still landing…"
+            : assetsFailed
+              ? "Generation failed"
+              : "Ship this campaign"}
+        </button>
       </div>
 
       <RevisionSheet
         open={!!revisionTarget}
         target={revisionTarget}
         assetsGenerating={assetsGenerating}
-        onOpenChange={(o: boolean) => { if (!o) setRevisionTarget(null); }}
+        onOpenChange={(o: boolean) => {
+          if (!o) setRevisionTarget(null);
+        }}
         campaignId={campaignId}
         campaign={campaign}
       />
@@ -621,100 +596,123 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
   );
 }
 
-function RevisionSheet({ open, onOpenChange, campaignId, campaign, target, assetsGenerating }: any) {
+function RevisionSheet({
+  open,
+  onOpenChange,
+  campaignId,
+  campaign,
+  target,
+  assetsGenerating,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  campaignId: string;
+  campaign?: { revisionsUsed?: number; revisionsAllowed?: number; status?: string } | null;
+  target: string | null;
+  assetsGenerating: boolean;
+}) {
   const [msg, setMsg] = useState("");
-  const [messages, setMessages] = useState<{role: "user" | "ai", content: string}[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
   const revise = useReviseCampaign();
   const queryClient = useQueryClient();
 
-  // Start a fresh thread whenever the user opens feedback on a different asset.
-  useEffect(() => { setMessages([]); setMsg(""); }, [target]);
+  useEffect(() => {
+    setMessages([]);
+    setMsg("");
+  }, [target]);
 
   const isTargeted = !!target && target !== "the overall campaign";
 
   const handleSend = () => {
     if (!msg.trim()) return;
     const userText = msg.trim();
-    setMessages(prev => [...prev, { role: "user", content: userText }]);
+    setMessages((prev) => [...prev, { role: "user", content: userText }]);
     const request = isTargeted ? `Regarding ${target}: ${userText}` : userText;
-    revise.mutate({ id: campaignId, data: { request } }, {
-      onSuccess: () => {
-        // Visual revisions reset the ad images to pending on the server, so
-        // invalidate to resume polling and stream the new images in.
-        queryClient.invalidateQueries({ queryKey: getGetCampaignStatusQueryKey(campaignId) });
-        queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
-        setMessages(prev => [...prev, { role: "ai", content: "Got it — I've updated the campaign. Close this to watch the changes apply." }]);
+    revise.mutate(
+      { id: campaignId, data: { request } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCampaignStatusQueryKey(campaignId) });
+          queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+          setMessages((prev) => [...prev, { role: "ai", content: "Changed." }]);
+        },
+        onError: () => {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: "That didn’t take. Say it another way." },
+          ]);
+        },
       },
-      onError: () => {
-        setMessages(prev => [...prev, { role: "ai", content: "That didn't go through. Try rephrasing your request." }]);
-      }
-    });
+    );
     setMsg("");
   };
 
-  const isLimited = campaign?.revisionsUsed >= campaign?.revisionsAllowed && campaign?.status === 'draft';
+  const isLimited =
+    (campaign?.revisionsUsed ?? 0) >= (campaign?.revisionsAllowed ?? 3) &&
+    campaign?.status === "draft";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[65vh] rounded-t-3xl border-none shadow-2xl flex flex-col p-0 bg-background">
-        <SheetHeader className="p-6 pb-2 border-b border-border/50">
-          <SheetTitle className="font-serif text-3xl">{isTargeted ? "Edit this" : "What's off?"}</SheetTitle>
+      <SheetContent
+        side="bottom"
+        className="h-[62vh] rounded-none border-t border-[#ede6dc]/12 bg-background p-0 flex flex-col shadow-none [&>button]:hidden"
+      >
+        <SheetHeader className="px-6 pt-8 pb-4">
+          <SheetTitle className="font-serif text-[2rem] text-foreground font-normal">
+            {isTargeted ? "This board." : "What’s off."}
+          </SheetTitle>
           {isTargeted && (
-            <p className="font-sans text-sm text-muted-foreground mt-1">Feedback on {target}</p>
+            <p className="font-serif text-[15px] text-[#8a8176] mt-1">{target}</p>
           )}
         </SheetHeader>
-        
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-          <div className="bg-card shadow-sm border border-border rounded-2xl p-4 self-start max-w-[80%] font-sans text-sm">
-            I can adjust angles, rewrite copy, change the color palette, or regenerate images. What should we tweak?
-          </div>
-          
+
+        <div className="flex-1 overflow-y-auto px-6 flex flex-col gap-5">
+          <p className="font-serif text-[16px] text-[#c4b8a8] max-w-[36ch] leading-relaxed">
+            Tell us what to change. We’ll rewrite that — not roll a new campaign.
+          </p>
+
           {messages.map((m, i) => (
-            <div key={i} className={`rounded-2xl p-4 max-w-[80%] font-sans text-sm ${
-              m.role === "user" 
-                ? "bg-foreground text-background self-end" 
-                : "bg-card shadow-sm border border-border self-start"
-            }`}>
+            <p
+              key={i}
+              className={`font-serif text-[16px] leading-relaxed max-w-[40ch] ${
+                m.role === "user" ? "text-foreground self-end text-right" : "text-[#c4b8a8]"
+              }`}
+            >
               {m.content}
-            </div>
+            </p>
           ))}
 
           {revise.isPending && (
-            <div className="bg-card shadow-sm border border-border rounded-2xl p-4 self-start flex gap-1 items-center h-[52px]">
-              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-[bounce_1.4s_infinite_-.32s]" />
-              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-[bounce_1.4s_infinite_-.16s]" />
-              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-[bounce_1.4s_infinite]" />
-            </div>
+            <p className="font-serif italic text-[16px] text-[#8a8176]">Listening…</p>
           )}
         </div>
 
-        <div className="p-4 border-t border-border/50 bg-background/80 backdrop-blur">
+        <div className="px-6 py-5 border-t border-[#ede6dc]/10">
           {isLimited ? (
-             <div className="text-center font-sans text-sm text-muted-foreground py-4">
-               Ship it to unlock unlimited revisions.
-             </div>
+            <p className="font-serif text-[15px] text-[#8a8176]">Ship it to keep talking.</p>
           ) : (
-            <div className="max-w-[800px] mx-auto">
+            <div>
               {assetsGenerating && (
-                <div className="text-center font-sans text-xs text-muted-foreground mb-3">
-                  Applying your last change — images are regenerating. One tweak at a time.
-                </div>
+                <p className="font-serif text-[13px] text-[#8a8176] mb-3">
+                  Last change is still landing. One at a time.
+                </p>
               )}
-              <div className="flex items-center gap-2">
-                <input 
-                  className="flex-1 bg-secondary rounded-full px-6 py-4 outline-none font-sans text-sm disabled:opacity-50"
-                  placeholder="Make it edgier..."
+              <div className="flex items-end gap-4">
+                <input
+                  className="flex-1 bg-transparent border-0 border-b border-[#ede6dc]/30 rounded-none outline-none py-2 font-serif text-[17px] placeholder:text-[#ede6dc]/28 focus:border-[#ede6dc]/70"
+                  placeholder="Make the hook quieter."
                   value={msg}
                   disabled={assetsGenerating}
-                  onChange={e => setMsg(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                  onChange={(e) => setMsg(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 />
-                <button 
+                <button
+                  type="button"
                   onClick={handleSend}
                   disabled={!msg.trim() || revise.isPending || assetsGenerating}
-                  className="bg-foreground text-background p-4 rounded-full disabled:opacity-50 transition-opacity"
+                  className="font-serif text-[16px] disabled:opacity-40"
                 >
-                  <Send className="w-4 h-4" />
+                  Send
                 </button>
               </div>
             </div>
@@ -730,20 +728,38 @@ function shipErrorMessage(err: unknown): string {
   const code = e?.data?.error;
   switch (code) {
     case "stripe_not_configured":
-      return "Payments aren't set up yet, so checkout can't start. Please try again later or contact support.";
+      return "Payments aren’t set up yet.";
     case "not_generated":
-      return "This campaign is still being prepared. Give it a moment to finish, then try again.";
+      return "Still being written. Wait, then try again.";
     case "not_found":
-      return "We couldn't find this campaign. Try starting a new one.";
+      return "This campaign is gone. Start a new one.";
     case "missing_params":
-      return "Please pick a budget and channel split before shipping.";
+      return "Pick a budget before shipping.";
   }
   if (e?.data?.message) return e.data.message;
-  return "Something went wrong starting checkout. Please try again.";
+  return "Checkout didn’t start. Try again.";
 }
 
-function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: any; onBack: () => void }) {
-  const [budget, setBudget] = useState(data.recommendedBudgetPreset === 'scale' ? 20000 : data.recommendedBudgetPreset === 'starter' ? 2500 : 7500);
+function LaunchPage({
+  campaignId,
+  data,
+  onBack,
+}: {
+  campaignId: string;
+  data: {
+    brandName?: string;
+    recommendedBudgetPreset?: string;
+    channelSplit?: { metaPct?: number; tiktokPct?: number };
+  };
+  onBack: () => void;
+}) {
+  const [budget, setBudget] = useState(
+    data.recommendedBudgetPreset === "scale"
+      ? 20000
+      : data.recommendedBudgetPreset === "starter"
+        ? 2500
+        : 7500,
+  );
   const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 40);
   const [tiktokPct, setTiktokPct] = useState(data.channelSplit?.tiktokPct || 30);
   const googlePct = Math.max(0, 100 - metaPct - tiktokPct);
@@ -753,77 +769,96 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
 
   const handleShip = () => {
     setShipError(null);
-    publish.mutate({ 
-      id: campaignId, 
-      data: { 
-        dailyBudgetCents: budget, 
-        metaSharePct: metaPct, 
-        tiktokSharePct: tiktokPct,
-        googleSharePct: googlePct,
-        successUrl: window.location.origin + "/?success=true&campaignId=" + campaignId
-      }
-    }, {
-      onSuccess: (res) => {
-        if (res?.checkoutUrl) {
-          window.location.href = res.checkoutUrl;
-        } else {
-          setShipError("We couldn't start checkout. Please try again in a moment.");
-        }
+    publish.mutate(
+      {
+        id: campaignId,
+        data: {
+          dailyBudgetCents: budget,
+          metaSharePct: metaPct,
+          tiktokSharePct: tiktokPct,
+          googleSharePct: googlePct,
+          successUrl: window.location.origin + "/?success=true&campaignId=" + campaignId,
+        },
       },
-      onError: (err) => {
-        setShipError(shipErrorMessage(err));
-      }
-    });
+      {
+        onSuccess: (res) => {
+          if (res?.checkoutUrl) {
+            window.location.href = res.checkoutUrl;
+          } else {
+            setShipError("Checkout didn’t start.");
+          }
+        },
+        onError: (err) => {
+          setShipError(shipErrorMessage(err));
+        },
+      },
+    );
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background animate-in fade-in duration-700">
-      <div className="max-w-[800px] mx-auto px-6 pt-6">
+    <div className="min-h-[100dvh] bg-background">
+      <div className="px-6 pt-8 md:px-10">
         <button
+          type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-2 font-serif text-[15px] text-[#8a8176] hover:text-[#ede6dc]"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to review
+          <ArrowLeft className="w-4 h-4" /> Back to the table
         </button>
       </div>
-      <div className="max-w-[800px] mx-auto px-6 pb-24 pt-8">
-        <h2 className="font-serif text-5xl md:text-6xl mb-3 text-center">Ship {data.brandName}</h2>
-        <p className="font-serif italic text-xl text-muted-foreground text-center mb-12">Choose a budget and where it runs.</p>
-        
-        <div className="mb-10">
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-6 text-center">Daily Budget</div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="px-6 md:px-10 pb-24 pt-12 max-w-[40rem]">
+        <h2 className="font-serif text-[clamp(2.4rem,6vw,4.2rem)] leading-[1.02] mb-4">
+          Ship {data.brandName}
+        </h2>
+        <p className="font-serif italic text-[1.2rem] text-[#b9aea0] mb-14">
+          A daily budget. Where it runs.
+        </p>
+
+        <div className="mb-12">
+          <p className="font-serif italic text-[14px] text-[#8a8176] mb-6">Daily</p>
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { val: 2500, label: "Starter", desc: "~2,000–5,000 daily reach" },
-              { val: 7500, label: "Growth", desc: "~8,000–15,000 daily reach", recommended: true },
-              { val: 20000, label: "Scale", desc: "~25,000–50,000 daily reach" }
-            ].map(tier => (
-              <button 
+              { val: 2500, label: "Starter" },
+              { val: 7500, label: "Growth" },
+              { val: 20000, label: "Scale" },
+            ].map((tier) => (
+              <button
                 key={tier.val}
+                type="button"
                 onClick={() => setBudget(tier.val)}
-                className={`flex flex-col items-center justify-center p-6 rounded-2xl border transition-all ${
-                  budget === tier.val ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:border-foreground/30"
+                className={`flex flex-col items-center py-6 border transition-colors ${
+                  budget === tier.val
+                    ? "border-[#ede6dc] text-foreground"
+                    : "border-[#ede6dc]/15 text-[#8a8176] hover:border-[#ede6dc]/40"
                 }`}
               >
-                {tier.recommended && <div className="text-[10px] uppercase tracking-wider opacity-70 mb-2">Recommended</div>}
-                <div className="font-serif text-3xl mb-1">${tier.val / 100}</div>
-                <div className={`text-xs font-sans text-center ${budget === tier.val ? 'opacity-80' : 'text-muted-foreground'}`}>{tier.desc}</div>
+                <span className="font-serif text-3xl">${tier.val / 100}</span>
+                <span className="mt-2 font-serif italic text-[13px]">{tier.label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="mb-12">
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-6 text-center">Channels</div>
-          <div className="text-center font-sans text-sm mb-4">
-            Running {metaPct}% Meta · {tiktokPct}% TikTok · {googlePct}% Google — picked for your audience
-            {!showAdjust && <button onClick={() => setShowAdjust(true)} className="ml-2 text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border">Adjust</button>}
-          </div>
+        <div className="mb-14">
+          <p className="font-serif italic text-[14px] text-[#8a8176] mb-4">Channels</p>
+          <p className="font-serif text-[16px] text-[#c4b8a8]">
+            {metaPct}% Meta · {tiktokPct}% TikTok · {googlePct}% Google
+            {!showAdjust && (
+              <button
+                type="button"
+                onClick={() => setShowAdjust(true)}
+                className="ml-3 text-[#8a8176] hover:text-[#ede6dc]"
+              >
+                Adjust
+              </button>
+            )}
+          </p>
           {showAdjust && (
-            <div className="px-12 py-4 flex flex-col gap-6">
+            <div className="pt-8 flex flex-col gap-6">
               <div>
-                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
-                  <span>Meta</span><span>{metaPct}%</span>
+                <div className="flex justify-between font-serif text-[13px] text-[#8a8176] mb-2">
+                  <span>Meta</span>
+                  <span>{metaPct}%</span>
                 </div>
                 <Slider
                   value={[metaPct]}
@@ -833,12 +868,12 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
                   }}
                   max={100}
                   step={5}
-                  className="w-full"
                 />
               </div>
               <div>
-                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
-                  <span>TikTok</span><span>{tiktokPct}%</span>
+                <div className="flex justify-between font-serif text-[13px] text-[#8a8176] mb-2">
+                  <span>TikTok</span>
+                  <span>{tiktokPct}%</span>
                 </div>
                 <Slider
                   value={[tiktokPct]}
@@ -848,52 +883,57 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
                   }}
                   max={100}
                   step={5}
-                  className="w-full"
                 />
               </div>
-              <div className="flex justify-between text-xs font-sans text-muted-foreground">
-                <span>Google</span><span>{googlePct}%</span>
+              <div className="flex justify-between font-serif text-[13px] text-[#8a8176]">
+                <span>Google</span>
+                <span>{googlePct}%</span>
               </div>
             </div>
           )}
         </div>
 
-        <div className="text-center font-sans text-xs text-muted-foreground mb-8 max-w-[400px] mx-auto leading-relaxed">
-          Your ad budget + 10% service fee · $29/mo minimum · includes hosting, image generation, unlimited revisions · pause anytime.
-        </div>
+        <p className="font-serif text-[14px] text-[#8a8176] mb-8 max-w-[32rem] leading-relaxed">
+          Ad budget plus 10% · $29/mo · pause anytime. Mock until you flip live.
+        </p>
 
-        <button 
+        <button
+          type="button"
           onClick={handleShip}
           disabled={publish.isPending}
-          className="w-full bg-foreground text-background py-5 rounded-full font-sans font-medium text-lg flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
+          className="font-serif text-[1.35rem] border-b border-[#ede6dc]/50 pb-1 hover:border-[#ede6dc] disabled:opacity-40"
         >
-          {publish.isPending ? "Preparing..." : `Ship ${data.brandName}`} <ArrowRight className="w-5 h-5" />
+          {publish.isPending ? "Preparing…" : `Ship ${data.brandName}`}
         </button>
 
         {shipError && (
-          <p className="mt-4 text-center font-sans text-sm text-red-700 max-w-[440px] mx-auto leading-relaxed">
-            {shipError}
-          </p>
+          <p className="mt-6 font-serif text-[15px] text-[#c4a090] max-w-[28rem]">{shipError}</p>
         )}
       </div>
     </div>
   );
 }
 
-function LiveState({ campaignId, setCampaignId }: { campaignId: string, setCampaignId: (id: string | null) => void }) {
+function LiveState({
+  campaignId,
+  setCampaignId,
+}: {
+  campaignId: string;
+  setCampaignId: (id: string | null) => void;
+}) {
   const { data: campaign } = useGetCampaign(campaignId, {
     query: {
       enabled: !!campaignId,
-      queryKey: getGetCampaignQueryKey(campaignId)
-    }
+      queryKey: getGetCampaignQueryKey(campaignId),
+    },
   });
 
   const { data: metrics } = useGetCampaignMetrics(campaignId, {
     query: {
-      enabled: !!campaignId && (campaign?.status === 'live' || campaign?.status === 'paused'),
+      enabled: !!campaignId && (campaign?.status === "live" || campaign?.status === "paused"),
       queryKey: getGetCampaignMetricsQueryKey(campaignId),
-      refetchInterval: 30000
-    }
+      refetchInterval: 30000,
+    },
   });
 
   const pause = usePauseCampaign();
@@ -902,70 +942,84 @@ function LiveState({ campaignId, setCampaignId }: { campaignId: string, setCampa
   if (!campaign || !data) return <WorkingState />;
 
   return (
-    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-6 animate-in fade-in duration-1000">
-      <div className="flex items-center justify-center w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full mb-8">
-        <CheckCircle2 className="w-10 h-10" />
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="px-6 pt-8 md:px-10">
+        <Mark onClick={() => setCampaignId(null)} />
       </div>
-      
-      <h1 className="font-serif text-5xl md:text-7xl mb-6 text-center">
-        {campaign.status === 'paused' ? `${data.brandName} is paused.` : `${data.brandName} is live.`}
-      </h1>
-      
-      <a href={`/p/${campaign.landingSlug}`} target="_blank" className="font-sans text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border transition-colors mb-16">
-        launchpad.com/p/{campaign.landingSlug}
-      </a>
-
-      <div className="grid grid-cols-3 gap-12 mb-20 text-center">
-        <div>
-          <div className="font-serif text-4xl mb-2">{metrics?.impressions?.toLocaleString() || "0"}</div>
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Impressions</div>
-        </div>
-        <div>
-          <div className="font-serif text-4xl mb-2">{metrics?.clicks?.toLocaleString() || "0"}</div>
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Clicks</div>
-        </div>
-        <div>
-          <div className="font-serif text-4xl mb-2">${((metrics?.spendCents || 0) / 100).toFixed(2)}</div>
-          <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Spend Today</div>
-        </div>
-      </div>
-
-      {metrics?.budgetCapCents != null && (
-        <div className="w-full max-w-sm mb-12 -mt-8">
-          <div className="flex justify-between font-sans text-sm text-muted-foreground mb-2">
-            <span>Total spent</span>
-            <span>
-              ${((metrics.lifetimeSpendCents ?? 0) / 100).toFixed(2)} of ${(metrics.budgetCapCents / 100).toFixed(2)}
-            </span>
-          </div>
-          <div className="h-1.5 rounded-full bg-border overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${campaign.pausedReason === 'budget_cap' ? 'bg-orange-400' : 'bg-emerald-500'}`}
-              style={{ width: `${Math.min(100, ((metrics.lifetimeSpendCents ?? 0) / metrics.budgetCapCents) * 100)}%` }}
-            />
-          </div>
-          {campaign.status === 'paused' && campaign.pausedReason === 'budget_cap' && (
-            <p className="font-sans text-sm text-orange-400 mt-3 text-center">
-              Paused — your budget has been fully spent. Contact us to add budget.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="flex items-center gap-8">
-        <button 
-          onClick={() => pause.mutate({ id: campaignId })}
-          disabled={pause.isPending || campaign.status === 'paused'}
-          className="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24">
+        <h1 className="font-serif text-[clamp(2.4rem,6vw,4.5rem)] leading-[1.02] max-w-[16ch]">
+          {campaign.status === "paused"
+            ? `${data.brandName} is paused.`
+            : `${data.brandName} is live.`}
+        </h1>
+        <a
+          href={`/p/${campaign.landingSlug}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-6 font-serif text-[16px] text-[#8a8176] hover:text-[#ede6dc]"
         >
-          {campaign.status === 'paused' ? 'Paused' : 'Pause campaign'}
-        </button>
-        <button 
-          onClick={() => setCampaignId(null)}
-          className="font-sans text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
-        >
-          Launch another <ArrowRight className="w-4 h-4" />
-        </button>
+          /p/{campaign.landingSlug}
+        </a>
+
+        <div className="grid grid-cols-3 gap-10 mt-16 max-w-[32rem]">
+          <div>
+            <div className="font-serif text-3xl">{metrics?.impressions?.toLocaleString() || "0"}</div>
+            <div className="mt-1 font-serif italic text-[13px] text-[#8a8176]">Impressions</div>
+          </div>
+          <div>
+            <div className="font-serif text-3xl">{metrics?.clicks?.toLocaleString() || "0"}</div>
+            <div className="mt-1 font-serif italic text-[13px] text-[#8a8176]">Clicks</div>
+          </div>
+          <div>
+            <div className="font-serif text-3xl">
+              ${((metrics?.spendCents || 0) / 100).toFixed(2)}
+            </div>
+            <div className="mt-1 font-serif italic text-[13px] text-[#8a8176]">Spend today</div>
+          </div>
+        </div>
+
+        {metrics?.budgetCapCents != null && (
+          <div className="w-full max-w-sm mt-12">
+            <div className="flex justify-between font-serif text-[14px] text-[#8a8176] mb-2">
+              <span>Spent</span>
+              <span>
+                ${((metrics.lifetimeSpendCents ?? 0) / 100).toFixed(2)} of $
+                {(metrics.budgetCapCents / 100).toFixed(2)}
+              </span>
+            </div>
+            <div className="h-px bg-[#ede6dc]/15">
+              <div
+                className="h-px bg-[#ede6dc]/70"
+                style={{
+                  width: `${Math.min(100, ((metrics.lifetimeSpendCents ?? 0) / metrics.budgetCapCents) * 100)}%`,
+                }}
+              />
+            </div>
+            {campaign.status === "paused" && campaign.pausedReason === "budget_cap" && (
+              <p className="font-serif text-[15px] text-[#c4a090] mt-3">
+                Paused — the cap is spent.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-8 mt-16">
+          <button
+            type="button"
+            onClick={() => pause.mutate({ id: campaignId })}
+            disabled={pause.isPending || campaign.status === "paused"}
+            className="font-serif text-[15px] text-[#8a8176] hover:text-[#ede6dc] disabled:opacity-40"
+          >
+            {campaign.status === "paused" ? "Paused" : "Pause"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCampaignId(null)}
+            className="font-serif text-[15px] inline-flex items-center gap-1 hover:opacity-70"
+          >
+            Another product <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

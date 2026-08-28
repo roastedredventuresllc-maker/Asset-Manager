@@ -29,7 +29,7 @@ Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@12
 - Frontend: React + Vite + Tailwind CSS + shadcn/ui (Instrument Serif + Inter fonts)
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM (`DATABASE_URL` required to boot)
-- AI copy: Anthropic Claude (`ANTHROPIC_API_KEY` or `AI_INTEGRATIONS_ANTHROPIC_*`)
+- AI copy: Grok (`XAI_API_KEY`) writes generate + revise from the founder prompt. Anthropic is not required.
 - Image gen: `gemini-3-pro-image-preview` then `gpt-image-1`; fail-closed (no silent SVG). Optional fal.ai for product-photo background removal only.
 - Storage: Replit Object Storage, local `/tmp/launchpad-assets` fallback; public URLs are relative `/api/assets/...`
 - Payments: Stripe Checkout; webhook sets `in_review` (does **not** auto-publish)
@@ -46,7 +46,7 @@ Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@12
 - `artifacts/api-server/src/routes/` — Express route handlers (incl. `mcp.ts` — MCP endpoint at `/api/mcp`)
 - `artifacts/api-server/src/mcp/` — MCP server: registers campaign tools for AI clients
 - `artifacts/api-server/src/ads/` — Ad platform clients (mock/meta/tiktok/google; linkedin stub)
-- `artifacts/api-server/src/lib/` — Shared libs: Claude, auth, storage, image pipeline, `campaignService.ts` (shared by REST routes + MCP)
+- `artifacts/api-server/src/lib/` — Shared libs: Grok campaign writer, auth, storage, image pipeline, `campaignService.ts` (shared by REST routes + MCP)
 - `lib/db/src/schema/` — Drizzle table definitions
 - `lib/api-spec/openapi.yaml` — OpenAPI spec (source of truth)
 - `lib/api-client-react/` — Generated React Query hooks
@@ -54,7 +54,7 @@ Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@12
 
 ## Architecture
 
-1. User describes product → POST /api/campaigns/generate → Claude generates JSON → image jobs enqueued
+1. User describes product → POST /api/campaigns/generate → Grok writes JSON from that prompt → image jobs enqueued
 2. Frontend polls GET /api/campaigns/:id/status until copy is ready; images finish as background jobs
 3. In-process worker drains `generate_image` jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
 4. User clicks Ship → POST /api/campaigns/:id/publish → Stripe Checkout (`status=publishing`)
@@ -66,7 +66,7 @@ Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@12
 
 The experience is one page that evolves through states:
 1. **Input** — Describe your product (no account needed)
-2. **Working** — Spinner while Claude generates the campaign
+2. **Working** — Quiet wait while Grok writes the campaign from the prompt
 3. **Briefing** — One-pager: brand name, three ads (hero/context/tight crop), landing page iframe
 4. **Revision** — Bottom sheet chat for AI-powered revisions
 5. **Ship** — Daily budget, channel split (Meta/TikTok/Google), Stripe checkout
@@ -76,7 +76,8 @@ The experience is one page that evolves through states:
 ## Secrets required (NAMES only)
 
 - `DATABASE_URL` — required on Replit; local mock falls back to docker-compose Postgres
-- `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`
+- `XAI_API_KEY` — required for campaign copy (Grok). `XAI_BASE_URL` / `XAI_MODEL` optional.
+- `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` — optional (reference vision only)
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
 - `ADMIN_PASSWORD` — `/admin` + encrypted connectors

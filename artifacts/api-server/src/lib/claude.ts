@@ -1,7 +1,15 @@
-import { anthropic as client } from "@workspace/integrations-anthropic-ai";
+import { grokJsonChat, parseJsonObject } from "@workspace/integrations-xai";
 import { buildReferencePlaybook } from "./referenceLibrary.js";
 import { getIndexedReferenceNotes } from "./referenceAssets.js";
 import { billboardLine } from "./craft.js";
+
+/** Testable chat seam. Production uses Grok (`grokJsonChat`). */
+export type CampaignJsonChat = (opts: {
+  system: string;
+  user: string;
+  maxTokens?: number;
+  temperature?: number;
+}) => Promise<string>;
 
 export interface CampaignAd {
   hook: string;
@@ -82,7 +90,7 @@ The JSON must match this exact schema:
     "hero": "5–8 word hero headline",
     "sub": "1–2 sentence subheadline",
     "features": ["feature 1", "feature 2", "feature 3"],
-    "socialProof": "one social proof line (e.g. '10,000+ founders trust LaunchPad')",
+    "socialProof": "one qualitative proof line — never invent counts, ratings, or awards",
     "cta": "call to action for landing page button",
     "faqs": [
       { "q": "question a prospective customer would realistically ask", "a": "1–3 sentence factual answer" },
@@ -94,7 +102,8 @@ The JSON must match this exact schema:
 Rules:
 - metaPct + tiktokPct + googlePct must equal 100. v1 channels are Meta, TikTok, and Google. Do not allocate to LinkedIn.
 - starter = $25/day (early stage, tight budget), growth = $75/day (scaling), scale = $200/day (established traction)
-- Use distinct creative angles across the 3 ads — but they are ONE campaign: same product, same light family, same color temperature. Three beats: hero, context, tight crop. Not three random boards.
+- The founder's product description is the only creative input. Write an intelligent campaign FROM that prompt. Do not fill templates, placeholders, or lorem. Do not label ads Variant A/B/C.
+- Use distinct creative angles across the 3 ads — but they are ONE campaign: same product, same light family, same color temperature. Three beats: hero, context, tight crop. Not three random boards. Copy must be runnable as paid social (2–6 word hooks).
 - imagePrompt should be a professional photographer/art director brief — describe the actual scene in detail
 - imagePrompt must describe pure photography only (no text, words, letters, logos, or watermarks — on-brand typography is composited later in designed top negative space)
 - imagePrompt must leave designed empty negative space in the TOP ~32% of the frame; product occupies 40–60% of the remaining frame, grounded with a contact shadow
@@ -122,7 +131,7 @@ Craft law still applies after a revision:
 /**
  * Strip positive text-rendering instructions from an imagePrompt. The image
  * model should produce pure photography (on-brand typography is composited
- * separately), but Claude occasionally writes "a tag reading 'X'" which fights
+ * separately), but the writer occasionally writes "a tag reading 'X'" which fights
  * the no-text rule and yields garbled AI text. We remove those clauses
  * defensively before the prompt reaches the image pipeline.
  */
@@ -151,29 +160,54 @@ function applyCraftCopy(data: CampaignData): void {
   }
 }
 
-export async function generateCampaign(brief: string): Promise<CampaignData> {
+export interface GenerateCampaignOptions {
+  hasProductPhoto?: boolean;
+  /** Test seam — production uses Grok. */
+  chat?: CampaignJsonChat;
+}
+
+function unwrapCampaignPayload(parsed: unknown): Record<string, unknown> {
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Invalid campaign data from Grok");
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (obj.brandName && obj.ads) return obj;
+  if (obj.json && typeof obj.json === "object") {
+    return unwrapCampaignPayload(obj.json);
+  }
+  if (obj.campaign && typeof obj.campaign === "object") {
+    return unwrapCampaignPayload(obj.campaign);
+  }
+  return obj;
+}
+
+/**
+ * Ask Grok to write a campaign from the founder's product description.
+ * The brief is the intelligence; this is not a template composer.
+ */
+export async function generateCampaign(
+  brief: string,
+  opts: GenerateCampaignOptions = {},
+): Promise<CampaignData> {
   const playbook = buildReferencePlaybook(brief);
-  // RAG: pull in notes from the indexed corpus of real ad creatives (best-effort).
-  const indexedNotes = await getIndexedReferenceNotes(brief).catch(() => "");
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 4096,
+  const indexedNotes = opts.chat
+    ? ""
+    : await getIndexedReferenceNotes(brief).catch(() => "");
+  const chat = opts.chat ?? grokJsonChat;
+  const photoNote = opts.hasProductPhoto
+    ? "\n\nThe founder uploaded a product photo. Write imagePrompts for THIS exact product (same silhouette, color, materials, label). Do not invent a different SKU."
+    : "";
+  const text = await chat({
     system: `${GENERATE_SYSTEM}\n\n${playbook}${indexedNotes}`,
-    messages: [
-      {
-        role: "user",
-        content: `Product description: ${brief}`,
-      },
-    ],
+    user: `Product description: ${brief}${photoNote}`,
+    maxTokens: 4096,
+    temperature: 0.75,
   });
 
-  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-  const jsonText = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
-  const data = JSON.parse(jsonText) as CampaignData;
+  const data = unwrapCampaignPayload(parseJsonObject(text)) as unknown as CampaignData;
 
-  // Validate required fields
   if (!data.brandName || !data.ads || data.ads.length !== 3) {
-    throw new Error("Invalid campaign data from Claude");
+    throw new Error("Invalid campaign data from Grok");
   }
 
   applyCraftCopy(data);
@@ -190,25 +224,21 @@ export async function generateCampaign(brief: string): Promise<CampaignData> {
 export async function reviseCampaign(
   existing: CampaignData,
   request: string,
+  opts: { chat?: CampaignJsonChat } = {},
 ): Promise<{ campaign: CampaignData; visualChanged: boolean }> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 4096,
+  const chat = opts.chat ?? grokJsonChat;
+  const text = await chat({
     system: REVISE_SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: `Existing campaign:\n${JSON.stringify(existing, null, 2)}\n\nRevision request: ${request}`,
-      },
-    ],
+    user: `Existing campaign:\n${JSON.stringify(existing, null, 2)}\n\nRevision request: ${request}`,
+    maxTokens: 4096,
+    temperature: 0.4,
   });
 
-  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-  const jsonText = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
-  const result = JSON.parse(jsonText) as CampaignData & { visualChanged?: boolean };
-
-  const visualChanged = result.visualChanged ?? false;
-  const { visualChanged: _v, ...campaign } = result;
+  const raw = unwrapCampaignPayload(parseJsonObject(text)) as unknown as CampaignData & {
+    visualChanged?: boolean;
+  };
+  const visualChanged = raw.visualChanged ?? false;
+  const { visualChanged: _v, ...campaign } = raw;
 
   const campaignData = campaign as CampaignData;
   applyCraftCopy(campaignData);

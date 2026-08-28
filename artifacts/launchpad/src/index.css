@@ -49,52 +49,59 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Ink on warm paper. Not Inter-on-white SaaS. */
 :root {
-  --background: 36 25% 96%; /* #F9F7F4 */
-  --foreground: 0 0% 7%; /* #111111 */
-  --border: 0 0% 90%;
-  --input: 0 0% 90%;
-  --ring: 0 0% 7%;
+  --background: 30 14% 8%;
+  --foreground: 36 28% 91%;
+  --border: 30 10% 18%;
+  --input: 30 10% 18%;
+  --ring: 36 28% 91%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 7%;
-  --card-border: 0 0% 90%;
+  --card: 30 12% 11%;
+  --card-foreground: 36 28% 91%;
+  --card-border: 30 10% 18%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 7%;
-  --popover-border: 0 0% 90%;
+  --popover: 30 12% 11%;
+  --popover-foreground: 36 28% 91%;
+  --popover-border: 30 10% 18%;
 
-  --primary: 0 0% 7%;
-  --primary-foreground: 0 0% 100%;
-  --primary-border: 0 0% 7%;
+  --primary: 36 28% 91%;
+  --primary-foreground: 30 14% 8%;
+  --primary-border: 36 28% 91%;
 
-  --secondary: 0 0% 96%;
-  --secondary-foreground: 0 0% 7%;
-  --secondary-border: 0 0% 90%;
+  --secondary: 30 10% 14%;
+  --secondary-foreground: 36 28% 91%;
+  --secondary-border: 30 10% 18%;
 
-  --muted: 0 0% 96%;
-  --muted-foreground: 0 0% 45%;
-  --muted-border: 0 0% 90%;
+  --muted: 30 10% 14%;
+  --muted-foreground: 32 12% 58%;
+  --muted-border: 30 10% 18%;
 
-  --accent: 0 0% 96%;
-  --accent-foreground: 0 0% 7%;
-  --accent-border: 0 0% 90%;
+  --accent: 30 10% 14%;
+  --accent-foreground: 36 28% 91%;
+  --accent-border: 30 10% 18%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --destructive-border: 0 84% 60%;
+  --destructive: 12 55% 48%;
+  --destructive-foreground: 36 28% 91%;
+  --destructive-border: 12 55% 48%;
 
-  --app-font-sans: 'Inter', sans-serif;
-  --app-font-serif: 'Instrument Serif', Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
+  --app-font-sans: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+  --app-font-serif: "Instrument Serif", "Times New Roman", serif;
+  --app-font-mono: "IBM Plex Mono", Menlo, monospace;
+  --radius: 0.15rem;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+  html,
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-serif antialiased bg-background text-foreground;
+  }
+  button,
+  input,
+  textarea {
+    font-family: inherit;
   }
 }

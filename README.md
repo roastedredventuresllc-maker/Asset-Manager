@@ -30,15 +30,17 @@ pnpm install
 
 ### 2. Configure secrets
 
-Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy needs `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (and `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`). Everything else is optional until you go live.
+Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy is written by Grok from the founder prompt — set `XAI_API_KEY`. No Anthropic key is required to generate or revise. Everything else is optional until you go live.
 
 | Secret | Required | Where to get it |
 |--------|----------|-----------------|
 | `DATABASE_URL` | **Yes** (API boot) | Postgres connection string |
 | `PORT` | API listen (Vite on Replit too) | Local default 8080 for the API if unset |
 | `BASE_PATH` | Vite base | Local default `/` if unset |
-| `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | **Yes** for copy | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` | With Anthropic key | `https://api.anthropic.com` if unset |
+| `XAI_API_KEY` | **Yes** for copy | [console.x.ai](https://console.x.ai) → API Keys. Grok writes generate + revise from the founder prompt. |
+| `XAI_BASE_URL` | Optional | Defaults to `https://api.x.ai/v1` |
+| `XAI_MODEL` | Optional | Defaults to `grok-4.6` (JSON chat) |
+| `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | Optional | Reference-image vision only. Not required to generate. |
 | `GEMINI_API_KEY` | For photoreal ads (or `AI_INTEGRATIONS_GEMINI_API_KEY`) | [aistudio.google.com](https://aistudio.google.com) → API keys. Quality path is `gemini-3-pro-image-preview`. |
 | `OPENAI_API_KEY` | Fallback images (or `AI_INTEGRATIONS_OPENAI_API_KEY`) | [platform.openai.com](https://platform.openai.com) → API keys |
 | `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — background removal only |
@@ -93,7 +95,7 @@ Local asset URLs are relative `/api/assets/...` (browser + Vite proxy). Do not e
 ## Mock Mode vs Live Mode
 
 `ADS_MODE=mock` (the default) makes publishing work end-to-end without spending:
-- Campaign generation via Claude works when `AI_INTEGRATIONS_ANTHROPIC_API_KEY` is set
+- Campaign copy: Grok writes generate + revise from the founder prompt when `XAI_API_KEY` is set. No Anthropic key required.
 - Image generation uses `gemini-3-pro-image-preview`, then `gpt-image-1`. If both miss, the job **fails** — a branded gradient is not an ad
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`
@@ -234,7 +236,7 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui — one page, six states
 - **Backend**: Express 5 + Node.js 24 + TypeScript
 - **Database**: PostgreSQL + Drizzle ORM
-- **AI**: Claude claude-sonnet-4-5 for generation + revision
+- **AI copy**: Grok (`XAI_API_KEY`, `https://api.x.ai/v1`) writes generate + revise from the founder prompt. Not a template composer.
 - **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
 - **Storage**: Replit Object Storage
 - **Payments**: Stripe Checkout + subscriptions + metered usage
@@ -242,7 +244,7 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 - **Auth**: Magic links via email (no passwords ever)
 
 ### Data flow
-1. User describes product → `POST /api/campaigns/generate` → Claude generates JSON → image jobs enqueued
+1. User describes the product → `POST /api/campaigns/generate` → Grok writes campaign JSON from that prompt → image jobs enqueued
 2. Frontend polls `GET /api/campaigns/:id/status` until copy is ready; images finish as background jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
 3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
 4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
