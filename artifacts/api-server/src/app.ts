@@ -1,45 +1,25 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
-import cors from "cors";
-import pinoHttp from "pino-http";
 import healthRouter from "./routes/health.js";
-import { logger } from "./lib/logger.js";
 
 const app: Express = express();
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(req) {
-        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
-      },
-      res(res) {
-        return { statusCode: res.statusCode };
-      },
-    },
-  }),
-);
-
-app.use(cors());
-app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// Must not load campaigns/DB/Grok. Missing env used to crash the whole function.
 app.use("/api", healthRouter);
 
 function isHealthz(req: Request): boolean {
   return req.path === "/healthz" || req.path === "/api/healthz";
 }
 
-let restLoaded = false;
 let restQueue: Promise<void> | null = null;
+let restLoaded = false;
 
 function loadRest(): Promise<void> {
   if (restLoaded) return Promise.resolve();
   if (!restQueue) {
     restQueue = (async () => {
       const [
+        { default: cors },
+        { default: pinoHttp },
+        { logger },
         { default: router },
         { default: landingRouter },
         { pool },
@@ -47,6 +27,9 @@ function loadRest(): Promise<void> {
         { runInBackground },
         { ensureSeededInBackground },
       ] = await Promise.all([
+        import("cors"),
+        import("pino-http"),
+        import("./lib/logger.js"),
         import("./routes/index.js"),
         import("./routes/landing.js"),
         import("@workspace/db"),
@@ -54,6 +37,24 @@ function loadRest(): Promise<void> {
         import("./lib/background.js"),
         import("./lib/referenceAssets.js"),
       ]);
+
+      app.use(
+        pinoHttp({
+          logger,
+          serializers: {
+            req(req) {
+              return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+            },
+            res(res) {
+              return { statusCode: res.statusCode };
+            },
+          },
+        }),
+      );
+      app.use(cors());
+      app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
+      app.use(express.json({ limit: "10mb" }));
+      app.use(express.urlencoded({ extended: true }));
 
       if (process.env.VERCEL) {
         try {

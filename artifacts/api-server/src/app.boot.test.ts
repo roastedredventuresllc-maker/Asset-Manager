@@ -23,6 +23,11 @@ test("app.ts does not statically import the DB or campaign routes", () => {
   assert.match(src, /healthRouter/);
 });
 
+test("health.ts does not import workspace packages", () => {
+  const src = readFileSync(join(here, "routes/health.ts"), "utf8");
+  assert.equal(/@workspace\//.test(src), false);
+});
+
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {
   const app = express();
   app.use("/api", healthRouter);
