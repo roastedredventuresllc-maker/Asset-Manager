@@ -23,7 +23,7 @@ await build({
   sourcemap: false,
   legalComments: "none",
   packages: "bundle",
-  external: ["sharp", "*.node", "pg-native"],
+  external: ["sharp", "*.node", "pg-native", "@vercel/functions"],
   footer: {
     js: "module.exports = module.exports.default || module.exports;",
   },

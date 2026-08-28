@@ -41,6 +41,13 @@ test("Vercel api service bundles Express into server.cjs", () => {
   );
   assert.match(bundle, /outfile: path.join\(serviceRoot, "server.cjs"\)/);
   assert.match(bundle, /packages: "bundle"/);
+  assert.match(bundle, /@vercel\/functions/);
+});
+
+test("createCampaign awaits generation on Vercel so the isolate does not freeze", () => {
+  const src = readFileSync(join(here, "lib/campaignService.ts"), "utf8");
+  assert.match(src, /if \(process\.env\.VERCEL\)/);
+  assert.match(src, /await work/);
 });
 
 test("index.ts does not statically import the DB/worker graph", () => {

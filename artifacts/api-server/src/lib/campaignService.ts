@@ -202,16 +202,25 @@ export async function createCampaign(input: {
     });
   }
 
+  const work = generateCampaignAsync(
+    id,
+    brief,
+    productImageUrl,
+    productImageNoBgUrl,
+  ).catch((err) => {
+    logger.error({ err, campaignId: id }, "Async campaign generation failed");
+  });
+
+  // Bundled waitUntil is a no-op, so Vercel froze the isolate after the 201
+  // and the campaign stayed `generating`. Await Grok+jobs on Vercel so the
+  // request keeps the function alive. Local stays background for snappy dev.
+  if (process.env.VERCEL) {
+    await work;
+  } else {
+    runInBackground(work);
+  }
+
   const campaign = await getCampaignRecord(id);
-
-  runInBackground(
-    generateCampaignAsync(id, brief, productImageUrl, productImageNoBgUrl).catch(
-      (err) => {
-        logger.error({ err, campaignId: id }, "Async campaign generation failed");
-      },
-    ),
-  );
-
   return toCampaignResponse(campaign!);
 }
 

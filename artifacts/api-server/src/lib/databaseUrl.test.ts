@@ -9,6 +9,7 @@ const KEYS = [
   "DATABASE_URL",
   "POSTGRES_URL",
   "POSTGRES_PRISMA_URL",
+  "DATABASE_URL_UNPOOLED",
   "VERCEL",
   "REPL_ID",
 ] as const;
@@ -64,6 +65,25 @@ test("Vercel uses POSTGRES_URL when DATABASE_URL is unset", () => {
   );
 });
 
+test("Vercel uses DATABASE_URL_UNPOOLED when pooled names are unset", () => {
+  withEnv(
+    {
+      VERCEL: "1",
+      REPL_ID: undefined,
+      DATABASE_URL: undefined,
+      POSTGRES_URL: undefined,
+      POSTGRES_PRISMA_URL: undefined,
+      DATABASE_URL_UNPOOLED: "postgres://neon.example/unpooled?sslmode=require",
+    },
+    () => {
+      assert.equal(
+        resolveDatabaseUrl(),
+        "postgres://neon.example/unpooled?sslmode=require",
+      );
+    },
+  );
+});
+
 test("Vercel requires DATABASE_URL (no docker-compose fallback)", () => {
   withEnv(
     {
@@ -72,6 +92,7 @@ test("Vercel requires DATABASE_URL (no docker-compose fallback)", () => {
       DATABASE_URL: undefined,
       POSTGRES_URL: undefined,
       POSTGRES_PRISMA_URL: undefined,
+      DATABASE_URL_UNPOOLED: undefined,
     },
     () => {
       assert.throws(() => resolveDatabaseUrl(), /DATABASE_URL must be set on Vercel/);
