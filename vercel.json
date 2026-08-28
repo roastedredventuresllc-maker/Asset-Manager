@@ -19,7 +19,8 @@
       "buildCommand": "node ./scripts/bundle-vercel.mjs",
       "functions": {
         "server.cjs": {
-          "maxDuration": 300
+          "maxDuration": 300,
+          "includeFiles": "node_modules/sharp/**"
         }
       }
     }

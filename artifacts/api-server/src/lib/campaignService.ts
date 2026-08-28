@@ -116,6 +116,7 @@ export async function generateCampaignAsync(
       .where(eq(campaignsTable.id, campaignId));
 
     const { jobsTable } = await import("@workspace/db");
+    const jobIds: string[] = [];
 
     for (let idx = 0; idx < 3; idx++) {
       const ad = campaignData.ads[idx];
@@ -129,8 +130,10 @@ export async function generateCampaignAsync(
       });
       if (!asset) continue;
 
+      const jobId = generateId("job");
+      jobIds.push(jobId);
       await db.insert(jobsTable).values({
-        id: generateId("job"),
+        id: jobId,
         type: "generate_image",
         payload: {
           campaignId,
@@ -146,10 +149,8 @@ export async function generateCampaignAsync(
     }
 
     logger.info({ campaignId }, "Campaign generated successfully");
-    // Drain image jobs in this invocation so generate works on Vercel
-    // (no long-lived in-process worker). Failures stay on the job row.
     try {
-      await processPendingJobs(3);
+      await processPendingJobs(3, { jobIds });
     } catch (err) {
       logger.error({ err, campaignId }, "Image job drain after generate failed");
     }

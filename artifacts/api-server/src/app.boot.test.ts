@@ -61,6 +61,7 @@ test("worker does not retry generate_image (one Imagine + one gpt-image-2 alread
   const src = readFileSync(join(here, "lib/worker.ts"), "utf8");
   assert.match(src, /failNow/);
   assert.match(src, /generate_image/);
+  assert.match(src, /jobIds/);
 });
 
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {

@@ -1,5 +1,5 @@
 import { db, jobsTable } from "@workspace/db";
-import { eq, and, lte } from "drizzle-orm";
+import { eq, and, lte, desc, inArray } from "drizzle-orm";
 import { processImageJob } from "./imagePipeline.js";
 import { logger } from "./logger.js";
 import { JOB_STATUS } from "./jobStatus.js";
@@ -16,12 +16,21 @@ export interface WorkerResult {
  * Drain a batch of pending jobs. Shared by the in-process loop and the
  * POST /api/jobs/worker endpoint (the latter is kept for external cron use).
  */
-export async function processPendingJobs(limit = 5): Promise<WorkerResult> {
+export async function processPendingJobs(
+  limit = 5,
+  opts?: { jobIds?: string[] },
+): Promise<WorkerResult> {
   const pendingJobs = await db.query.jobsTable.findMany({
-    where: and(
-      eq(jobsTable.status, JOB_STATUS.pending),
-      lte(jobsTable.attempts, MAX_ATTEMPTS),
-    ),
+    where: opts?.jobIds?.length
+      ? and(
+          inArray(jobsTable.id, opts.jobIds),
+          eq(jobsTable.status, JOB_STATUS.pending),
+        )
+      : and(
+          eq(jobsTable.status, JOB_STATUS.pending),
+          lte(jobsTable.attempts, MAX_ATTEMPTS),
+        ),
+    orderBy: [desc(jobsTable.createdAt)],
     limit,
   });
 
