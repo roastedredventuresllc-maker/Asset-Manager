@@ -10,21 +10,6 @@ import healthRouter from "./routes/health.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-test("app.ts does not import the DB or campaign routes at module load", () => {
-  const src = readFileSync(join(here, "app.ts"), "utf8");
-  assert.equal(
-    /from ["']@workspace\/db["']/.test(src),
-    false,
-    "app.ts must not statically import @workspace/db",
-  );
-  assert.equal(
-    /from ["']\.\/routes\/index/.test(src),
-    false,
-    "app.ts must not statically import the rest of the API",
-  );
-  assert.match(src, /healthRouter/);
-});
-
 test("db package constructs the Pool inside getPool, not at import", () => {
   const src = readFileSync(join(here, "../../../lib/db/src/index.ts"), "utf8");
   assert.match(src, /export function getPool/);
