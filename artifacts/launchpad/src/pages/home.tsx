@@ -146,8 +146,7 @@ function ActiveCampaignRouter({
 }
 
 function Mark({ onClick }: { onClick?: () => void }) {
-  const className =
-    "font-serif text-[15px] tracking-[0.18em] uppercase text-[#ede6dc]/80 hover:text-[#ede6dc] transition-colors";
+  const className = "font-serif italic text-[17px] text-[#ede6dc]/70 hover:text-[#ede6dc] transition-colors";
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className}>
@@ -244,10 +243,10 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
               }
             }}
             placeholder="The product, who it’s for, why it exists."
-            className="mt-10 w-full min-h-[8rem] resize-none bg-transparent border-0 border-b border-[#ede6dc]/25 rounded-none outline-none px-0 py-3 font-serif text-[1.35rem] md:text-[1.6rem] leading-snug placeholder:text-[#ede6dc]/28 focus:border-[#ede6dc]/60"
+            className="mt-10 w-full min-h-[7.5rem] resize-none bg-transparent border-0 rounded-none outline-none px-0 py-0 font-serif text-[1.35rem] md:text-[1.65rem] leading-snug placeholder:text-[#ede6dc]/28"
             autoFocus
           />
-          <div className="mt-6 flex items-center gap-6">
+          <div className="mt-8 flex flex-wrap items-baseline gap-x-8 gap-y-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -263,27 +262,27 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
                   setPreview(null);
                   if (fileInputRef.current) fileInputRef.current.value = "";
                 }}
-                className="flex items-center gap-3 font-serif text-[15px] text-[#b9aea0]"
+                className="flex items-center gap-3 font-serif italic text-[15px] text-[#b9aea0]"
               >
-                <img src={preview} alt="" className="h-10 w-10 object-cover" />
-                Remove photo
+                <img src={preview} alt="" className="h-9 w-9 object-cover" />
+                Take the photo off
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="font-serif text-[15px] text-[#8a8176] hover:text-[#ede6dc] transition-colors"
+                className="font-serif italic text-[15px] text-[#6e675e] hover:text-[#ede6dc] transition-colors"
               >
-                Include a photo
+                A photo of it, if you have one
               </button>
             )}
             <button
               type="button"
               onClick={() => void handleSubmit()}
               disabled={isPending}
-              className="ml-auto font-serif text-[17px] text-foreground hover:opacity-70 disabled:opacity-40 transition-opacity"
+              className="font-serif text-[18px] text-foreground hover:opacity-70 disabled:opacity-40 transition-opacity"
             >
-              {isPending ? "Sending…" : "Write the campaign"}
+              {isPending ? "Writing…" : "Write it →"}
             </button>
           </div>
           {error && (
@@ -295,30 +294,15 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
   );
 }
 
-const WORKING_LINES = [
-  "Reading what you sell.",
-  "Writing the campaign.",
-  "Setting three boards.",
-];
-
 function WorkingState() {
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setActive((a) => Math.min(a + 1, WORKING_LINES.length - 1));
-    }, 2800);
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
       <div className="px-6 pt-8 md:px-10">
         <Mark />
       </div>
       <div className="flex-1 flex items-center px-6 md:px-10 pb-24">
-        <p className="font-serif text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] text-foreground max-w-[18ch]">
-          {WORKING_LINES[active]}
+        <p className="font-serif text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] text-foreground max-w-[14ch]">
+          Writing the campaign.
         </p>
       </div>
     </div>
@@ -423,7 +407,7 @@ function BriefingState({
       brandName?: string;
       tagline?: string;
       ads?: Array<{ hook?: string; body?: string; cta?: string; angle?: string }>;
-      landing?: { hero?: string };
+      landing?: { hero?: string; sub?: string; cta?: string };
     } | null;
     adAssets?: Array<{ idx: number; imageUrl?: string | null; status?: string | null }>;
   };
@@ -453,6 +437,11 @@ function BriefingState({
   );
   const assetsFailed = (statusRes.adAssets ?? []).some((a) => a.status === "failed");
   const ads = data.ads ?? [];
+  const landing = data.landing;
+  const openBoard = (target: string) => {
+    if (assetsGenerating) return;
+    setRevisionTarget(target);
+  };
 
   return (
     <div className="min-h-[100dvh] bg-background pb-28">
@@ -462,124 +451,128 @@ function BriefingState({
           type="button"
           onClick={() => setRevisionTarget("the overall campaign")}
           disabled={assetsGenerating}
-          className="font-serif text-[15px] text-[#8a8176] hover:text-[#ede6dc] disabled:opacity-40"
+          className="font-serif italic text-[16px] text-[#6e675e] hover:text-[#ede6dc] disabled:opacity-40"
         >
           What’s off
         </button>
       </div>
 
-      <div className="px-6 md:px-10 mt-16 mb-14 max-w-[72rem]">
-        <p className="font-serif italic text-[15px] text-[#8a8176] mb-4">From your brief</p>
-        <h1 className="font-serif text-[clamp(2.8rem,8vw,6.5rem)] leading-[0.92] text-foreground">
-          {data.brandName}
-        </h1>
-        <p className="mt-5 font-serif italic text-[clamp(1.2rem,2.4vw,1.75rem)] text-[#c4b8a8] max-w-[28ch]">
-          {data.tagline}
-        </p>
+      <div className="px-6 md:px-10 mt-14 mb-12 max-w-[80rem]">
         <button
           type="button"
           disabled={assetsGenerating}
           onClick={() =>
-            setRevisionTarget(
+            openBoard(
               `the brand name & tagline (currently "${data.brandName}" — "${data.tagline}")`,
             )
           }
-          className="mt-6 font-serif text-[14px] text-[#8a8176] hover:text-[#ede6dc] disabled:opacity-40"
+          className="text-left disabled:opacity-70"
         >
-          Change the name
+          <h1 className="font-serif text-[clamp(2.8rem,8vw,6.5rem)] leading-[0.92] text-foreground">
+            {data.brandName}
+          </h1>
+          <p className="mt-4 font-serif italic text-[clamp(1.2rem,2.4vw,1.75rem)] text-[#c4b8a8] max-w-[28ch]">
+            {data.tagline}
+          </p>
         </button>
       </div>
 
       {assetsFailed && (
         <p className="px-6 md:px-10 mb-10 font-serif text-[16px] text-[#c4a090] max-w-[36rem]">
-          Generation failed. A branded gradient is not an ad. Copy is ready; photography is not.
+          Generation failed. Photography did not come back. Copy is on the table; those frames are not ads.
         </p>
       )}
 
-      <div className="px-6 md:px-10 max-w-[72rem]">
-        <div className="grid grid-cols-1 md:grid-cols-[1.15fr_0.72fr] gap-x-8 gap-y-12 items-start">
+      {/* Art director's table: one family, three different prints — not a card gallery. */}
+      <div className="px-6 md:px-10 max-w-[80rem]">
+        <div className="flex flex-col md:flex-row md:items-end gap-10 md:gap-8 lg:gap-12">
           {ads[0] ? (
-            <div className="md:row-span-2">
+            <div className="md:w-[46%] md:flex-none">
               <CampaignBoard
                 beat={beatForIndex(0)}
                 hook={ads[0].hook ?? ""}
                 imageUrl={statusRes.adAssets?.find((a) => a.idx === 0)?.imageUrl}
                 status={statusRes.adAssets?.find((a) => a.idx === 0)?.status}
-                onChange={
+                onOpen={
                   assetsGenerating
                     ? undefined
-                    : () =>
-                        setRevisionTarget(
-                          `the hero board (hook: "${ads[0].hook}")`,
-                        )
+                    : () => openBoard(`the hero board (hook: "${ads[0].hook}")`)
                 }
               />
             </div>
           ) : null}
           {ads[1] ? (
-            <CampaignBoard
-              beat={beatForIndex(1)}
-              hook={ads[1].hook ?? ""}
-              imageUrl={statusRes.adAssets?.find((a) => a.idx === 1)?.imageUrl}
-              status={statusRes.adAssets?.find((a) => a.idx === 1)?.status}
-              onChange={
-                assetsGenerating
-                  ? undefined
-                  : () =>
-                      setRevisionTarget(
-                        `the in-use board (hook: "${ads[1].hook}")`,
-                      )
-              }
-            />
+            <div className="w-[58%] max-w-[280px] md:w-[22%] md:max-w-none md:flex-none">
+              <CampaignBoard
+                beat={beatForIndex(1)}
+                hook={ads[1].hook ?? ""}
+                imageUrl={statusRes.adAssets?.find((a) => a.idx === 1)?.imageUrl}
+                status={statusRes.adAssets?.find((a) => a.idx === 1)?.status}
+                onOpen={
+                  assetsGenerating
+                    ? undefined
+                    : () => openBoard(`the in-use board (hook: "${ads[1].hook}")`)
+                }
+              />
+            </div>
           ) : null}
           {ads[2] ? (
-            <CampaignBoard
-              beat={beatForIndex(2)}
-              hook={ads[2].hook ?? ""}
-              imageUrl={statusRes.adAssets?.find((a) => a.idx === 2)?.imageUrl}
-              status={statusRes.adAssets?.find((a) => a.idx === 2)?.status}
-              onChange={
-                assetsGenerating
-                  ? undefined
-                  : () =>
-                      setRevisionTarget(
-                        `the close board (hook: "${ads[2].hook}")`,
-                      )
-              }
-            />
+            <div className="w-[70%] max-w-[340px] md:w-[28%] md:max-w-none md:flex-none md:mb-16">
+              <CampaignBoard
+                beat={beatForIndex(2)}
+                hook={ads[2].hook ?? ""}
+                imageUrl={statusRes.adAssets?.find((a) => a.idx === 2)?.imageUrl}
+                status={statusRes.adAssets?.find((a) => a.idx === 2)?.status}
+                onOpen={
+                  assetsGenerating
+                    ? undefined
+                    : () => openBoard(`the close board (hook: "${ads[2].hook}")`)
+                }
+              />
+            </div>
           ) : null}
         </div>
       </div>
 
-      <div className="px-6 md:px-10 mt-20 max-w-[72rem]">
-        <div className="flex items-baseline justify-between gap-4 mb-5">
-          <p className="font-serif italic text-[15px] text-[#8a8176]">Landing</p>
+      {landing ? (
+        <div className="px-6 md:px-10 mt-20 max-w-[40rem]">
           <button
             type="button"
             disabled={assetsGenerating}
-            onClick={() => setRevisionTarget("the landing page")}
-            className="font-serif text-[14px] text-[#8a8176] hover:text-[#ede6dc] disabled:opacity-40"
+            onClick={() => openBoard("the landing page")}
+            className="text-left disabled:opacity-70"
           >
-            Change the page
+            <p className="font-serif text-[clamp(1.8rem,3.5vw,2.6rem)] leading-[1.15] text-foreground">
+              {landing.hero}
+            </p>
+            {landing.sub ? (
+              <p className="mt-4 font-serif text-[1.15rem] leading-relaxed text-[#c4b8a8]">
+                {landing.sub}
+              </p>
+            ) : null}
+            {landing.cta ? (
+              <p className="mt-5 font-serif italic text-[16px] text-[#ede6dc]/80">{landing.cta}</p>
+            ) : null}
           </button>
-        </div>
-        <div className="w-full h-[560px] overflow-hidden border border-[#ede6dc]/12 bg-[#1c1915]">
           {campaign?.landingSlug ? (
-            <iframe src={`/p/${campaign.landingSlug}`} className="w-full h-full border-none bg-white" title="Landing page" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center font-serif text-[#8a8176]">
-              Setting the page…
-            </div>
-          )}
+            <a
+              href={`/p/${campaign.landingSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
+            >
+              The live page
+            </a>
+          ) : null}
         </div>
-      </div>
+      ) : null}
 
-      <div className="px-6 md:px-10 mt-16 flex flex-col items-start gap-5">
+      <div className="px-6 md:px-10 mt-16">
         <button
           type="button"
           onClick={() => setShowLaunch(true)}
           disabled={assetsGenerating || assetsFailed}
-          className="font-serif text-[1.35rem] text-foreground border-b border-[#ede6dc]/50 pb-1 hover:border-[#ede6dc] disabled:opacity-35 disabled:cursor-not-allowed"
+          className="font-serif text-[1.35rem] text-foreground disabled:opacity-35 disabled:cursor-not-allowed"
         >
           {assetsGenerating
             ? "Photography still landing…"
@@ -662,7 +655,7 @@ function RevisionSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="h-[62vh] rounded-none border-t border-[#ede6dc]/12 bg-background p-0 flex flex-col shadow-none"
+        className="h-[62vh] rounded-none border-t border-[#ede6dc]/12 bg-background p-0 flex flex-col shadow-none [&>button]:hidden"
       >
         <SheetHeader className="px-6 pt-8 pb-4">
           <SheetTitle className="font-serif text-[2rem] text-foreground font-normal">
