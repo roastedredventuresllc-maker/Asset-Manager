@@ -5,10 +5,12 @@ description: Which image models power ad backgrounds and why
 
 Ad-background images are generated in `artifacts/api-server/src/lib/imagePipeline.ts`.
 
-**Decision:** "Nano Banana" = Google Gemini 2.5 Flash Image (`gemini-2.5-flash-image`), accessed via the Replit Gemini AI integration (no own API key; billed to Replit credits). Higgsfield was requested by the user but is NOT a supported Replit integration, so it was not used.
+**Quality path:** `gemini-3-pro-image-preview` (Nano Banana Pro) via `@workspace/integrations-gemini-ai/image`. Do not invoke this model until the CEO approves spend.
 
-**Chain:** Nano Banana primary (multimodal edit path for the hero slot when a product photo exists, else text-to-image) → gpt-image-1 (OpenAI) fallback → SVG last resort. Both integration imports are lazy/dynamic so a missing env degrades to the next tier instead of crashing the worker.
+**Off-Replit:** the Gemini/OpenAI/Anthropic clients must NOT throw at module load. Auth is lazy. Accept `GEMINI_API_KEY` / `GOOGLE_API_KEY` (public `https://generativelanguage.googleapis.com`) **or** Replit `AI_INTEGRATIONS_GEMINI_*`. Same pattern for OpenAI (`OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_*`).
 
-**Quality upgrade path:** swap the model to `gemini-3-pro-image-preview` (Nano Banana Pro) for higher quality at higher cost.
+**Chain:** Gemini primary (edit when a product PNG exists, else text-to-image) → gpt-image-1 → **fail**. A branded SVG/gradient is not an ad. The UI says "Generation failed." `makeSvgFallbackKillOnSight` exists only as a labeled refuse sample.
 
-**Why the PNG normalization:** uploaded product images are stored as JPEG (`uploads.ts`), but the edit calls declare `image/png` (Gemini inlineData + OpenAI temp file). `fetchProductImage` re-encodes the fetched bytes to PNG via sharp so the declared MIME always matches the real bytes — otherwise edits can fail or silently degrade to text-to-image, losing the user's product photo.
+**Crops:** three ads, one campaign. idx 0 hero 4:5 1080×1350, idx 1 context 9:16 1080×1920, idx 2 tight crop 4:5 1080×1350. Model is muted; compositor adds 2–6 word type in the top ~32% negative space.
+
+**JPEG/PNG trap:** uploads are stored as JPEG (`uploads.ts`). Edit APIs declare `image/png`. `fetchProductImage` sharp-re-encodes to PNG so MIME matches bytes. Do not skip this. If fetch fails, log a warning and continue without the product photo (do not crash; do not silently swallow).

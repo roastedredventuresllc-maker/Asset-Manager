@@ -80,7 +80,7 @@ export async function generateImage(
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio, imageSize: "1K" } as { aspectRatio: AspectRatio; imageSize: string },
+      imageConfig: imageConfig(aspectRatio),
     },
   });
   return extractImageBuffer(response);
@@ -114,7 +114,7 @@ export async function editImage(
     ],
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio, imageSize: "1K" } as { aspectRatio: AspectRatio; imageSize: string },
+      imageConfig: imageConfig(aspectRatio),
     },
   });
   return extractImageBuffer(response);

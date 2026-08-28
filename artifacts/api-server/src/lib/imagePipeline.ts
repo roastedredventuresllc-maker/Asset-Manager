@@ -46,12 +46,30 @@ export interface ImageGenerators {
 async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   try {
     const res = await fetch(url);
-    if (!res.ok) return undefined;
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, host: safeHost(url) },
+        "Product photo fetch missed — continuing without it (not silently dropped)",
+      );
+      return undefined;
+    }
     const input = Buffer.from(await res.arrayBuffer());
     // JPEG/PNG trap: uploads are JPEG. Edit calls declare PNG. Re-encode.
     return await reencodeToPng(input);
-  } catch {
+  } catch (err) {
+    logger.warn(
+      { err, host: safeHost(url) },
+      "Product photo fetch missed — continuing without it (not silently dropped)",
+    );
     return undefined;
+  }
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "invalid-url";
   }
 }
 
