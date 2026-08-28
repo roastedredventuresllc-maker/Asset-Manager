@@ -70,8 +70,8 @@ The experience is one page that evolves through states:
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
 - `ADMIN_PASSWORD` — `/admin` + encrypted connectors
-- `META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID` (**Ad Account ID**, digits only, not Business Manager ID), `META_DEFAULT_PAGE_ID`
-- `TIKTOK_ACCESS_TOKEN`, `TIKTOK_BC_ID`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_IDENTITY_ID`
+- `META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID` (**Ad Account ID**, digits only, no `act_` prefix, not Business Manager ID), `META_DEFAULT_PAGE_ID`
+- `TIKTOK_ACCESS_TOKEN`, `TIKTOK_BC_ID`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_IDENTITY_ID` (CUSTOMIZED_USER identity, required for image ads)
 - `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`
 - `ADS_MODE=mock` — documented default; saving creds never flips live
 - `PUBLIC_APP_URL` — local Stripe return, e.g. `http://localhost:5173`

@@ -65,11 +65,32 @@ test("ADS_MODE defaults to mock and is not flipped by reading connectors", () =>
   process.env.ADS_MODE = prev;
 });
 
+test("META_BUSINESS_ID setup copy is Ad Account ID, digits only, no act_ prefix", () => {
+  const meta = CONNECTOR_SPECS.find((s) => s.id === "meta");
+  assert.ok(meta);
+  const blob = [
+    meta.secretKeyLabels?.META_BUSINESS_ID,
+    ...meta.setupSteps.map((s) => s.text),
+  ].join(" ");
+  assert.match(blob, /Ad Account ID/);
+  assert.match(blob, /not the Business Manager ID/);
+  assert.match(blob, /no act_ prefix/);
+});
+
 test("META_BUSINESS_ID is treated as Ad Account ID (digits, optional act_ prefix)", () => {
   assert.equal(normalizeMetaAdAccountId("act_1234567890"), "1234567890");
   assert.equal(normalizeMetaAdAccountId("1234567890"), "1234567890");
   assert.ok(isMetaAdAccountId("act_1234567890"));
   assert.equal(isMetaAdAccountId("not-a-business-id"), false);
+});
+
+test("TIKTOK_IDENTITY_ID is required CUSTOMIZED_USER identity", () => {
+  const tiktok = CONNECTOR_SPECS.find((s) => s.id === "tiktok");
+  assert.ok(tiktok);
+  assert.ok(tiktok.requiredSecretKeys.includes("TIKTOK_IDENTITY_ID"));
+  const blob = tiktok.setupSteps.map((s) => s.text).join(" ");
+  assert.match(blob, /TIKTOK_IDENTITY_ID/);
+  assert.match(blob, /CUSTOMIZED_USER/);
 });
 
 test("Google customer IDs strip dashes from the Ads UI", () => {

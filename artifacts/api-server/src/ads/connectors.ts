@@ -56,14 +56,14 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     ],
     optionalSecretKeys: [],
     secretKeyLabels: {
-      META_BUSINESS_ID: "Ad Account ID (digits only; env name META_BUSINESS_ID)",
+      META_BUSINESS_ID: "Ad Account ID (digits only, no act_ prefix; env name META_BUSINESS_ID)",
       META_SYSTEM_USER_TOKEN: "System user token",
       META_DEFAULT_PAGE_ID: "Facebook Page ID",
     },
     v1: true,
     setupSteps: [
       {
-        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only). Paste it as META_BUSINESS_ID — that field is the Ad Account ID, not the Business Manager ID.",
+        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only, no act_ prefix). Paste it as META_BUSINESS_ID — that field is the Ad Account ID, not the Business Manager ID.",
         link: {
           label: "Open Ad Accounts",
           url: "https://business.facebook.com/settings/ad-accounts",
@@ -117,7 +117,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
         },
       },
       {
-        text: "In Business Center, copy your Business Center ID (TIKTOK_BC_ID), Advertiser ID (TIKTOK_ADVERTISER_ID) and a verified Identity ID (TIKTOK_IDENTITY_ID).",
+        text: "In Business Center, copy your Business Center ID (TIKTOK_BC_ID), Advertiser ID (TIKTOK_ADVERTISER_ID), and a verified CUSTOMIZED_USER Identity ID (TIKTOK_IDENTITY_ID). Image ads require TIKTOK_IDENTITY_ID.",
       },
       { text: "Paste the four values into the fields below and press Save." },
     ],

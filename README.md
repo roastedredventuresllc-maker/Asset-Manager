@@ -29,12 +29,12 @@ Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not
 | `STRIPE_WEBHOOK_SECRET` | For webhooks | Run `stripe listen` or add endpoint in Stripe dashboard |
 | `ADMIN_PASSWORD` | Admin + encrypted connectors | Any strong password |
 | `META_SYSTEM_USER_TOKEN` | For Meta ads | See Meta setup below |
-| `META_BUSINESS_ID` | For Meta ads | **Ad Account ID** (digits only), not the Business Manager ID |
+| `META_BUSINESS_ID` | For Meta ads | **Ad Account ID** (digits only, no `act_` prefix), not the Business Manager ID |
 | `META_DEFAULT_PAGE_ID` | For Meta ads | Your Facebook Page ID |
 | `TIKTOK_ACCESS_TOKEN` | For TikTok ads | See TikTok setup below |
 | `TIKTOK_BC_ID` | For TikTok ads | TikTok Business Center ID |
 | `TIKTOK_ADVERTISER_ID` | For TikTok ads | TikTok Ads Manager advertiser ID |
-| `TIKTOK_IDENTITY_ID` | For TikTok ads | Verified identity ID for image ads |
+| `TIKTOK_IDENTITY_ID` | For TikTok ads | Verified **CUSTOMIZED_USER** identity ID (required for image ads) |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | Google Ads API Center |
 | `GOOGLE_ADS_CLIENT_ID` | For Google Ads | Google Cloud OAuth client |
 | `GOOGLE_ADS_CLIENT_SECRET` | For Google Ads | Google Cloud OAuth client |
@@ -146,7 +146,7 @@ Deployed endpoint: `https://your-domain/api/webhooks/stripe` listening to:
 4. Approval: typically 1–2 weeks; you can create and pause campaigns in Standard Access while waiting
 
 ### Step 4: Get IDs
-- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → Ad Account ID (digits only). This product stores it as `META_BUSINESS_ID`.
+- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → copy the **Ad Account ID** (digits only, no `act_` prefix). This product stores that Ad Account ID in `META_BUSINESS_ID`. Do **not** paste the Business Manager ID — `/act_${id}/...` 404s if you do.
 - `META_DEFAULT_PAGE_ID`: Your Facebook Page → About → Page ID
 
 ---
@@ -169,6 +169,7 @@ Deployed endpoint: `https://your-domain/api/webhooks/stripe` listening to:
 - `TIKTOK_ACCESS_TOKEN`: TikTok Ads Manager → Tools → Open API → Generate Access Token
 - `TIKTOK_BC_ID`: Business Center Settings → Business Center ID
 - `TIKTOK_ADVERTISER_ID`: TikTok Ads Manager advertiser ID
+- `TIKTOK_IDENTITY_ID`: Business Center → a verified **CUSTOMIZED_USER** identity ID (required for image ads; already in Admin → Connectors)
 
 ---
 
