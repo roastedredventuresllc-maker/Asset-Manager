@@ -11,6 +11,12 @@
         { "source": "/(.*)", "destination": "/index.html" }
       ]
     },
+    "health": {
+      "root": "artifacts/healthz",
+      "framework": "express",
+      "entrypoint": "src/app.ts",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile"
+    },
     "api": {
       "root": "artifacts/api-server",
       "framework": "express",
@@ -24,6 +30,8 @@
     }
   },
   "rewrites": [
+    { "source": "/healthz", "destination": { "service": "health" } },
+    { "source": "/api/healthz", "destination": { "service": "health" } },
     { "source": "/api/(.*)", "destination": { "service": "api" } },
     { "source": "/p/(.*)", "destination": { "service": "api" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }

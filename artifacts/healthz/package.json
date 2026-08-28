@@ -1,0 +1,9 @@
+{
+  "name": "@workspace/healthz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
