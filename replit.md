@@ -1,6 +1,6 @@
 # LaunchPad
 
-Founders describe their product, get a complete AI-generated ad campaign, and push it live to Meta, TikTok, and Google — without ever touching an ad platform. Ads run from house accounts after admin review.
+Founders describe their product, get a complete AI-generated ad campaign, and push it live to Meta, TikTok, and Google — without ever touching an ad platform. Ads go live after admin review.
 
 ## Run & Operate
 
@@ -49,7 +49,7 @@ Local (no Replit): copy `.env.example` to `.env`. Names match CODE.
 3. In-process worker drains `generate_image` jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
 4. User clicks Ship → POST /api/campaigns/:id/publish → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` → claim campaign, `in_review` + `pendingPublishJson` (does **not** auto-publish)
-6. Admin approves in `/admin` → house-account publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
+6. Admin approves in `/admin` → publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
 7. Landing pages served at `/p/:slug` (server-rendered HTML from campaign JSON)
 
 ## Product

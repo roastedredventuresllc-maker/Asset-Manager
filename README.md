@@ -146,7 +146,7 @@ Deployed endpoint: `https://your-domain/api/webhooks/stripe` listening to:
 4. Approval: typically 1–2 weeks; you can create and pause campaigns in Standard Access while waiting
 
 ### Step 4: Get IDs
-- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → copy the **Ad Account ID** (digits only, no `act_` prefix). This product stores that Ad Account ID in `META_BUSINESS_ID`. Do **not** paste the Business Manager ID — `/act_${id}/...` 404s if you do.
+- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → copy the **Ad Account ID** (digits only, no `act_` prefix). Paste it as `META_BUSINESS_ID` — that field is the Ad Account ID, not the Business Manager ID.
 - `META_DEFAULT_PAGE_ID`: Your Facebook Page → About → Page ID
 
 ---
@@ -207,7 +207,7 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 - **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
 - **Storage**: Replit Object Storage
 - **Payments**: Stripe Checkout + subscriptions + metered usage
-- **Ads**: House accounts on Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
+- **Ads**: Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
 - **Auth**: Magic links via email (no passwords ever)
 
 ### Data flow
@@ -216,7 +216,7 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
 4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` webhook → claim campaign, set `in_review` + `pendingPublishJson` (does **not** auto-publish)
-6. Admin approves in `/admin` (`ADMIN_PASSWORD`) → house-account publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
+6. Admin approves in `/admin` (`ADMIN_PASSWORD`) → publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
 7. Frontend shows ReviewState after paid checkout; LiveState after admin approval
 
 ### Landing pages
