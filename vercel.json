@@ -14,14 +14,18 @@
     "api": {
       "root": "artifacts/api-server",
       "framework": "express",
-      "entrypoint": "src/app.ts",
+      "entrypoint": "server.cjs",
       "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+      "buildCommand": "node ./scripts/bundle-vercel.mjs",
       "functions": {
-        "src/app.ts": {
+        "server.cjs": {
           "maxDuration": 300
         }
       }
     }
+  },
+  "env": {
+    "ADS_MODE": "mock"
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "api" } },

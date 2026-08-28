@@ -13,7 +13,7 @@ The product URL is the Vite app in `artifacts/launchpad`. Generate and revise ru
 `vercel.json` defines two services in one project: **frontend** (`artifacts/launchpad`, Vite) and **api** (`artifacts/api-server`, Express). Top-level rewrites send `/api/*` and `/p/*` to the API and everything else to the site. Generate/revise are not a static-only deploy. Both services run `installCommand` from the **repo root** (`cd ../.. && pnpm install --frozen-lockfile`) so they use the root `pnpm-lock.yaml` / `pnpm-workspace.yaml` and can resolve `workspace:*` packages. There is no second lockfile inside a package.
 
 1. Import this GitHub repo in Vercel. **Root Directory** = repository root (`.`). **Framework Preset** = **Services**.
-2. Set environment variables (names only — never commit values). Scope them to Production, Preview, and Development as needed:
+2. Set environment variables (names only — never commit values). Attach them to the **api** service (not only the frontend) and to Production, Preview, and Development as needed. Redeploy Production after adding them so the function actually receives the new names:
 
 | Name | Required | Notes |
 |------|----------|--------|

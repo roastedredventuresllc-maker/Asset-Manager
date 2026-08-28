@@ -28,6 +28,21 @@ test("health.ts does not import workspace packages", () => {
   assert.equal(/@workspace\//.test(src), false);
 });
 
+test("Vercel api service bundles Express into server.cjs", () => {
+  const vercel = JSON.parse(
+    readFileSync(join(here, "../../../vercel.json"), "utf8"),
+  );
+  assert.equal(vercel.services.api.entrypoint, "server.cjs");
+  assert.equal(vercel.services.api.buildCommand, "node ./scripts/bundle-vercel.mjs");
+  assert.equal(vercel.env?.ADS_MODE, "mock");
+  const bundle = readFileSync(
+    join(here, "../scripts/bundle-vercel.mjs"),
+    "utf8",
+  );
+  assert.match(bundle, /outfile: path.join\(serviceRoot, "server.cjs"\)/);
+  assert.match(bundle, /packages: "bundle"/);
+});
+
 test("index.ts does not statically import the DB/worker graph", () => {
   const src = readFileSync(join(here, "index.ts"), "utf8");
   assert.equal(/from ["']\.\/lib\/worker/.test(src), false);

@@ -1,7 +1,8 @@
 /**
- * Local / long-running entry. Vercel uses `src/app.ts` as the Express
- * entrypoint. Do not statically import the DB/worker graph here — a Vercel
- * bundle that includes this file would crash `/api/healthz` at import time.
+ * Local / long-running entry. Vercel uses `server.cjs` (esbuild bundle of
+ * `src/app.ts`) as the Express entrypoint. Do not statically import the
+ * DB/worker graph here — a Vercel bundle that includes this file would crash
+ * `/api/healthz` at import time.
  */
 if (!process.env.VERCEL) {
   void bootLocal();
