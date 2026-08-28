@@ -1,13 +1,8 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import router from "./routes/index.js";
-import landingRouter from "./routes/landing.js";
+import healthRouter from "./routes/health.js";
 import { logger } from "./lib/logger.js";
-import { runInBackground } from "./lib/background.js";
-import { ensureSeededInBackground } from "./lib/referenceAssets.js";
-import { pool } from "@workspace/db";
-import { attachDatabasePool } from "@vercel/functions";
 
 const app: Express = express();
 
@@ -26,33 +21,60 @@ app.use(
 );
 
 app.use(cors());
-
-// Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
 app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
-
-// Everything else gets JSON parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// On Vercel there is no long-lived listen() process. Seed on first request.
-let vercelBootstrapped = false;
-app.use((_req, _res, next) => {
-  if (process.env.VERCEL && !vercelBootstrapped) {
-    vercelBootstrapped = true;
-    try {
-      attachDatabasePool(pool);
-    } catch (err) {
-      logger.error({ err }, "Failed to attach Postgres pool");
-    }
-    runInBackground(ensureSeededInBackground());
+// Must not load campaigns/DB/Grok. Missing env used to crash the whole function.
+app.use("/api", healthRouter);
+
+function isHealthz(req: Request): boolean {
+  return req.path === "/healthz" || req.path === "/api/healthz";
+}
+
+let restLoaded = false;
+let restQueue: Promise<void> | null = null;
+
+function loadRest(): Promise<void> {
+  if (restLoaded) return Promise.resolve();
+  if (!restQueue) {
+    restQueue = (async () => {
+      const [
+        { default: router },
+        { default: landingRouter },
+        { pool },
+        { attachDatabasePool },
+        { runInBackground },
+        { ensureSeededInBackground },
+      ] = await Promise.all([
+        import("./routes/index.js"),
+        import("./routes/landing.js"),
+        import("@workspace/db"),
+        import("@vercel/functions"),
+        import("./lib/background.js"),
+        import("./lib/referenceAssets.js"),
+      ]);
+
+      if (process.env.VERCEL) {
+        try {
+          attachDatabasePool(pool);
+        } catch (err) {
+          logger.error({ err }, "Failed to attach Postgres pool");
+        }
+        runInBackground(ensureSeededInBackground());
+      }
+
+      app.use("/api", router);
+      app.use("/p", landingRouter);
+      restLoaded = true;
+    })();
   }
-  next();
+  return restQueue;
+}
+
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (isHealthz(req)) return next();
+  loadRest().then(() => next()).catch(next);
 });
-
-// API routes
-app.use("/api", router);
-
-// Landing pages at /p/:slug
-app.use("/p", landingRouter);
 
 export default app;

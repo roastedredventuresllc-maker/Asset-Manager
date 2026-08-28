@@ -16,6 +16,13 @@ test("db Pool construction catches missing DATABASE_URL on Vercel", () => {
   assert.match(src, /launchpad_unconfigured/);
 });
 
+test("app.ts does not statically import the DB or campaign routes", () => {
+  const src = readFileSync(join(here, "app.ts"), "utf8");
+  assert.equal(/from ["']@workspace\/db["']/.test(src), false);
+  assert.equal(/from ["']\.\/routes\/index/.test(src), false);
+  assert.match(src, /healthRouter/);
+});
+
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {
   const app = express();
   app.use("/api", healthRouter);
