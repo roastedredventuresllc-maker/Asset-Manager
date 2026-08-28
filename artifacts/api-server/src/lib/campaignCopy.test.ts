@@ -61,6 +61,8 @@ const sample: CampaignData = {
 test("xAI is not required at import — no Anthropic either", () => {
   delete process.env.XAI_API_KEY;
   delete process.env.AI_INTEGRATIONS_XAI_API_KEY;
+  delete process.env.AI_GATEWAY_API_KEY;
+  delete process.env.VERCEL_OIDC_TOKEN;
   delete process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   assert.equal(isXaiConfigured(), false);

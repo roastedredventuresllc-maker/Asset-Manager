@@ -41,16 +41,21 @@ function findEnvFile(): string | null {
   return null;
 }
 
-/** Load repo-root `.env` if present. Shell / Replit Secrets win over the file. */
+/** Load repo-root `.env` if present. Shell / Vercel env / Replit Secrets win over the file. */
 export function loadRootEnv(): void {
   const envFile = findEnvFile();
   if (envFile) parseEnvFile(readFileSync(envFile, "utf8"));
 }
 
+function isHostedRuntime(): boolean {
+  return Boolean(process.env.VERCEL || process.env.REPL_ID);
+}
+
 /**
  * Resolve DATABASE_URL for drizzle-kit and the Pool.
- * Off Replit, an unset/empty URL falls back to docker-compose Postgres so
- * `pnpm --filter @workspace/db run push` and the API can boot in mock.
+ * Production (Vercel primary, Replit fallback) requires a real URL — typically
+ * a Vercel Marketplace / Neon pooled connection string. Local mock falls back
+ * to docker-compose Postgres so `pnpm --filter @workspace/db run push` works.
  */
 export function resolveDatabaseUrl(): string {
   loadRootEnv();
@@ -59,9 +64,10 @@ export function resolveDatabaseUrl(): string {
     process.env.DATABASE_URL = existing;
     return existing;
   }
-  if (process.env.REPL_ID) {
+  if (isHostedRuntime()) {
+    const host = process.env.VERCEL ? "Vercel" : "Replit";
     throw new Error(
-      "DATABASE_URL must be set. Did you forget to provision a database?",
+      `DATABASE_URL must be set on ${host}. Use a Neon/Vercel Postgres pooled URL (see README).`,
     );
   }
   process.env.DATABASE_URL = LOCAL_COMPOSE_DATABASE_URL;

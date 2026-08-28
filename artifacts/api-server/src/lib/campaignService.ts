@@ -14,6 +14,8 @@ import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
 import { publicOrigin } from "./assetUrl.js";
 import { JOB_STATUS } from "./jobStatus.js";
+import { runInBackground } from "./background.js";
+import { processPendingJobs } from "./worker.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -144,6 +146,13 @@ export async function generateCampaignAsync(
     }
 
     logger.info({ campaignId }, "Campaign generated successfully");
+    // Drain image jobs in this invocation so generate works on Vercel
+    // (no long-lived in-process worker). Failures stay on the job row.
+    try {
+      await processPendingJobs(3);
+    } catch (err) {
+      logger.error({ err, campaignId }, "Image job drain after generate failed");
+    }
   } catch (err) {
     logger.error({ err, campaignId }, "Campaign generation error");
     await db
@@ -195,9 +204,13 @@ export async function createCampaign(input: {
 
   const campaign = await getCampaignRecord(id);
 
-  generateCampaignAsync(id, brief, productImageUrl, productImageNoBgUrl).catch((err) => {
-    logger.error({ err, campaignId: id }, "Async campaign generation failed");
-  });
+  runInBackground(
+    generateCampaignAsync(id, brief, productImageUrl, productImageNoBgUrl).catch(
+      (err) => {
+        logger.error({ err, campaignId: id }, "Async campaign generation failed");
+      },
+    ),
+  );
 
   return toCampaignResponse(campaign!);
 }
@@ -370,6 +383,11 @@ export async function reviseCampaignById(id: string, request: string) {
         status: JOB_STATUS.pending,
       });
     }
+    runInBackground(
+      processPendingJobs(3).catch((err) => {
+        logger.error({ err, campaignId: id }, "Image job drain after revise failed");
+      }),
+    );
   }
 
   const fresh = await getCampaignRecord(id);

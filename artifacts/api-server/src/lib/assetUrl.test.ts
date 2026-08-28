@@ -12,6 +12,7 @@ function withEnv(overrides: Record<string, string | undefined>, fn: () => void):
     "PUBLIC_APP_URL",
     "REPLIT_DEV_DOMAIN",
     "REPLIT_DOMAINS",
+    "VERCEL_URL",
     "PORT",
     "API_PORT",
     "VITE_DEV_PORT",
@@ -61,6 +62,7 @@ test("PUBLIC_APP_URL wins for Stripe/browser origin; local assets stay relative"
       PUBLIC_APP_URL: "http://localhost:5173",
       REPLIT_DEV_DOMAIN: undefined,
       REPLIT_DOMAINS: undefined,
+      VERCEL_URL: undefined,
       PORT: undefined,
       API_PORT: "8080",
       VITE_DEV_PORT: undefined,
@@ -90,6 +92,25 @@ test("https://localhost is never used for asset URLs", () => {
       const url = publicAssetUrl("ad-images/x/0.png");
       assert.equal(url, "/api/assets/ad-images/x/0.png");
       assert.ok(!url.includes("https://localhost"));
+    },
+  );
+});
+
+test("Vercel deployment uses VERCEL_URL for origin; assets stay relative", () => {
+  withEnv(
+    {
+      PUBLIC_APP_URL: undefined,
+      REPLIT_DEV_DOMAIN: undefined,
+      REPLIT_DOMAINS: undefined,
+      VERCEL_URL: "launchpad-abc.vercel.app",
+      PORT: undefined,
+      API_PORT: undefined,
+      VITE_DEV_PORT: undefined,
+    },
+    () => {
+      assert.equal(publicOrigin(), "https://launchpad-abc.vercel.app");
+      assert.equal(apiListenOrigin(), "https://launchpad-abc.vercel.app");
+      assert.equal(publicAssetUrl("ad-images/x/0.png"), "/api/assets/ad-images/x/0.png");
     },
   );
 });

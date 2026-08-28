@@ -4,7 +4,7 @@ Founders describe their product, get a complete AI-generated ad campaign, and pu
 
 ## Run & Operate
 
-Local mock (no Replit `DATABASE_URL`): copy `.env.example` to `.env` (names only). Then:
+Production host is **Vercel** (see `README.md` and `vercel.json`). Replit is not required. Local mock: copy `.env.example` to `.env` (names only). Then:
 
 ```bash
 docker compose up -d --wait
@@ -13,7 +13,7 @@ pnpm --filter @workspace/api-server run dev
 pnpm --filter @workspace/launchpad run dev
 ```
 
-Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad`. Keep `ADS_MODE=mock`. `curl http://127.0.0.1:8080/api/healthz`.
+On Vercel, `DATABASE_URL` is required (Neon pooled URL). Locally, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad`. Keep `ADS_MODE=mock`. `curl http://127.0.0.1:8080/api/healthz`.
 
 - `pnpm run db:up` — same as `docker compose up -d --wait`
 - `pnpm --filter @workspace/launchpad run dev` — frontend on 5173; proxies `/api` and `/p` to the API
@@ -29,9 +29,9 @@ Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@12
 - Frontend: React + Vite + Tailwind CSS + shadcn/ui (Instrument Serif + Inter fonts)
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM (`DATABASE_URL` required to boot)
-- AI copy: Grok (`XAI_API_KEY`) writes generate + revise from the founder prompt. Anthropic is not required.
+- AI copy: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Anthropic is not required.
 - Image gen: `gemini-3-pro-image-preview` then `gpt-image-1`; fail-closed (no silent SVG). Optional fal.ai for product-photo background removal only.
-- Storage: Replit Object Storage, local `/tmp/launchpad-assets` fallback; public URLs are relative `/api/assets/...`
+- Storage: Vercel Blob (primary), Replit Object Storage fallback, local `/tmp/launchpad-assets`; public URLs are relative `/api/assets/...`
 - Payments: Stripe Checkout; webhook sets `in_review` (does **not** auto-publish)
 - Ads: Meta + TikTok + Google (v1). LinkedIn unimplemented. Mock by default (`ADS_MODE=mock`). Saving connector creds never flips live. Client brands publish to per-customer ad account IDs; house env IDs are LaunchPad tests only.
 - Auth: magic links via email (log-only in v1)
@@ -75,8 +75,8 @@ The experience is one page that evolves through states:
 
 ## Secrets required (NAMES only)
 
-- `DATABASE_URL` — required on Replit; local mock falls back to docker-compose Postgres
-- `XAI_API_KEY` — required for campaign copy (Grok). `XAI_BASE_URL` / `XAI_MODEL` optional.
+- `DATABASE_URL` — required on Vercel (Neon pooled URL); local mock falls back to docker-compose Postgres
+- `AI_GATEWAY_API_KEY` / OIDC — preferred for campaign copy (Grok). `XAI_API_KEY` is fallback only.
 - `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` — optional (reference vision only)
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
@@ -101,9 +101,9 @@ _Populate as you build — explicit user instructions worth remembering across s
 - Jobs status is `done` (not `completed`).
 - Local asset URLs are relative `/api/assets/...`, never `https://localhost`.
 - After any spec change: run `pnpm --filter @workspace/api-spec run codegen` before writing routes
-- Local mock needs Postgres: `docker compose up -d --wait` then `pnpm --filter @workspace/db run push`. Off Replit, empty `DATABASE_URL` uses the compose URL. Do not set `ADS_MODE=live`.
+- Local mock needs Postgres: `docker compose up -d --wait` then `pnpm --filter @workspace/db run push`. Vercel production needs `DATABASE_URL` (no compose). Empty local `DATABASE_URL` uses the compose URL. Do not set `ADS_MODE=live`.
 
 ## Pointers
 
-- See `README.md` for full setup: Stripe webhook forward, Meta / TikTok / Google dashboard steps
+- See `README.md` for Vercel boot, schema push, Stripe webhook, Meta / TikTok / Google dashboard steps
 - See `.env.example` for names that match CODE
