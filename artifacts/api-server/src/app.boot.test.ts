@@ -28,6 +28,13 @@ test("health.ts does not import workspace packages", () => {
   assert.equal(/@workspace\//.test(src), false);
 });
 
+test("index.ts does not statically import the DB/worker graph", () => {
+  const src = readFileSync(join(here, "index.ts"), "utf8");
+  assert.equal(/from ["']\.\/lib\/worker/.test(src), false);
+  assert.equal(/from ["']\.\/lib\/spendGuard/.test(src), false);
+  assert.equal(/from ["']\.\/lib\/referenceAssets/.test(src), false);
+});
+
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {
   const app = express();
   app.use("/api", healthRouter);

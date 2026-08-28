@@ -1,17 +1,20 @@
-import "./loadEnv";
-import app from "./app";
-import { logger } from "./lib/logger";
-import { startWorkerLoop } from "./lib/worker";
-import { startSpendGuardLoop } from "./lib/spendGuard";
-import { ensureSeededInBackground } from "./lib/referenceAssets";
-
 /**
- * Local / long-running entry. Vercel uses `src/app.ts` (exported Express app)
- * as the service entrypoint — do not listen() on Vercel.
+ * Local / long-running entry. Vercel uses `src/app.ts` as the Express
+ * entrypoint. Do not statically import the DB/worker graph here — a Vercel
+ * bundle that includes this file would crash `/api/healthz` at import time.
  */
-if (process.env.VERCEL) {
-  logger.info("Vercel runtime — skipping listen(); src/app.ts is the entrypoint");
-} else {
+if (!process.env.VERCEL) {
+  void bootLocal();
+}
+
+async function bootLocal(): Promise<void> {
+  await import("./loadEnv.js");
+  const { default: app } = await import("./app.js");
+  const { logger } = await import("./lib/logger.js");
+  const { startWorkerLoop } = await import("./lib/worker.js");
+  const { startSpendGuardLoop } = await import("./lib/spendGuard.js");
+  const { ensureSeededInBackground } = await import("./lib/referenceAssets.js");
+
   const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
   const port = Number(rawPort);
 
