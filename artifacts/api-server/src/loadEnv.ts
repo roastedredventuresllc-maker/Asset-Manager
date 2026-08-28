@@ -15,7 +15,7 @@ function parseEnvFile(text: string): void {
     if (eq <= 0) continue;
     const key = line.slice(0, eq).trim();
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-    if (process.env[key] !== undefined) continue;
+    if (process.env[key] !== undefined && process.env[key] !== "") continue;
     let val = line.slice(eq + 1).trim();
     if (
       (val.startsWith('"') && val.endsWith('"')) ||
@@ -23,6 +23,8 @@ function parseEnvFile(text: string): void {
     ) {
       val = val.slice(1, -1);
     }
+    // Names-only .env.example uses KEY= — skip empties so local defaults apply.
+    if (val === "") continue;
     process.env[key] = val;
   }
 }
