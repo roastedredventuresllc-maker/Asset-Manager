@@ -4,8 +4,18 @@ Founders describe their product, get a complete AI-generated ad campaign, and pu
 
 ## Run & Operate
 
-Local (no Replit): copy `.env.example` to `.env`. Names match CODE.
+Local mock (no Replit `DATABASE_URL`): copy `.env.example` to `.env` (names only). Then:
 
+```bash
+docker compose up -d --wait
+pnpm --filter @workspace/db run push
+pnpm --filter @workspace/api-server run dev
+pnpm --filter @workspace/launchpad run dev
+```
+
+Off Replit, unset `DATABASE_URL` uses compose `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad`. Keep `ADS_MODE=mock`. `curl http://127.0.0.1:8080/api/healthz`.
+
+- `pnpm run db:up` — same as `docker compose up -d --wait`
 - `pnpm --filter @workspace/launchpad run dev` — frontend on 5173; proxies `/api` and `/p` to the API
 - `pnpm --filter @workspace/api-server run dev` — API on `API_PORT` (default 8080); loads repo-root `.env`
 - `pnpm run typecheck` — full typecheck across all packages
@@ -65,7 +75,7 @@ The experience is one page that evolves through states:
 
 ## Secrets required (NAMES only)
 
-- `DATABASE_URL` — API will not boot without it
+- `DATABASE_URL` — required on Replit; local mock falls back to docker-compose Postgres
 - `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
@@ -90,6 +100,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 - Jobs status is `done` (not `completed`).
 - Local asset URLs are relative `/api/assets/...`, never `https://localhost`.
 - After any spec change: run `pnpm --filter @workspace/api-spec run codegen` before writing routes
+- Local mock needs Postgres: `docker compose up -d --wait` then `pnpm --filter @workspace/db run push`. Off Replit, empty `DATABASE_URL` uses the compose URL. Do not set `ADS_MODE=live`.
 
 ## Pointers
 

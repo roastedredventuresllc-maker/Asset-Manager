@@ -1,0 +1,22 @@
+# Local Postgres for ADS_MODE=mock. Credentials are local-dev only
+# (same URL as lib/db and the api-server test default). Not production secrets.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: launchpad-postgres
+    environment:
+      POSTGRES_USER: launchpad
+      POSTGRES_PASSWORD: launchpad
+      POSTGRES_DB: launchpad
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U launchpad -d launchpad"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - launchpad_pgdata:/var/lib/postgresql/data
+
+volumes:
+  launchpad_pgdata:

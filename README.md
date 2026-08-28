@@ -6,6 +6,23 @@ Founders describe their product, get a complete AI-generated ad campaign in 30 s
 
 ## Setup
 
+### Boot locally (`ADS_MODE=mock`, no Replit)
+
+Postgres is required for `db push` and the API. House ad accounts stay test-only; this path does not flip live or spend.
+
+```bash
+pnpm install
+cp .env.example .env          # names only — fill keys you have; leave the rest blank
+docker compose up -d --wait   # local Postgres at 127.0.0.1:5432 (user/db: launchpad)
+pnpm --filter @workspace/db run push
+pnpm --filter @workspace/api-server run dev    # API, default 8080
+pnpm --filter @workspace/launchpad run dev     # frontend, 5173, proxies /api
+```
+
+If `DATABASE_URL` is unset off Replit, drizzle and the API use `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad` (the compose database). Put a real URL in `.env` when you are not using compose. Keep `ADS_MODE=mock`.
+
+Confirm the API: `curl -s http://127.0.0.1:8080/api/healthz` → `{"status":"ok"}`.
+
 ### 1. Install dependencies
 ```bash
 pnpm install
