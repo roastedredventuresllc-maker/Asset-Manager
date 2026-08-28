@@ -275,7 +275,13 @@ export interface CampaignMetrics {
 }
 
 export interface CheckoutResult {
-  checkoutUrl: string;
+  /**
+   * Stripe Checkout URL when ADS_MODE=live; null in mock (no charge)
+   * @nullable
+   */
+  checkoutUrl: string | null;
+  adsMode?: string;
+  live?: boolean;
 }
 
 export interface WorkerResult {

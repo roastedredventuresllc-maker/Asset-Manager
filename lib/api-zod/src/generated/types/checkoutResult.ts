@@ -7,5 +7,7 @@
  */
 
 export interface CheckoutResult {
-  checkoutUrl: string;
+  checkoutUrl: string | null;
+  adsMode?: string;
+  live?: boolean;
 }

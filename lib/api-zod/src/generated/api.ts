@@ -187,7 +187,9 @@ export const PublishCampaignBody = zod.object({
 })
 
 export const PublishCampaignResponse = zod.object({
-  "checkoutUrl": zod.string()
+  "checkoutUrl": zod.string().nullable(),
+  "adsMode": zod.string().optional(),
+  "live": zod.boolean().optional()
 })
 
 

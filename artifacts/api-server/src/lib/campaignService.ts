@@ -9,7 +9,12 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "./claude.js";
 import { generateId, generateSlug } from "./ids.js";
 import { getAdPlatformForCampaign } from "../ads/index.js";
-import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
+import { adsMode } from "../ads/connectors.js";
+import {
+  publishCampaignToPlatforms,
+  type PublishOptions,
+  type PublishOutcome,
+} from "./publish.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
 import { publicOrigin } from "./assetUrl.js";
@@ -418,7 +423,12 @@ export async function publishCampaignById(
     googleSharePct?: number;
     successUrl?: string | null;
   },
-): Promise<{ checkoutUrl: string | null }> {
+): Promise<{
+  checkoutUrl: string | null;
+  adsMode: string;
+  live: boolean;
+  outcomes?: PublishOutcome[];
+}> {
   const { dailyBudgetCents, metaSharePct, tiktokSharePct, googleSharePct, successUrl } = opts;
 
   if (!dailyBudgetCents || metaSharePct == null || tiktokSharePct == null) {
@@ -433,6 +443,25 @@ export async function publishCampaignById(
   if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
   if (!campaign.campaignJson) {
     throw new ServiceError(400, "not_generated", "campaign not generated yet");
+  }
+
+  const mode = adsMode();
+  const publishOpts: PublishOptions = {
+    dailyBudgetCents,
+    metaSharePct,
+    tiktokSharePct,
+    googleSharePct: resolveGoogleSharePct(metaSharePct, tiktokSharePct, googleSharePct),
+  };
+
+  // Mock (and any non-live mode) publishes through MockAdPlatform — no Stripe,
+  // no real ad spend. Live mode still requires Checkout before ads go out.
+  if (mode !== "live") {
+    const { live, outcomes } = await publishCampaignToPlatforms(id, publishOpts);
+    if (!live) {
+      const errors = outcomes.map((o) => `${o.platform}: ${o.error ?? "failed"}`).join("; ");
+      throw new ServiceError(502, "publish_failed", `Publishing failed — ${errors}`);
+    }
+    return { checkoutUrl: null, adsMode: mode, live: true, outcomes };
   }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -480,7 +509,7 @@ export async function publishCampaignById(
     .set({ status: "publishing" })
     .where(eq(campaignsTable.id, id));
 
-  return { checkoutUrl: session.url };
+  return { checkoutUrl: session.url, adsMode: mode, live: false };
 }
 
 /**

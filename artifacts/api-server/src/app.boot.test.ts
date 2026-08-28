@@ -64,6 +64,23 @@ test("worker does not retry generate_image (one Imagine + one gpt-image-2 alread
   assert.match(src, /jobIds/);
 });
 
+test("mock publish skips Stripe and allows unclaimed house in production", () => {
+  const publish = readFileSync(join(here, "lib/publish.ts"), "utf8");
+  assert.match(publish, /adsMode\(\) !== "live"/);
+  const service = readFileSync(join(here, "lib/campaignService.ts"), "utf8");
+  assert.match(service, /if \(mode !== "live"\)/);
+  assert.match(service, /publishCampaignToPlatforms/);
+  assert.match(service, /checkoutUrl: null/);
+  const stripeIdx = service.indexOf("STRIPE_SECRET_KEY");
+  const mockIdx = service.indexOf('if (mode !== "live")');
+  assert.ok(mockIdx >= 0 && stripeIdx > mockIdx, "Stripe must run only after the mock branch");
+  const routes = readFileSync(join(here, "routes/campaigns.ts"), "utf8");
+  assert.match(routes, /adsMode\(\) === "live"/);
+  assert.equal(/process\.env\.ADS_MODE\s*=/.test(service), false);
+  assert.equal(/process\.env\.ADS_MODE\s*=/.test(publish), false);
+  assert.equal(/process\.env\.ADS_MODE\s*=/.test(routes), false);
+});
+
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {
   const app = express();
   app.use("/api", healthRouter);

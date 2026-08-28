@@ -228,7 +228,9 @@ export function buildMcpServer(auth: McpAuth): McpServer {
       });
       return ok({
         ...result,
-        note: "Open checkoutUrl to complete payment. Live ads launch only after checkout succeeds.",
+        note: result.checkoutUrl
+          ? "Open checkoutUrl to complete payment. Live ads launch only after checkout succeeds."
+          : "Mock publish completed. No Stripe, no ad spend.",
       });
     }),
   );

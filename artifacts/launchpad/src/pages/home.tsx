@@ -784,9 +784,14 @@ function LaunchPage({
         onSuccess: (res) => {
           if (res?.checkoutUrl) {
             window.location.href = res.checkoutUrl;
-          } else {
-            setShipError("Checkout didn’t start.");
+            return;
           }
+          if (res?.live === true || (res?.adsMode && res.adsMode !== "live")) {
+            window.location.href =
+              window.location.origin + "/?success=true&campaignId=" + campaignId;
+            return;
+          }
+          setShipError("Checkout didn’t start.");
         },
         onError: (err) => {
           setShipError(shipErrorMessage(err));

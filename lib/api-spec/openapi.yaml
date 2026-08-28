@@ -570,7 +570,12 @@ components:
       required: [checkoutUrl]
       properties:
         checkoutUrl:
+          description: Stripe Checkout URL when ADS_MODE=live; null in mock (no charge)
+          type: ["string", "null"]
+        adsMode:
           type: string
+        live:
+          type: boolean
 
     WorkerResult:
       type: object

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, campaignsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { publishCampaignToPlatforms } from "../lib/publish.js";
+import { adsMode } from "../ads/connectors.js";
 import { verifyToken } from "../lib/auth.js";
 import * as svc from "../lib/campaignService.js";
 import { logger } from "../lib/logger.js";
@@ -96,13 +97,10 @@ router.post("/:id/publish", async (req, res) => {
   }
 });
 
-// POST /api/campaigns/:id/test-publish — DEV ONLY.
-// Runs the paid-social publishing pipeline directly, bypassing Stripe, so the
-// publish → live → metrics → pause flow can be tested end-to-end (in mock mode,
-// or against real platforms once Meta/TikTok/Google credentials + ADS_MODE=live are set).
-// Disabled in production.
+// POST /api/campaigns/:id/test-publish — bypass Stripe.
+// Safe in mock (MockAdPlatform, no spend). Disabled only when production AND live.
 router.post("/:id/test-publish", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && adsMode() === "live") {
     return res.status(403).json({ error: "test-publish is disabled in production" });
   }
 

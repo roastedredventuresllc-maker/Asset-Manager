@@ -1,6 +1,7 @@
 import { db, campaignsTable, publishesTable, adAssetsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAdPlatformForCampaign } from "../ads/index.js";
+import { adsMode } from "../ads/connectors.js";
 import { AccountIsolationError } from "../ads/accountTarget.js";
 import { generateId } from "./ids.js";
 import { logger } from "./logger.js";
@@ -83,8 +84,10 @@ export async function publishCampaignToPlatforms(
     scope: campaign.isHouseTest ? "house" : "client",
   };
 
+  // Anonymous founder prompts (no Stripe user) publish through house in mock,
+  // including production mock. Live mode still requires a client assignment.
   const allowUnclaimedHouse =
-    !campaign.userId && process.env.NODE_ENV !== "production";
+    !campaign.userId && (process.env.NODE_ENV !== "production" || adsMode() !== "live");
 
   for (const platform of platforms) {
     const share =
