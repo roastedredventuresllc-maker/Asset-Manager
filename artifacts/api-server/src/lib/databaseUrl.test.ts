@@ -5,7 +5,13 @@ import {
   LOCAL_COMPOSE_DATABASE_URL,
 } from "@workspace/db";
 
-const KEYS = ["DATABASE_URL", "VERCEL", "REPL_ID"] as const;
+const KEYS = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "VERCEL",
+  "REPL_ID",
+] as const;
 
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
   const prev: Record<string, string | undefined> = {};
@@ -40,12 +46,32 @@ test("Vercel uses DATABASE_URL when set", () => {
   );
 });
 
+test("Vercel uses POSTGRES_URL when DATABASE_URL is unset", () => {
+  withEnv(
+    {
+      VERCEL: "1",
+      REPL_ID: undefined,
+      DATABASE_URL: undefined,
+      POSTGRES_URL: "postgres://neon.example/from-postgres-url?sslmode=require",
+      POSTGRES_PRISMA_URL: undefined,
+    },
+    () => {
+      assert.equal(
+        resolveDatabaseUrl(),
+        "postgres://neon.example/from-postgres-url?sslmode=require",
+      );
+    },
+  );
+});
+
 test("Vercel requires DATABASE_URL (no docker-compose fallback)", () => {
   withEnv(
     {
       VERCEL: "1",
       REPL_ID: undefined,
       DATABASE_URL: undefined,
+      POSTGRES_URL: undefined,
+      POSTGRES_PRISMA_URL: undefined,
     },
     () => {
       assert.throws(() => resolveDatabaseUrl(), /DATABASE_URL must be set on Vercel/);

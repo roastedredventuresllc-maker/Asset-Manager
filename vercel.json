@@ -15,7 +15,7 @@
       "root": "artifacts/api-server",
       "framework": "express",
       "entrypoint": "src/app.ts",
-      "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile && sh -c 'if [ -n \"$DATABASE_URL\" ] || [ -n \"$POSTGRES_URL\" ]; then pnpm --filter @workspace/db run push; fi'",
       "functions": {
         "src/app.ts": {
           "maxDuration": 300
@@ -24,6 +24,7 @@
     }
   },
   "rewrites": [
+    { "source": "/healthz", "destination": { "service": "api" } },
     { "source": "/api/(.*)", "destination": { "service": "api" } },
     { "source": "/p/(.*)", "destination": { "service": "api" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }

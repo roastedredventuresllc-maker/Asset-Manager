@@ -51,18 +51,27 @@ function isHostedRuntime(): boolean {
   return Boolean(process.env.VERCEL || process.env.REPL_ID);
 }
 
+const DATABASE_URL_KEYS = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+] as const;
+
 /**
  * Resolve DATABASE_URL for drizzle-kit and the Pool.
  * Production (Vercel primary, Replit fallback) requires a real URL — typically
  * a Vercel Marketplace / Neon pooled connection string. Local mock falls back
  * to docker-compose Postgres so `pnpm --filter @workspace/db run push` works.
+ * Neon Marketplace also injects POSTGRES_URL / POSTGRES_PRISMA_URL.
  */
 export function resolveDatabaseUrl(): string {
   loadRootEnv();
-  const existing = process.env.DATABASE_URL?.trim();
-  if (existing) {
-    process.env.DATABASE_URL = existing;
-    return existing;
+  for (const key of DATABASE_URL_KEYS) {
+    const existing = process.env[key]?.trim();
+    if (existing) {
+      process.env.DATABASE_URL = existing;
+      return existing;
+    }
   }
   if (isHostedRuntime()) {
     const host = process.env.VERCEL ? "Vercel" : "Replit";
