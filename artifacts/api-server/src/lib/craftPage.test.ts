@@ -21,7 +21,16 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.doesNotMatch(board, /linear-gradient/);
   assert.match(home, /What's off|What’s off/);
   assert.doesNotMatch(home, /InSituAd/);
-  assert.doesNotMatch(home, /CAMPAIGN_STEPS/);
+  assert.match(home, /AGENCY_STEPS/);
+  assert.match(home, /Research/);
+  assert.match(home, /\bBrief\b/);
+  assert.match(home, /\bCopy\b/);
+  assert.match(home, /Creative/);
+  assert.match(home, /\bMedia\b/);
+  assert.match(home, /briefing/);
+  assert.match(home, /iframe/);
+  assert.doesNotMatch(home, /Writing…|Writing the campaign/);
+  assert.match(home, /GENERATE_TIMEOUT_MS/);
 });
 
 test("failed photography is not shipped as a gradient ad", () => {

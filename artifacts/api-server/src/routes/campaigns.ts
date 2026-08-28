@@ -63,6 +63,18 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// POST /api/campaigns/:id/render-stills — drain this campaign's stills jobs.
+// Generate returns copy first; this keeps photography alive on Vercel Hobby
+// after the 201. Does not spend ads. ADS_MODE is untouched.
+router.post("/:id/render-stills", async (req, res) => {
+  try {
+    const result = await svc.renderCampaignStills(req.params.id);
+    return res.json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+});
+
 // POST /api/campaigns/:id/revise
 router.post("/:id/revise", async (req, res) => {
   const { request } = req.body as { request?: string };

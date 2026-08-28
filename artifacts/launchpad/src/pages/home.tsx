@@ -19,6 +19,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { CampaignBoard, beatForIndex } from "@/components/campaign-board";
 
 const POST_CHECKOUT_KEY = "launchpad_post_checkout";
+const GENERATE_TIMEOUT_MS = 55_000;
+
+/** Sequential desks an agency runs before it presents. Hold the last step until copy is ready. */
+const AGENCY_STEPS = [
+  { desk: "Research", line: "The market and the category." },
+  { desk: "Brief", line: "Who it’s for, and the position." },
+  { desk: "Copy", line: "Hooks, body, and the landing." },
+  { desk: "Creative", line: "Three boards. One family." },
+  { desk: "Media", line: "Then we present the briefing." },
+] as const;
 
 export default function Home() {
   const searchParams = new URLSearchParams(window.location.search);
@@ -161,9 +171,10 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
   const [brief, setBrief] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const genRef = useRef(0);
   const generateCampaign = useGenerateCampaign();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,10 +192,17 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
       setError("Say what you sell.");
       return;
     }
-    setIsSubmitting(true);
+    const gen = ++genRef.current;
+    setWorking(true);
     setError(null);
     let productImageUrl: string | null = null;
     let productImageNoBgUrl: string | null = null;
+
+    const timeout = window.setTimeout(() => {
+      if (genRef.current !== gen) return;
+      setError("It took too long. Nothing presented. Try again.");
+      setWorking(false);
+    }, GENERATE_TIMEOUT_MS);
 
     try {
       if (file) {
@@ -201,24 +219,21 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
         }
       }
 
-      generateCampaign.mutate(
-        { data: { brief: brief.trim(), productImageUrl, productImageNoBgUrl } },
-        {
-          onSuccess: (campaign) => setCampaignId(campaign.id),
-          onError: () => {
-            setError("We couldn't start. Try again.");
-            setIsSubmitting(false);
-          },
-          onSettled: () => setIsSubmitting(false),
-        },
-      );
+      const campaign = await generateCampaign.mutateAsync({
+        data: { brief: brief.trim(), productImageUrl, productImageNoBgUrl },
+      });
+      window.clearTimeout(timeout);
+      if (genRef.current !== gen) return;
+      setCampaignId(campaign.id);
     } catch {
-      setError("We couldn't start. Try again.");
-      setIsSubmitting(false);
+      window.clearTimeout(timeout);
+      if (genRef.current !== gen) return;
+      setError("We couldn’t write it. Try again.");
+      setWorking(false);
     }
   };
 
-  const isPending = isSubmitting || generateCampaign.isPending;
+  if (working) return <WorkingState />;
 
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
@@ -279,10 +294,9 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
             <button
               type="button"
               onClick={() => void handleSubmit()}
-              disabled={isPending}
               className="font-serif text-[18px] text-foreground hover:opacity-70 disabled:opacity-40 transition-opacity"
             >
-              {isPending ? "Writing…" : "Write it →"}
+              Write it →
             </button>
           </div>
           {error && (
@@ -295,15 +309,49 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
 }
 
 function WorkingState() {
+  const [active, setActive] = useState(0);
+  const total = AGENCY_STEPS.length;
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setActive((a) => Math.min(a + 1, total - 1));
+    }, 2400);
+    return () => window.clearInterval(id);
+  }, [total]);
+
+  const step = AGENCY_STEPS[active];
+
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
       <div className="px-6 pt-8 md:px-10">
         <Mark />
       </div>
-      <div className="flex-1 flex items-center px-6 md:px-10 pb-24">
-        <p className="font-serif text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] text-foreground max-w-[14ch]">
-          Writing the campaign.
+      <div className="flex-1 flex flex-col justify-center px-6 md:px-10 pb-24">
+        <p className="font-serif italic text-[15px] tracking-wide text-[#6e675e]">
+          {step.desk}
         </p>
+        <h1
+          key={step.desk}
+          className="mt-5 font-serif text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] text-foreground max-w-[16ch]"
+        >
+          {step.line}
+        </h1>
+        <ol className="mt-16 flex flex-col gap-2 max-w-[20rem]">
+          {AGENCY_STEPS.map((s, i) => (
+            <li
+              key={s.desk}
+              className={`font-serif text-[15px] ${
+                i === active
+                  ? "text-foreground"
+                  : i < active
+                    ? "text-[#8a8176]"
+                    : "text-[#6e675e]/45"
+              }`}
+            >
+              {s.desk}
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
@@ -414,6 +462,7 @@ function BriefingState({
 }) {
   const [revisionTarget, setRevisionTarget] = useState<string | null>(null);
   const [showLaunch, setShowLaunch] = useState(false);
+  const lastStillsKick = useRef(0);
 
   const { data: campaign } = useGetCampaign(campaignId, {
     query: {
@@ -424,6 +473,20 @@ function BriefingState({
 
   const data = statusRes.campaignData || campaign?.campaignData;
 
+  const assetsGenerating = (statusRes.adAssets ?? []).some(
+    (a) => a.status !== "done" && a.status !== "failed",
+  );
+
+  useEffect(() => {
+    if (!assetsGenerating) return;
+    const now = Date.now();
+    if (now - lastStillsKick.current < 45_000) return;
+    lastStillsKick.current = now;
+    void fetch(`/api/campaigns/${campaignId}/render-stills`, { method: "POST" }).catch(
+      () => {},
+    );
+  }, [campaignId, assetsGenerating]);
+
   if (!data) return <WorkingState />;
 
   if (showLaunch) {
@@ -432,12 +495,12 @@ function BriefingState({
     );
   }
 
-  const assetsGenerating = (statusRes.adAssets ?? []).some(
-    (a) => a.status !== "done" && a.status !== "failed",
-  );
   const assetsFailed = (statusRes.adAssets ?? []).some((a) => a.status === "failed");
   const ads = data.ads ?? [];
   const landing = data.landing;
+  const landingPhotoReady = (statusRes.adAssets ?? []).some(
+    (a) => a.status === "done" && Boolean(a.imageUrl),
+  );
   const openBoard = (target: string) => {
     if (assetsGenerating) return;
     setRevisionTarget(target);
@@ -555,14 +618,22 @@ function BriefingState({
             ) : null}
           </button>
           {campaign?.landingSlug ? (
-            <a
-              href={`/p/${campaign.landingSlug}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
-            >
-              The live page
-            </a>
+            <div className="mt-8">
+              <iframe
+                key={landingPhotoReady ? "photo" : "copy"}
+                src={`/p/${campaign.landingSlug}`}
+                title="Landing page"
+                className="w-full h-[28rem] border-0 bg-[#1c1915]"
+              />
+              <a
+                href={`/p/${campaign.landingSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
+              >
+                The live page
+              </a>
+            </div>
           ) : null}
         </div>
       ) : null}

@@ -44,7 +44,7 @@ curl -s https://<deployment>/api/healthz   # {"status":"ok"}
 
 Then open the deployment URL and run generate/revise — `/api` is the same origin.
 
-`vercel.json` also registers a daily cron for `/api/jobs/worker` (image queue backup). Generate already drains image jobs in the same invocation via `waitUntil`. Add `/api/jobs/spend-guard` as another cron if you want hourly spend snapshots (Pro plans allow more frequent schedules).
+`vercel.json` also registers a daily cron for `/api/jobs/worker` (image queue backup). Generate returns copy first, then drains stills via `waitUntil` plus `POST /api/campaigns/:id/render-stills`. Add `/api/jobs/spend-guard` as another cron if you want hourly spend snapshots (Pro plans allow more frequent schedules).
 
 ### Boot locally (`ADS_MODE=mock`)
 
@@ -234,9 +234,9 @@ Generate also drains pending image jobs in the same invocation. Add `CRON_SECRET
 - **Auth**: Magic links via email (no passwords ever)
 
 ### Data flow
-1. User describes the product → `POST /api/campaigns/generate` → Grok writes campaign JSON from that prompt → image jobs enqueued
-2. Frontend polls `GET /api/campaigns/:id/status` until copy is ready; images finish as background jobs (Grok Imagine then `gpt-image-2`, fail-closed)
-3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
+1. User describes the product → `POST /api/campaigns/generate` → Grok writes campaign JSON from that prompt → 201 with copy ready; image jobs drain in the background
+2. Frontend shows agency steps, then the briefing (three ads + landing) as soon as copy is ready; images finish as background jobs (Grok Imagine then `gpt-image-2`, fail-closed)
+3. In-process worker drains `generate_image` jobs (status polls and `POST /api/campaigns/:id/render-stills` keep stills alive on Vercel; optional cron: `POST /api/jobs/worker`)
 4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` webhook → claim campaign, set `in_review` + `pendingPublishJson` (does **not** auto-publish)
 6. Admin stores per-customer ad account IDs (or marks a house test) then approves in `/admin` → publish to those accounts (still mock unless `ADS_MODE=live`)

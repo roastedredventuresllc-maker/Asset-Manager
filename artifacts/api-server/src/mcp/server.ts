@@ -80,9 +80,9 @@ export function buildMcpServer(auth: McpAuth): McpServer {
     {
       title: "Generate campaign",
       description:
-        "Generate a complete ad campaign from a short product brief. Returns a campaign " +
-        "with status 'generating'; poll get_campaign_status until it becomes 'ready' to " +
-        "see the brand name, three ads, and landing page. No charges occur.",
+        "Generate a complete ad campaign from a short product brief. Returns when copy is " +
+        "ready (brand name, three ads, landing). Stills may still be rendering — poll " +
+        "get_campaign_status for image URLs. No charges occur.",
       inputSchema: {
         brief: z
           .string()

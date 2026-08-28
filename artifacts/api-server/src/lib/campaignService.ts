@@ -96,15 +96,16 @@ export async function getCampaignRecord(
 }
 
 /**
- * Background generation: Grok writes campaign JSON from the founder brief,
- * then image-generation jobs are enqueued. Fire-and-forget from the caller.
+ * Grok writes campaign JSON from the founder brief and enqueues stills jobs.
+ * Does not wait for photography — the briefing can present as soon as copy
+ * is `ready`. Returns job ids so the caller can drain stills in the background.
  */
-export async function generateCampaignAsync(
+export async function writeCampaignCopy(
   campaignId: string,
   brief: string,
   productImageUrl: string | null,
   productImageNoBgUrl?: string | null,
-): Promise<void> {
+): Promise<string[]> {
   try {
     const campaignData = await generateCampaign(brief, {
       hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
@@ -153,18 +154,36 @@ export async function generateCampaignAsync(
       });
     }
 
-    logger.info({ campaignId }, "Campaign generated successfully");
-    try {
-      await processPendingJobs(3, { jobIds });
-    } catch (err) {
-      logger.error({ err, campaignId }, "Image job drain after generate failed");
-    }
+    logger.info({ campaignId }, "Campaign copy ready; stills enqueued");
+    return jobIds;
   } catch (err) {
     logger.error({ err, campaignId }, "Campaign generation error");
     await db
       .update(campaignsTable)
       .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
+    return [];
+  }
+}
+
+/** @deprecated Prefer writeCampaignCopy + a background stills drain. */
+export async function generateCampaignAsync(
+  campaignId: string,
+  brief: string,
+  productImageUrl: string | null,
+  productImageNoBgUrl?: string | null,
+): Promise<void> {
+  const jobIds = await writeCampaignCopy(
+    campaignId,
+    brief,
+    productImageUrl,
+    productImageNoBgUrl,
+  );
+  if (jobIds.length === 0) return;
+  try {
+    await processPendingJobs(3, { jobIds });
+  } catch (err) {
+    logger.error({ err, campaignId }, "Image job drain after generate failed");
   }
 }
 
@@ -208,26 +227,35 @@ export async function createCampaign(input: {
     });
   }
 
-  const work = generateCampaignAsync(
+  // Await copy so POST /generate returns a presentable campaign (status ready
+  // or error). Do not await stills — Hobby will time out, and the briefing
+  // should present while photography is still landing.
+  const jobIds = await writeCampaignCopy(
     id,
     brief,
     productImageUrl,
     productImageNoBgUrl,
-  ).catch((err) => {
-    logger.error({ err, campaignId: id }, "Async campaign generation failed");
-  });
-
-  // Bundled waitUntil is a no-op, so Vercel froze the isolate after the 201
-  // and the campaign stayed `generating`. Await Grok+jobs on Vercel so the
-  // request keeps the function alive. Local stays background for snappy dev.
-  if (process.env.VERCEL) {
-    await work;
-  } else {
-    runInBackground(work);
+  );
+  if (jobIds.length > 0) {
+    runInBackground(
+      processPendingJobs(3, { jobIds }).catch((err) => {
+        logger.error({ err, campaignId: id }, "Image job drain after generate failed");
+      }),
+    );
   }
 
   const campaign = await getCampaignRecord(id);
   return toCampaignResponse(campaign!);
+}
+
+/**
+ * Await this campaign's stills jobs. Used by POST /campaigns/:id/render-stills
+ * so photography keeps running after generate returns copy.
+ */
+export async function renderCampaignStills(id: string) {
+  const campaign = await getCampaignRecord(id);
+  if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  return processPendingJobs(3, { campaignId: id });
 }
 
 /** List campaign summaries for a user, newest first. */
@@ -283,6 +311,18 @@ export async function getCampaignStatus(id: string) {
     where: eq(adAssetsTable.campaignId, id),
     orderBy: [adAssetsTable.idx],
   });
+
+  const stillsPending = assets.some(
+    (a) => a.status !== JOB_STATUS.done && a.status !== JOB_STATUS.failed,
+  );
+  if (stillsPending) {
+    // Keep photography moving if generate's waitUntil froze the isolate.
+    runInBackground(
+      processPendingJobs(3, { campaignId: id }).catch((err) => {
+        logger.error({ err, campaignId: id }, "Status-poll stills drain failed");
+      }),
+    );
+  }
 
   const lifetimeSpendCents =
     campaign.status === "live" || campaign.status === "paused"

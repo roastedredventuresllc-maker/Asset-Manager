@@ -54,9 +54,9 @@ On Vercel, `DATABASE_URL` is required (Neon pooled URL). Locally, unset `DATABAS
 
 ## Architecture
 
-1. User describes product → POST /api/campaigns/generate → Grok writes JSON from that prompt → image jobs enqueued
-2. Frontend polls GET /api/campaigns/:id/status until copy is ready; images finish as background jobs
-3. In-process worker drains `generate_image` jobs (`gemini-3-pro-image-preview` then `gpt-image-1`, fail-closed)
+1. User describes product → POST /api/campaigns/generate → Grok writes JSON from that prompt → 201 with copy ready → image jobs drain in the background
+2. Frontend shows agency steps, then the briefing (three ads + landing) as soon as copy is ready; images finish as background jobs
+3. In-process worker drains `generate_image` jobs (Grok Imagine then `gpt-image-2`, fail-closed)
 4. User clicks Ship → POST /api/campaigns/:id/publish → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` → claim campaign, `in_review` + `pendingPublishJson` (does **not** auto-publish)
 6. Admin assigns per-customer Meta Ad Account / TikTok advertiser / Google Customer IDs (or marks a LaunchPad house test), then approves in `/admin` → publish to those accounts (still mock unless `ADS_MODE=live`)
@@ -66,7 +66,7 @@ On Vercel, `DATABASE_URL` is required (Neon pooled URL). Locally, unset `DATABAS
 
 The experience is one page that evolves through states:
 1. **Input** — Describe your product (no account needed)
-2. **Working** — Quiet wait while Grok writes the campaign from the prompt
+2. **Working** — Agency desks in sequence (research / brief / copy / creative / media) while Grok writes from the prompt. Then present.
 3. **Briefing** — One-pager: brand name, three ads (hero/context/tight crop), landing page iframe
 4. **Revision** — Bottom sheet chat for AI-powered revisions
 5. **Ship** — Daily budget, channel split (Meta/TikTok/Google), Stripe checkout
