@@ -14,10 +14,10 @@
     "api": {
       "root": "artifacts/api-server",
       "framework": "express",
-      "entrypoint": "src/app.ts",
+      "entrypoint": "src/vercel-entry.ts",
       "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
       "functions": {
-        "src/app.ts": {
+        "src/vercel-entry.ts": {
           "maxDuration": 10
         }
       }
