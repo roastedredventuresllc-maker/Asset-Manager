@@ -9,5 +9,6 @@
 export type CampaignDataChannelSplit = {
   metaPct: number;
   tiktokPct: number;
+  googlePct: number;
   rationale: string;
 };

@@ -3,16 +3,18 @@ import { eq } from "drizzle-orm";
 import { getAdPlatform } from "../ads/index.js";
 import { generateId } from "./ids.js";
 import { logger } from "./logger.js";
+import { resolveGoogleSharePct } from "./channelSplit.js";
 import type { CampaignData } from "./claude.js";
 
 export interface PublishOptions {
   dailyBudgetCents: number;
   metaSharePct: number;
   tiktokSharePct: number;
+  googleSharePct?: number;
 }
 
 export interface PublishOutcome {
-  platform: "meta" | "tiktok";
+  platform: "meta" | "tiktok" | "google";
   ok: boolean;
   externalCampaignId?: string;
   error?: string;
@@ -74,14 +76,25 @@ export async function publishCampaignToPlatforms(
     imageUrl: assets.find((a) => a.idx === idx)?.imageUrl ?? null,
   }));
 
-  const platforms: Array<"meta" | "tiktok"> = [];
+  const platforms: Array<"meta" | "tiktok" | "google"> = [];
   if (opts.metaSharePct > 0) platforms.push("meta");
   if (opts.tiktokSharePct > 0) platforms.push("tiktok");
+  const googlePct = resolveGoogleSharePct(
+    opts.metaSharePct,
+    opts.tiktokSharePct,
+    opts.googleSharePct,
+  );
+  if (googlePct > 0) platforms.push("google");
 
   const outcomes: PublishOutcome[] = [];
 
   for (const platform of platforms) {
-    const share = platform === "meta" ? opts.metaSharePct : opts.tiktokSharePct;
+    const share =
+      platform === "meta"
+        ? opts.metaSharePct
+        : platform === "tiktok"
+          ? opts.tiktokSharePct
+          : googlePct;
     const platformBudget = Math.round((opts.dailyBudgetCents * share) / 100);
 
     try {

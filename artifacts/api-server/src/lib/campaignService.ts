@@ -11,6 +11,7 @@ import { generateId, generateSlug } from "./ids.js";
 import { getAdPlatform } from "../ads/index.js";
 import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
 import { logger } from "./logger.js";
+import { resolveGoogleSharePct } from "./channelSplit.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -332,7 +333,7 @@ export async function reviseCampaignById(id: string, request: string) {
     const prevJob = await db.query.jobsTable.findFirst({
       where: and(
         eq(jobsTable.type, "generate_image"),
-        eq(jobsTable.status, "completed"),
+        eq(jobsTable.status, "done"),
       ),
       orderBy: [desc(jobsTable.createdAt)],
     });
@@ -388,10 +389,11 @@ export async function publishCampaignById(
     dailyBudgetCents: number;
     metaSharePct: number;
     tiktokSharePct: number;
+    googleSharePct?: number;
     successUrl?: string | null;
   },
 ): Promise<{ checkoutUrl: string | null }> {
-  const { dailyBudgetCents, metaSharePct, tiktokSharePct, successUrl } = opts;
+  const { dailyBudgetCents, metaSharePct, tiktokSharePct, googleSharePct, successUrl } = opts;
 
   if (!dailyBudgetCents || metaSharePct == null || tiktokSharePct == null) {
     throw new ServiceError(
@@ -441,6 +443,7 @@ export async function publishCampaignById(
       dailyBudgetCents: String(dailyBudgetCents),
       metaSharePct: String(metaSharePct),
       tiktokSharePct: String(tiktokSharePct),
+      googleSharePct: String(resolveGoogleSharePct(metaSharePct, tiktokSharePct, googleSharePct)),
     },
     success_url: successUrl ?? `https://${domain}/?success=true&campaignId=${id}`,
     cancel_url: `https://${domain}/?campaignId=${id}`,
@@ -483,7 +486,7 @@ export async function pauseCampaignById(
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
-      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
+      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
       await platform.pauseCampaign(pub.externalCampaignId);
       await db
         .update(publishesTable)
@@ -553,7 +556,7 @@ export async function resumeCampaignById(id: string) {
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
-      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
+      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
       await platform.resumeCampaign(pub.externalCampaignId);
       await db
         .update(publishesTable)
@@ -710,7 +713,7 @@ export async function getCampaignMetrics(id: string) {
     for (const pub of publishes) {
       if (!pub.externalCampaignId) continue;
       try {
-        const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
+        const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
         const m = await platform.getMetrics(pub.externalCampaignId);
         totalImpressions += m.impressions;
         totalClicks += m.clicks;

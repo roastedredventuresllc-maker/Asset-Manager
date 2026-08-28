@@ -6,11 +6,21 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
 import { uploadBuffer } from "./storage.js";
-import { compositeAdImage, makeSvgFallback } from "./imageComposite.js";
-import type { AspectRatio } from "@workspace/integrations-gemini-ai/image";
+import { compositeAdImage } from "./imageComposite.js";
+import { reencodeToPng, EDIT_MIME } from "./imageMime.js";
+import {
+  buildCraftPrompt,
+  rejectIfFlatGradient,
+  rejectIfNotAPhotograph,
+  slotForIndex,
+  ImageGenerationFailed,
+  CraftReject,
+  GEMINI_IMAGE_MODEL,
+  type AdSlot,
+} from "./craft.js";
 import type { CampaignAd } from "../ads/types.js";
 
-interface GenerateImageJob {
+export interface GenerateImageJob {
   campaignId: string;
   adAssetId: string;
   idx: number;
@@ -20,159 +30,152 @@ interface GenerateImageJob {
   productImageNoBgUrl?: string | null;
 }
 
-// We composite clean, on-brand typography ourselves, so the AI image should be
-// pure photography with no rendered text/logos (AI text tends to be garbled).
-const PHOTO_STYLE =
-  " Professional advertising product photography, photorealistic, sharp focus, high detail, studio-grade lighting, premium commercial campaign quality. Absolutely no text, no words, no letters, no logos, no watermarks.";
+export interface ImageGenerators {
+  generateWithGemini: (
+    prompt: string,
+    slot: AdSlot,
+    productPng?: Buffer,
+  ) => Promise<Buffer | null>;
+  generateWithOpenAI: (
+    prompt: string,
+    slot: AdSlot,
+    productPng?: Buffer,
+  ) => Promise<Buffer | null>;
+}
 
 async function fetchProductImage(url: string): Promise<Buffer | undefined> {
   try {
     const res = await fetch(url);
     if (!res.ok) return undefined;
     const input = Buffer.from(await res.arrayBuffer());
-    // Normalize to PNG so the edit calls' declared MIME type (image/png for
-    // both Gemini inlineData and the OpenAI temp file) matches the real bytes.
-    // Uploads are stored as JPEG, which would otherwise be a format mismatch.
-    const { default: sharp } = await import("sharp");
-    return await sharp(input).png().toBuffer();
+    // JPEG/PNG trap: uploads are JPEG. Edit calls declare PNG. Re-encode.
+    return await reencodeToPng(input);
   } catch {
     return undefined;
   }
 }
 
-/** Text-to-image with gpt-image-1. Square or portrait depending on the slot. */
-async function generateWithOpenAI(
+async function defaultGemini(
   prompt: string,
-  portrait: boolean,
-): Promise<Buffer | null> {
-  try {
-    const { openai } = await import("@workspace/integrations-openai-ai-server/image");
-    const res = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: prompt + PHOTO_STYLE,
-      size: portrait ? "1024x1536" : "1024x1024",
-      quality: "medium",
-    });
-    const b64 = res.data?.[0]?.b64_json;
-    return b64 ? Buffer.from(b64, "base64") : null;
-  } catch (err) {
-    logger.warn({ err }, "gpt-image-1 generation failed");
-    return null;
-  }
-}
-
-/** Image edit with gpt-image-1 — features the user's actual product photo. */
-async function editWithOpenAI(
-  productBuffer: Buffer,
-  prompt: string,
-): Promise<Buffer | null> {
-  const tmpPath = join(tmpdir(), `product-${randomUUID()}.png`);
-  try {
-    const { editImages } = await import("@workspace/integrations-openai-ai-server/image");
-    await writeFile(tmpPath, productBuffer);
-    return await editImages([tmpPath], prompt + PHOTO_STYLE);
-  } catch (err) {
-    logger.warn({ err }, "gpt-image-1 edit failed");
-    return null;
-  } finally {
-    await unlink(tmpPath).catch(() => {});
-  }
-}
-
-/**
- * Primary generator: Nano Banana (Google Gemini 2.5 Flash Image).
- * If `productBuffer` is provided, the scene is built around that real product
- * photo (image editing); otherwise it's pure text-to-image. Lazily imported so
- * a missing integration degrades to the OpenAI fallback instead of crashing.
- */
-async function generateWithGemini(
-  prompt: string,
-  aspectRatio: AspectRatio,
-  productBuffer?: Buffer,
+  slot: AdSlot,
+  productPng?: Buffer,
 ): Promise<Buffer | null> {
   try {
     const gemini = await import("@workspace/integrations-gemini-ai/image");
-    if (productBuffer) {
+    if (!gemini.isGeminiImageConfigured()) return null;
+    if (productPng) {
       return await gemini.editImage(
-        prompt + PHOTO_STYLE,
-        { data: productBuffer, mimeType: "image/png" },
-        aspectRatio,
+        prompt,
+        { data: productPng, mimeType: EDIT_MIME },
+        slot.aspectRatio,
       );
     }
-    return await gemini.generateImage(prompt + PHOTO_STYLE, aspectRatio);
+    return await gemini.generateImage(prompt, slot.aspectRatio);
   } catch (err) {
-    logger.warn({ err }, "Nano Banana (gemini-2.5-flash-image) generation failed");
+    logger.warn({ err, model: GEMINI_IMAGE_MODEL }, "Gemini image generation missed");
     return null;
   }
 }
 
-async function generateImageBuffer(
+async function defaultOpenAI(
+  prompt: string,
+  slot: AdSlot,
+  productPng?: Buffer,
+): Promise<Buffer | null> {
+  try {
+    const openai = await import("@workspace/integrations-openai-ai-server/image");
+    if (!openai.isOpenAIImageConfigured()) return null;
+    if (productPng) {
+      const tmpPath = join(tmpdir(), `product-${randomUUID()}.png`);
+      try {
+        await writeFile(tmpPath, productPng);
+        return await openai.editImages([tmpPath], prompt);
+      } finally {
+        await unlink(tmpPath).catch(() => {});
+      }
+    }
+    const portrait = slot.aspectRatio === "9:16" || slot.aspectRatio === "4:5";
+    return await openai.generateImageBuffer(prompt, portrait ? "1024x1536" : "1024x1024");
+  } catch (err) {
+    logger.warn({ err }, "gpt-image-1 generation missed");
+    return null;
+  }
+}
+
+export const defaultImageGenerators: ImageGenerators = {
+  generateWithGemini: defaultGemini,
+  generateWithOpenAI: defaultOpenAI,
+};
+
+/**
+ * Generate one campaign ad photograph. Fail-closed:
+ * Gemini miss → gpt-image-1 → FAILED. Never an SVG/gradient.
+ */
+export async function generateImageBuffer(
   job: GenerateImageJob,
+  generators: ImageGenerators = defaultImageGenerators,
 ): Promise<{ buffer: Buffer; model: string }> {
-  const { ad, idx, productImageUrl, productImageNoBgUrl } = job;
-  const portrait = idx === 1;
-  const width = 1080;
-  const height = portrait ? 1920 : 1080;
-  const aspectRatio: AspectRatio = portrait ? "9:16" : "1:1";
+  const slot = slotForIndex(job.idx);
+  const heroImageUrl = job.productImageNoBgUrl ?? job.productImageUrl;
+  const productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
+  const hasProductPhoto = !!productPng;
 
-  // Prefer the background-removed PNG (transparent cutout) for the hero ad
-  // so the AI model composites the subject cleanly into the generated scene.
-  // Fall back to the original photo if no-bg processing was unavailable.
-  const heroImageUrl = productImageNoBgUrl ?? productImageUrl;
-  const productBuffer = heroImageUrl
-    ? await fetchProductImage(heroImageUrl)
-    : undefined;
-
-  // Hero ad (idx 0): if the user uploaded a product photo, build the scene
-  // around it. Other slots are pure text-to-image.
-  const useProductPhoto = idx === 0 && !!productBuffer;
+  const prompt = buildCraftPrompt({
+    ad: job.ad,
+    slot,
+    brandName: job.brandName,
+    hasProductPhoto,
+  });
 
   let raw: Buffer | null = null;
   let model = "";
 
-  // Primary: Nano Banana (Gemini 2.5 Flash Image) — best-in-class generation.
-  raw = await generateWithGemini(
-    ad.imagePrompt,
-    aspectRatio,
-    useProductPhoto ? productBuffer : undefined,
+  raw = await generators.generateWithGemini(
+    prompt,
+    slot,
+    hasProductPhoto ? productPng : undefined,
   );
-  if (raw) model = useProductPhoto ? "gemini-2.5-flash-image-edit" : "gemini-2.5-flash-image";
-
-  // Fallback: gpt-image-1 (OpenAI) if Nano Banana is unavailable.
-  if (!raw && useProductPhoto) {
-    raw = await editWithOpenAI(productBuffer!, ad.imagePrompt);
-    if (raw) model = "gpt-image-1-edit";
-  }
-  if (!raw) {
-    raw = await generateWithOpenAI(ad.imagePrompt, portrait);
-    if (raw) model = "gpt-image-1";
-  }
-
   if (raw) {
-    const finalBuffer = await compositeAdImage({
-      ad,
-      brandName: job.brandName,
-      sourceImageBuffer: raw,
-      width,
-      height,
-    });
-    return { buffer: finalBuffer, model };
+    model = hasProductPhoto
+      ? `${GEMINI_IMAGE_MODEL}-edit`
+      : GEMINI_IMAGE_MODEL;
   }
 
-  // Last-resort fallback: branded gradient (no image model available)
-  logger.info({ adAssetId: job.adAssetId }, "Using SVG fallback for ad image");
-  const svgBuffer = await makeSvgFallback({
-    ad,
+  if (!raw) {
+    raw = await generators.generateWithOpenAI(
+      prompt,
+      slot,
+      hasProductPhoto ? productPng : undefined,
+    );
+    if (raw) model = hasProductPhoto ? "gpt-image-1-edit" : "gpt-image-1";
+  }
+
+  if (!raw) {
+    throw new ImageGenerationFailed(
+      "Generation failed. Gemini and gpt-image-1 both missed. A branded gradient is not an ad.",
+    );
+  }
+
+  rejectIfNotAPhotograph(raw);
+  await rejectIfFlatGradient(raw);
+
+  const finalBuffer = await compositeAdImage({
+    ad: job.ad,
     brandName: job.brandName,
-    sourceImageBuffer: productBuffer,
-    width,
-    height,
+    sourceImageBuffer: raw,
+    width: slot.width,
+    height: slot.height,
   });
-  return { buffer: svgBuffer, model: "svg-fallback" };
+
+  return { buffer: finalBuffer, model };
 }
 
-export async function processImageJob(job: GenerateImageJob): Promise<void> {
-  logger.info({ adAssetId: job.adAssetId, idx: job.idx }, "Processing image job");
+export async function processImageJob(
+  job: GenerateImageJob,
+  generators: ImageGenerators = defaultImageGenerators,
+): Promise<void> {
+  const slot = slotForIndex(job.idx);
+  logger.info({ adAssetId: job.adAssetId, idx: job.idx, role: slot.role }, "Processing image job");
 
   await db
     .update(adAssetsTable)
@@ -180,7 +183,7 @@ export async function processImageJob(job: GenerateImageJob): Promise<void> {
     .where(eq(adAssetsTable.id, job.adAssetId));
 
   try {
-    const { buffer, model } = await generateImageBuffer(job);
+    const { buffer, model } = await generateImageBuffer(job, generators);
     const key = `ad-images/${job.campaignId}/${job.idx}.png`;
     const imageUrl = await uploadBuffer(key, buffer, "image/png");
 
@@ -190,17 +193,24 @@ export async function processImageJob(job: GenerateImageJob): Promise<void> {
         imageUrl,
         model,
         status: "done",
-        format: job.idx === 1 ? "1080x1920" : "1080x1080",
+        format: slot.format,
       })
       .where(eq(adAssetsTable.id, job.adAssetId));
 
     logger.info({ adAssetId: job.adAssetId, imageUrl, model }, "Image job done");
   } catch (err) {
-    logger.error({ err, adAssetId: job.adAssetId }, "Image job failed");
+    const craft = err instanceof CraftReject || err instanceof ImageGenerationFailed;
+    logger.error({ err, adAssetId: job.adAssetId, craft }, "Image job failed");
 
     await db
       .update(adAssetsTable)
-      .set({ status: "failed" })
+      .set({
+        status: "failed",
+        imageUrl: null,
+        model: null,
+      })
       .where(eq(adAssetsTable.id, job.adAssetId));
+
+    throw err;
   }
 }

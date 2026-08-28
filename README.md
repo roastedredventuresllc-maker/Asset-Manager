@@ -1,6 +1,6 @@
 # LaunchPad
 
-Founders describe their product, get a complete AI-generated ad campaign in 30 seconds, and push it live to Meta + TikTok — without ever touching an ad platform.
+Founders describe their product, get a complete AI-generated ad campaign in 30 seconds, and push it live to Meta, TikTok, and Google — without ever touching an ad platform.
 
 ---
 
@@ -17,16 +17,26 @@ All secrets are set in Replit Secrets (the padlock icon in the sidebar). The app
 
 | Secret | Required | Where to get it |
 |--------|----------|-----------------|
-| `ANTHROPIC_API_KEY` | **Yes** | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — falls back to SVG gradient ads if absent |
+| `ANTHROPIC_API_KEY` | **Yes** (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `GEMINI_API_KEY` | For photoreal ads (or `AI_INTEGRATIONS_GEMINI_API_KEY`) | [aistudio.google.com](https://aistudio.google.com) → API keys. Quality path is `gemini-3-pro-image-preview`. |
+| `OPENAI_API_KEY` | Fallback images (or `AI_INTEGRATIONS_OPENAI_API_KEY`) | [platform.openai.com](https://platform.openai.com) → API keys |
+| `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — background removal only |
 | `STRIPE_SECRET_KEY` | For payments | [dashboard.stripe.com](https://dashboard.stripe.com) → Developers → API Keys |
 | `STRIPE_WEBHOOK_SECRET` | For webhooks | Run `stripe listen` or add endpoint in Stripe dashboard |
+| `ADMIN_PASSWORD` | Admin + encrypted connectors | Any strong password |
 | `META_SYSTEM_USER_TOKEN` | For Meta ads | See Meta setup below |
-| `META_BUSINESS_ID` | For Meta ads | Meta Business Manager → Business Settings |
+| `META_BUSINESS_ID` | For Meta ads | **Ad Account ID** (digits only), not the Business Manager ID |
 | `META_DEFAULT_PAGE_ID` | For Meta ads | Your Facebook Page ID |
 | `TIKTOK_ACCESS_TOKEN` | For TikTok ads | See TikTok setup below |
 | `TIKTOK_BC_ID` | For TikTok ads | TikTok Business Center ID |
 | `TIKTOK_ADVERTISER_ID` | For TikTok ads | TikTok Ads Manager advertiser ID |
+| `TIKTOK_IDENTITY_ID` | For TikTok ads | Verified identity ID for image ads |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | Google Ads API Center |
+| `GOOGLE_ADS_CLIENT_ID` | For Google Ads | Google Cloud OAuth client |
+| `GOOGLE_ADS_CLIENT_SECRET` | For Google Ads | Google Cloud OAuth client |
+| `GOOGLE_ADS_REFRESH_TOKEN` | For Google Ads | OAuth Playground, AdWords scope |
+| `GOOGLE_ADS_CUSTOMER_ID` | For Google Ads | Customer ID (digits; dashes stripped) |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional | Manager account customer ID |
 | `WORKER_SECRET` | Optional | Any random string — secures the job worker endpoint |
 
 ### 3. Environment variables
@@ -54,13 +64,13 @@ pnpm --filter @workspace/launchpad run dev
 
 ## Mock Mode vs Live Mode
 
-`ADS_MODE=mock` (the default) makes everything work end-to-end without any ad platform credentials:
-- Campaign generation via Claude works immediately (only `ANTHROPIC_API_KEY` needed)
-- Image generation via fal.ai works when `FAL_API_KEY` is set; falls back to SVG gradient ads otherwise
+`ADS_MODE=mock` (the default) makes publishing work end-to-end without spending:
+- Campaign generation via Claude works when `ANTHROPIC_API_KEY` (or `AI_INTEGRATIONS_ANTHROPIC_API_KEY`) is set
+- Image generation uses `gemini-3-pro-image-preview`, then `gpt-image-1`. If both miss, the job **fails** — a branded gradient is not an ad
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`
 
-**To go live**: set `ADS_MODE=live` in Replit Secrets once your Meta and TikTok approvals land. That's the only change needed.
+**To go live**: set `ADS_MODE=live` once Meta, TikTok, and Google credentials are saved. Saving credentials in Admin → Connectors does **not** flip live.
 
 ---
 
@@ -117,7 +127,7 @@ Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
 4. Approval: typically 1–2 weeks; you can create and pause campaigns in Standard Access while waiting
 
 ### Step 4: Get IDs
-- `META_BUSINESS_ID`: Business Settings → Business Info → Business Manager ID
+- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → Ad Account ID (digits only). This product stores it as `META_BUSINESS_ID`.
 - `META_DEFAULT_PAGE_ID`: Your Facebook Page → About → Page ID
 
 ---
@@ -143,7 +153,17 @@ Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
-## Scheduled Deployments (Crons)
+## Google Ads Setup
+
+v1 channel. Saving these in Admin → Connectors does **not** turn on live spend (`ADS_MODE` stays `mock` until you set it).
+
+1. Google Ads Manager → API Center → developer token → `GOOGLE_ADS_DEVELOPER_TOKEN` ([API Center](https://ads.google.com/aw/apicenter))
+2. Google Cloud Console → APIs & Services → Credentials → OAuth client → `GOOGLE_ADS_CLIENT_ID` and `GOOGLE_ADS_CLIENT_SECRET` ([Credentials](https://console.cloud.google.com/apis/credentials))
+3. OAuth Playground with the AdWords scope → `GOOGLE_ADS_REFRESH_TOKEN` ([Playground](https://developers.google.com/oauthplayground))
+4. Ads account Customer ID (digits; dashes stripped) → `GOOGLE_ADS_CUSTOMER_ID`
+5. Only if you publish through a manager account: `GOOGLE_ADS_LOGIN_CUSTOMER_ID`
+
+---
 
 After deploying, set up four scheduled deployments in Replit:
 
@@ -164,10 +184,10 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 - **Backend**: Express 5 + Node.js 24 + TypeScript
 - **Database**: PostgreSQL + Drizzle ORM
 - **AI**: Claude claude-sonnet-4-5 for generation + revision
-- **Image gen**: fal.ai (FLUX 1.1 Pro, Ideogram v3, Gemini Flash Edit) with SVG fallback
+- **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
 - **Storage**: Replit Object Storage
 - **Payments**: Stripe Checkout + subscriptions + metered usage
-- **Ads**: Agency accounts on Meta + TikTok (mock mode by default)
+- **Ads**: House accounts on Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
 - **Auth**: Magic links via email (no passwords ever)
 
 ### Data flow
@@ -198,4 +218,4 @@ $99/mo Pro is **never shown in the ship flow**. It surfaces only:
 - In the account settings page
 - When a user tries to start a second concurrent live campaign (one-line inline upsell)
 
-Pro includes: 5% service fee, up to 5 simultaneous campaigns, Google + LinkedIn channels, custom domain.
+Pro includes: 5% service fee, up to 5 simultaneous campaigns, custom domain. v1 ad channels are Meta, TikTok, and Google (LinkedIn is out of v1).

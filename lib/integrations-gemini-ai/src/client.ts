@@ -1,21 +1,35 @@
 import { GoogleGenAI } from "@google/genai";
+import { resolveGeminiAuth } from "./auth";
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_BASE_URL must be set. Did you forget to provision the Gemini AI integration?",
-  );
+let cached: GoogleGenAI | null = null;
+let cachedKey: string | null = null;
+
+export function getGeminiClient(): GoogleGenAI {
+  const auth = resolveGeminiAuth();
+  if (!auth) {
+    throw new Error(
+      "Gemini is not configured. Set GEMINI_API_KEY or AI_INTEGRATIONS_GEMINI_API_KEY.",
+    );
+  }
+  const cacheKey = `${auth.baseUrl}::${auth.apiKey}`;
+  if (!cached || cachedKey !== cacheKey) {
+    cached = new GoogleGenAI({
+      apiKey: auth.apiKey,
+      httpOptions: {
+        apiVersion: "",
+        baseUrl: auth.baseUrl,
+      },
+    });
+    cachedKey = cacheKey;
+  }
+  return cached;
 }
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_API_KEY must be set. Did you forget to provision the Gemini AI integration?",
-  );
-}
-
-export const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+/** Lazy stand-in for the previous eager `ai` export. Does not throw at import. */
+export const ai: GoogleGenAI = new Proxy({} as GoogleGenAI, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getGeminiClient() as object, prop, receiver);
   },
 });
+
+export { isGeminiConfigured, resolveGeminiAuth } from "./auth";

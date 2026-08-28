@@ -471,6 +471,9 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
   const assetsGenerating = (statusRes.adAssets ?? []).some(
     (a: any) => a.status !== "done" && a.status !== "failed",
   );
+  const assetsFailed = (statusRes.adAssets ?? []).some(
+    (a: any) => a.status === "failed",
+  );
 
   return (
     <div className="min-h-[100dvh] bg-background pb-32 animate-in fade-in duration-1000">
@@ -505,10 +508,15 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
             <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Three Ads</div>
             <div className="text-[11px] font-sans text-muted-foreground hidden sm:block">Previewed in-feed — switch platforms on each ad</div>
           </div>
+          {assetsFailed && (
+            <p className="mb-8 text-center font-sans text-sm text-red-700">
+              Generation failed. A branded gradient is not an ad — retry from the start.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-14 items-start">
             {data.ads.map((ad: any, i: number) => {
               const asset = statusRes.adAssets?.find((a: any) => a.idx === i);
-              const placement: "square" | "vertical" = i === 1 ? "vertical" : "square";
+              const placement: "portrait" | "vertical" = i === 1 ? "vertical" : "portrait";
               return (
                 <div key={i} className="flex flex-col gap-5">
                   <InSituAd
@@ -558,10 +566,10 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
         <div className="flex flex-col items-center gap-6">
           <button 
             onClick={() => setShowLaunch(true)}
-            disabled={assetsGenerating}
+            disabled={assetsGenerating || assetsFailed}
             className="bg-foreground text-background px-8 py-4 rounded-full font-sans font-medium text-lg flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {assetsGenerating ? "Finishing images…" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
+            {assetsGenerating ? "Finishing images…" : assetsFailed ? "Generation failed" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
           </button>
           
           <button 
@@ -709,7 +717,9 @@ function shipErrorMessage(err: unknown): string {
 
 function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: any; onBack: () => void }) {
   const [budget, setBudget] = useState(data.recommendedBudgetPreset === 'scale' ? 20000 : data.recommendedBudgetPreset === 'starter' ? 2500 : 7500);
-  const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 50);
+  const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 40);
+  const [tiktokPct, setTiktokPct] = useState(data.channelSplit?.tiktokPct || 30);
+  const googlePct = Math.max(0, 100 - metaPct - tiktokPct);
   const [showAdjust, setShowAdjust] = useState(false);
   const [shipError, setShipError] = useState<string | null>(null);
   const publish = usePublishCampaign();
@@ -721,7 +731,8 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
       data: { 
         dailyBudgetCents: budget, 
         metaSharePct: metaPct, 
-        tiktokSharePct: 100 - metaPct,
+        tiktokSharePct: tiktokPct,
+        googleSharePct: googlePct,
         successUrl: window.location.origin + "/?success=true&campaignId=" + campaignId
       }
     }, {
@@ -778,21 +789,43 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
         <div className="mb-12">
           <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-6 text-center">Channels</div>
           <div className="text-center font-sans text-sm mb-4">
-            Running {metaPct}% Meta · {100 - metaPct}% TikTok — picked for your audience
+            Running {metaPct}% Meta · {tiktokPct}% TikTok · {googlePct}% Google — picked for your audience
             {!showAdjust && <button onClick={() => setShowAdjust(true)} className="ml-2 text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border">Adjust</button>}
           </div>
           {showAdjust && (
-            <div className="px-12 py-4">
-              <Slider 
-                value={[metaPct]} 
-                onValueChange={(v) => setMetaPct(v[0])} 
-                max={100} 
-                step={5} 
-                className="w-full"
-              />
-              <div className="flex justify-between mt-2 text-xs font-sans text-muted-foreground">
-                <span>Meta</span>
-                <span>TikTok</span>
+            <div className="px-12 py-4 flex flex-col gap-6">
+              <div>
+                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
+                  <span>Meta</span><span>{metaPct}%</span>
+                </div>
+                <Slider
+                  value={[metaPct]}
+                  onValueChange={(v) => {
+                    const next = Math.min(v[0], 100 - tiktokPct);
+                    setMetaPct(next);
+                  }}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
+                  <span>TikTok</span><span>{tiktokPct}%</span>
+                </div>
+                <Slider
+                  value={[tiktokPct]}
+                  onValueChange={(v) => {
+                    const next = Math.min(v[0], 100 - metaPct);
+                    setTiktokPct(next);
+                  }}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex justify-between text-xs font-sans text-muted-foreground">
+                <span>Google</span><span>{googlePct}%</span>
               </div>
             </div>
           )}

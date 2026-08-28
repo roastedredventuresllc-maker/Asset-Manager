@@ -1,18 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { resolveAnthropicAuth } from "./auth";
 
-if (!process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL) {
-  throw new Error(
-    "AI_INTEGRATIONS_ANTHROPIC_BASE_URL must be set. Did you forget to provision the Anthropic AI integration?",
-  );
+let cached: Anthropic | null = null;
+let cachedKey: string | null = null;
+
+export function getAnthropicClient(): Anthropic {
+  const auth = resolveAnthropicAuth();
+  if (!auth) {
+    throw new Error(
+      "Anthropic is not configured. Set ANTHROPIC_API_KEY or AI_INTEGRATIONS_ANTHROPIC_API_KEY.",
+    );
+  }
+  const cacheKey = `${auth.baseURL}::${auth.apiKey}`;
+  if (!cached || cachedKey !== cacheKey) {
+    cached = new Anthropic({ apiKey: auth.apiKey, baseURL: auth.baseURL });
+    cachedKey = cacheKey;
+  }
+  return cached;
 }
 
-if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_ANTHROPIC_API_KEY must be set. Did you forget to provision the Anthropic AI integration?",
-  );
-}
-
-export const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+/** Lazy stand-in for the previous eager export. Does not throw at import. */
+export const anthropic: Anthropic = new Proxy({} as Anthropic, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getAnthropicClient() as object, prop, receiver);
+  },
 });
+
+export { isAnthropicConfigured, resolveAnthropicAuth } from "./auth";

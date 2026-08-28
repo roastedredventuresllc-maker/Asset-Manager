@@ -24,8 +24,12 @@ export interface ConnectorSpec {
   note: string | null;
   requiredSecretKeys: string[];
   optionalSecretKeys: string[];
+  /** Human labels for secret KEY NAMES. Never values. */
+  secretKeyLabels?: Record<string, string>;
   setupSteps: SetupStep[];
   docsUrl: string;
+  /** v1 ship channels. LinkedIn is kept in-code but hidden from v1. */
+  v1: boolean;
 }
 
 export interface ConnectorStatus extends ConnectorSpec {
@@ -51,9 +55,15 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
       "META_DEFAULT_PAGE_ID",
     ],
     optionalSecretKeys: [],
+    secretKeyLabels: {
+      META_BUSINESS_ID: "Ad Account ID (digits only; env name META_BUSINESS_ID)",
+      META_SYSTEM_USER_TOKEN: "System user token",
+      META_DEFAULT_PAGE_ID: "Facebook Page ID",
+    },
+    v1: true,
     setupSteps: [
       {
-        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only) — that's META_BUSINESS_ID.",
+        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only). Paste it as META_BUSINESS_ID — that field is the Ad Account ID, not the Business Manager ID.",
         link: {
           label: "Open Ad Accounts",
           url: "https://business.facebook.com/settings/ad-accounts",
@@ -90,6 +100,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
       "TIKTOK_IDENTITY_ID",
     ],
     optionalSecretKeys: [],
+    v1: true,
     setupSteps: [
       {
         text: "Create a Marketing API app in the TikTok for Business developer portal.",
@@ -126,6 +137,15 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
       "GOOGLE_ADS_CUSTOMER_ID",
     ],
     optionalSecretKeys: ["GOOGLE_ADS_LOGIN_CUSTOMER_ID"],
+    secretKeyLabels: {
+      GOOGLE_ADS_DEVELOPER_TOKEN: "Developer token from Google Ads API Center",
+      GOOGLE_ADS_CLIENT_ID: "OAuth client ID from Google Cloud Console",
+      GOOGLE_ADS_CLIENT_SECRET: "OAuth client secret from Google Cloud Console",
+      GOOGLE_ADS_REFRESH_TOKEN: "Refresh token from OAuth Playground (AdWords scope)",
+      GOOGLE_ADS_CUSTOMER_ID: "Ads Customer ID (digits; dashes are stripped)",
+      GOOGLE_ADS_LOGIN_CUSTOMER_ID: "Manager-account Customer ID, only if you publish through an MCC",
+    },
+    v1: true,
     setupSteps: [
       {
         text: "In your Google Ads Manager account, open the API Center and apply for a developer token — that's GOOGLE_ADS_DEVELOPER_TOKEN.",
@@ -188,8 +208,13 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
       { text: "Paste the three values into the fields below and press Save." },
     ],
     docsUrl: "https://learn.microsoft.com/en-us/linkedin/marketing/",
+    v1: false,
   },
 ];
+
+export const V1_PLATFORM_IDS: AdPlatformId[] = CONNECTOR_SPECS.filter((s) => s.v1).map(
+  (s) => s.id,
+);
 
 /** Current ad-publishing mode. Defaults to the safe "mock" mode. */
 export function adsMode(): string {
@@ -203,7 +228,7 @@ export function adsMode(): string {
  */
 export async function connectorStatuses(): Promise<ConnectorStatus[]> {
   return Promise.all(
-    CONNECTOR_SPECS.map(async (spec) => {
+    CONNECTOR_SPECS.filter((spec) => spec.v1).map(async (spec) => {
       const state = await credentialState(
         spec.id,
         spec.requiredSecretKeys,

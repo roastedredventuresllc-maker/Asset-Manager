@@ -1,5 +1,6 @@
 import type { AdPlatform, PublishInput, PublishResult, Metrics } from "./types.js";
 import { logger } from "../lib/logger.js";
+import { normalizeMetaAdAccountId } from "./metaAccount.js";
 
 const BASE = "https://graph.facebook.com/v21.0";
 
@@ -39,9 +40,9 @@ export class MetaAdPlatform implements AdPlatform {
   }
 
   async publishCampaign(input: PublishInput): Promise<PublishResult> {
-    const adAccountId = this.creds.META_BUSINESS_ID;
+    const adAccountId = normalizeMetaAdAccountId(this.creds.META_BUSINESS_ID);
     const pageId = this.creds.META_DEFAULT_PAGE_ID ?? input.pageId;
-    if (!adAccountId || !pageId) throw new Error("META_BUSINESS_ID or META_DEFAULT_PAGE_ID not set");
+    if (!adAccountId || !pageId) throw new Error("META_BUSINESS_ID (Ad Account ID) or META_DEFAULT_PAGE_ID not set");
 
     // 1. Create campaign
     const campaignRes = (await this.fetch(`/act_${adAccountId}/campaigns`, "POST", {

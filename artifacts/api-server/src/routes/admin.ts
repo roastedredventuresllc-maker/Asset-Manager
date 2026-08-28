@@ -11,6 +11,7 @@ import {
 } from "../lib/referenceAssets.js";
 import { connectorStatuses, adsMode, CONNECTOR_SPECS } from "../ads/connectors.js";
 import { saveCredentials, deleteCredentials } from "../ads/credentials.js";
+import { verifyConnector } from "../ads/verify.js";
 import { db, campaignsTable, usersTable, publishesTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import {
@@ -135,7 +136,7 @@ router.get("/connectors", requireAdmin, async (_req: Request, res: Response) => 
 router.post("/connectors/:platform", requireAdmin, async (req: Request, res: Response) => {
   const platform = String(req.params.platform);
   const spec = CONNECTOR_SPECS.find((s) => s.id === platform);
-  if (!spec) return res.status(404).json({ error: "Unknown connector." });
+  if (!spec || !spec.v1) return res.status(404).json({ error: "Unknown connector." });
 
   if (!process.env.ADMIN_PASSWORD) {
     return res.status(503).json({ error: "Admin password is not configured." });
@@ -153,12 +154,19 @@ router.post("/connectors/:platform", requireAdmin, async (req: Request, res: Res
     const v = source[key];
     if (typeof v === "string" && v.trim().length > 0) incoming[key] = v.trim();
   }
+  if (platform === "meta") {
+    const alias = source.META_AD_ACCOUNT_ID;
+    if (typeof alias === "string" && alias.trim().length > 0 && !incoming.META_BUSINESS_ID) {
+      incoming.META_BUSINESS_ID = alias.trim();
+    }
+  }
   if (Object.keys(incoming).length === 0) {
     return res.status(400).json({ error: "Provide at least one credential value to save." });
   }
 
   try {
     await saveCredentials(platform, incoming, allowed);
+    // Saving credentials must NEVER flip ADS_MODE.
     return res.json({ ok: true, adsMode: adsMode(), connectors: await connectorStatuses() });
   } catch (err) {
     logger.error({ err, platform }, "Failed to save connector credentials");
@@ -171,7 +179,7 @@ router.post("/connectors/:platform", requireAdmin, async (req: Request, res: Res
 router.delete("/connectors/:platform", requireAdmin, async (req: Request, res: Response) => {
   const platform = String(req.params.platform);
   const spec = CONNECTOR_SPECS.find((s) => s.id === platform);
-  if (!spec) return res.status(404).json({ error: "Unknown connector." });
+  if (!spec || !spec.v1) return res.status(404).json({ error: "Unknown connector." });
 
   try {
     await deleteCredentials(platform);
@@ -180,6 +188,20 @@ router.delete("/connectors/:platform", requireAdmin, async (req: Request, res: R
     logger.error({ err, platform }, "Failed to delete connector credentials");
     return res.status(500).json({ error: "Couldn't disconnect credentials." });
   }
+});
+
+// POST /api/admin/connectors/:platform/verify — read-only authenticate.
+// Does not publish, does not spend, does not change ADS_MODE.
+router.post("/connectors/:platform/verify", requireAdmin, async (req: Request, res: Response) => {
+  const platform = String(req.params.platform);
+  const spec = CONNECTOR_SPECS.find((s) => s.id === platform);
+  if (!spec || !spec.v1) return res.status(404).json({ error: "Unknown connector." });
+  const modeBefore = adsMode();
+  const result = await verifyConnector(platform);
+  if (adsMode() !== modeBefore) {
+    logger.error({ platform }, "ADS_MODE changed during verify — this is a bug");
+  }
+  return res.json(result);
 });
 
 // GET /api/admin/reference-library — the curated reference library, gated.
@@ -291,6 +313,7 @@ router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
           dailyBudgetCents?: number;
           metaSharePct?: number;
           tiktokSharePct?: number;
+          googleSharePct?: number;
         } | null;
         const hasSpend = c.status === "live" || c.status === "paused";
         const spendCents = hasSpend ? await getLifetimeSpendCents(c.id) : 0;
@@ -308,6 +331,7 @@ router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
           dailyBudgetCents: pending?.dailyBudgetCents ?? null,
           metaSharePct: pending?.metaSharePct ?? null,
           tiktokSharePct: pending?.tiktokSharePct ?? null,
+          googleSharePct: pending?.googleSharePct ?? null,
           budgetCapCents: c.budgetCapCents,
           spendCents,
           landingSlug: c.landingSlug,

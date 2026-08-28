@@ -2,7 +2,7 @@
 
 LaunchPad exposes its campaign capabilities as a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server, so AI assistants like Claude Desktop and Cursor can create, manage, publish, and monitor ad campaigns on your behalf.
 
-The MCP server is **embedded inside the existing `api-server`** (it is not a separate service). It reuses the same magic-link auth, database, Stripe, and Meta/TikTok ad clients that power the LaunchPad website — so anything you can do in the UI, you can do from an MCP client.
+The MCP server is **embedded inside the existing `api-server`** (it is not a separate service). It reuses the same magic-link auth, database, Stripe, and Meta/TikTok/Google ad clients that power the LaunchPad website — so anything you can do in the UI, you can do from an MCP client.
 
 > ⚠️ **This MCP exposes the full campaign lifecycle, including publishing and pausing.** Publishing creates a Stripe Checkout session and, once paid, launches **live ads that spend real money**. Pausing immediately stops live ads. See [Safety](#safety) below.
 
@@ -101,8 +101,8 @@ Clients that don't support remote URLs directly can use the `mcp-remote` bridge 
 | `get_campaign` | Get full details of one campaign. | `id` (string) | Campaign object incl. AI-generated `campaignData` |
 | `get_campaign_status` | Poll generation + per-ad image status. | `id` (string) | `{ id, status, campaignData, adAssets[] }` |
 | `revise_campaign` | Revise a campaign in natural language. Drafts allow 3 free revisions; shipped campaigns are unlimited. Images regenerate if visuals change. | `id` (string), `request` (string) | Updated campaign object |
-| `publish_campaign` ⚠️ | Start publishing: creates a Stripe Checkout session. Returns a `checkoutUrl` the user must open to pay. Live ads launch only after checkout completes. | `id` (string), `dailyBudgetCents` (int), `metaSharePct` (0–100), `tiktokSharePct` (0–100), `successUrl` (string URL, optional) | `{ checkoutUrl, note }` |
-| `pause_campaign` ⚠️ | Immediately pause a live campaign across Meta + TikTok, stopping ad spend. | `id` (string) | Updated campaign object (status `paused`) |
+| `publish_campaign` ⚠️ | Start publishing: creates a Stripe Checkout session. Returns a `checkoutUrl` the user must open to pay. Live ads launch only after checkout completes. | `id` (string), `dailyBudgetCents` (int), `metaSharePct` (0–100), `tiktokSharePct` (0–100), `googleSharePct` (0–100, optional remainder), `successUrl` (string URL, optional) | `{ checkoutUrl, note }` |
+| `pause_campaign` ⚠️ | Immediately pause a live campaign across Meta + TikTok + Google, stopping ad spend. | `id` (string) | Updated campaign object (status `paused`) |
 | `get_campaign_metrics` | Fetch live metrics (impressions, clicks, spend). Zeros if not live. | `id` (string) | `{ campaignId, impressions, clicks, spendCents, updatedAt }` |
 
 Tool results are returned as JSON text content. Failures (not found, forbidden, revision limit reached, etc.) come back with `isError: true` and a `code: message` string.
@@ -113,11 +113,11 @@ Tool results are returned as JSON text content. Failures (not found, forbidden, 
 
 `publish_campaign` and `pause_campaign` affect **real money and live ads**:
 
-- **`publish_campaign` does not charge silently.** It returns a Stripe Checkout URL. The user must open that URL and complete payment. Only after checkout succeeds does LaunchPad charge the subscription and launch live ads on Meta/TikTok that spend the configured daily budget.
+- **`publish_campaign` does not charge silently.** It returns a Stripe Checkout URL. The user must open that URL and complete payment. Only after checkout succeeds does LaunchPad charge the subscription and launch live ads on Meta/TikTok/Google that spend the configured daily budget.
 - **`pause_campaign` takes effect immediately** — it stops a running campaign's ad spend across all platforms.
 - Always confirm the daily budget and channel split with the user before publishing, and confirm before pausing an actively running campaign.
 
-In development the app runs with `ADS_MODE=mock`, so no real ad spend occurs even though the full flow (including Stripe Checkout) executes. Set `ADS_MODE=live` only after Meta/TikTok approvals land.
+In development the app runs with `ADS_MODE=mock`, so no real ad spend occurs even though the full flow (including Stripe Checkout) executes. Set `ADS_MODE=live` only after Meta/TikTok/Google credentials are in place. Saving connector credentials does not flip live.
 
 ---
 

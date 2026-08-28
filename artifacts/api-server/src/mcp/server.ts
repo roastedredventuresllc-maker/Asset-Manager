@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import * as svc from "../lib/campaignService.js";
 import { logger } from "../lib/logger.js";
+import { resolveGoogleSharePct } from "../lib/channelSplit.js";
 
 export interface McpAuth {
   userId: string;
@@ -20,7 +21,7 @@ export function buildMcpServer(auth: McpAuth): McpServer {
       capabilities: { tools: {} },
       instructions:
         "LaunchPad lets you create, manage, publish, and monitor AI-generated ad " +
-        "campaigns on Meta and TikTok. Tools are scoped to the authenticated user. " +
+        "campaigns on Meta, TikTok, and Google. Tools are scoped to the authenticated user. " +
         "publish_campaign and pause_campaign affect REAL ad spend and LIVE ads — " +
         "publish returns a Stripe Checkout URL the user must open to complete payment.",
     },
@@ -180,10 +181,8 @@ export function buildMcpServer(auth: McpAuth): McpServer {
       description:
         "⚠️ AFFECTS REAL MONEY. Starts publishing a campaign by creating a Stripe Checkout " +
         "session. This does NOT charge immediately — it returns a checkoutUrl that the user " +
-        "must open and complete. Once paid, LaunchPad charges the subscription and launches " +
-        "LIVE ads on Meta/TikTok that spend the specified daily budget. Always confirm the " +
-        "budget and channel split with the user before calling, and share the returned " +
-        "checkoutUrl so they can approve payment.",
+        "must open and complete. Once paid, the campaign enters in_review; an admin must " +
+        "approve before ads run. v1 channels: Meta, TikTok, Google. LinkedIn is out of v1.",
       inputSchema: {
         id: idSchema,
         dailyBudgetCents: z
@@ -200,7 +199,13 @@ export function buildMcpServer(auth: McpAuth): McpServer {
           .number()
           .min(0)
           .max(100)
-          .describe("Percentage of the budget allocated to TikTok (0-100); should sum to 100 with metaSharePct"),
+          .describe("Percentage of the budget allocated to TikTok (0-100)"),
+        googleSharePct: z
+          .number()
+          .min(0)
+          .max(100)
+          .optional()
+          .describe("Percentage of the budget allocated to Google Ads (0-100); meta+tiktok+google should sum to 100"),
         successUrl: z
           .string()
           .url()
@@ -214,6 +219,11 @@ export function buildMcpServer(auth: McpAuth): McpServer {
         dailyBudgetCents: args.dailyBudgetCents as number,
         metaSharePct: args.metaSharePct as number,
         tiktokSharePct: args.tiktokSharePct as number,
+        googleSharePct: resolveGoogleSharePct(
+          args.metaSharePct as number,
+          args.tiktokSharePct as number,
+          args.googleSharePct as number | undefined,
+        ),
         successUrl: (args.successUrl as string | null) ?? null,
       });
       return ok({

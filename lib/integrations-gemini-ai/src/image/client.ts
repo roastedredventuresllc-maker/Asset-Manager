@@ -1,34 +1,47 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { Buffer } from "node:buffer";
+import { resolveGeminiAuth } from "../auth";
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_BASE_URL must be set. Did you forget to provision the Gemini AI integration?",
-  );
-}
+/**
+ * Craft quality path. Nano Banana Pro. Do not invoke this model in this
+ * run until the CEO approves spend — production code path is implemented;
+ * tests inject stubs and never call the live model.
+ */
+export const GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview";
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_API_KEY must be set. Did you forget to provision the Gemini AI integration?",
-  );
-}
-
-export const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
-
-// "nano banana" — Google's native image generation/editing model.
-const IMAGE_MODEL = "gemini-2.5-flash-image";
-
-export type AspectRatio = "1:1" | "9:16" | "16:9" | "3:4" | "4:3";
+export type AspectRatio = "1:1" | "9:16" | "16:9" | "3:4" | "4:3" | "4:5";
 
 interface InlineImage {
   data: Buffer;
   mimeType: string;
+}
+
+let cached: GoogleGenAI | null = null;
+let cachedKey: string | null = null;
+
+function getClient(): GoogleGenAI {
+  const auth = resolveGeminiAuth();
+  if (!auth) {
+    throw new Error(
+      "Gemini is not configured. Set GEMINI_API_KEY or AI_INTEGRATIONS_GEMINI_API_KEY.",
+    );
+  }
+  const cacheKey = `${auth.baseUrl}::${auth.apiKey}`;
+  if (!cached || cachedKey !== cacheKey) {
+    cached = new GoogleGenAI({
+      apiKey: auth.apiKey,
+      httpOptions: {
+        apiVersion: "",
+        baseUrl: auth.baseUrl,
+      },
+    });
+    cachedKey = cacheKey;
+  }
+  return cached;
+}
+
+export function isGeminiImageConfigured(): boolean {
+  return resolveGeminiAuth() !== null;
 }
 
 function extractImageBuffer(response: {
@@ -47,36 +60,44 @@ function extractImageBuffer(response: {
   return Buffer.from(data, "base64");
 }
 
+function imageConfig(aspectRatio: AspectRatio) {
+  return {
+    aspectRatio,
+    // 1K is the default Pro Image size. Do not bump to 2K/4K here.
+    imageSize: "1K",
+  };
+}
+
 /**
- * Text-to-image generation with Nano Banana (gemini-2.5-flash-image).
- * Returns a raw image Buffer.
+ * Text-to-image via gemini-3-pro-image-preview (Nano Banana Pro).
  */
 export async function generateImage(
   prompt: string,
-  aspectRatio: AspectRatio = "1:1",
+  aspectRatio: AspectRatio = "4:5",
 ): Promise<Buffer> {
-  const response = await ai.models.generateContent({
-    model: IMAGE_MODEL,
+  const response = await getClient().models.generateContent({
+    model: GEMINI_IMAGE_MODEL,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio },
+      imageConfig: { aspectRatio, imageSize: "1K" } as { aspectRatio: AspectRatio; imageSize: string },
     },
   });
   return extractImageBuffer(response);
 }
 
 /**
- * Image editing with Nano Banana — builds a new scene around an input image
- * (e.g. the founder's real product photo). Returns a raw image Buffer.
+ * Image editing via gemini-3-pro-image-preview — scene built around the
+ * founder's real product photo. `image.mimeType` must match the bytes
+ * (pipeline re-encodes JPEG uploads to PNG and declares image/png).
  */
 export async function editImage(
   prompt: string,
   image: InlineImage,
-  aspectRatio: AspectRatio = "1:1",
+  aspectRatio: AspectRatio = "4:5",
 ): Promise<Buffer> {
-  const response = await ai.models.generateContent({
-    model: IMAGE_MODEL,
+  const response = await getClient().models.generateContent({
+    model: GEMINI_IMAGE_MODEL,
     contents: [
       {
         role: "user",
@@ -93,8 +114,15 @@ export async function editImage(
     ],
     config: {
       responseModalities: [Modality.IMAGE],
-      imageConfig: { aspectRatio },
+      imageConfig: { aspectRatio, imageSize: "1K" } as { aspectRatio: AspectRatio; imageSize: string },
     },
   });
   return extractImageBuffer(response);
 }
+
+/** Lazy stand-in; does not throw at import. */
+export const ai: GoogleGenAI = new Proxy({} as GoogleGenAI, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getClient() as object, prop, receiver);
+  },
+});

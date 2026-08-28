@@ -44,7 +44,7 @@ export async function runSpendGuardOnce(): Promise<SpendGuardResult> {
       for (const pub of publishes) {
         if (!pub.externalCampaignId) continue;
         try {
-          const platform = await getAdPlatform(pub.platform as "meta" | "tiktok");
+          const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
           const m = await platform.getMetrics(pub.externalCampaignId);
           anyMetrics = true;
           totalImpressions += m.impressions;

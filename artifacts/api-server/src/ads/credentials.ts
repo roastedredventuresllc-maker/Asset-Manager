@@ -2,6 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypt
 import { eq } from "drizzle-orm";
 import { db, platformCredentialsTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { normalizeMetaAdAccountId } from "./metaAccount.js";
+import { normalizeGoogleCustomerId } from "./googleCustomer.js";
 
 /**
  * Encrypted-at-rest credential storage for ad-platform connectors. Admins may
@@ -134,12 +136,30 @@ export async function saveCredentials(
   allowedKeys: string[],
 ): Promise<string[]> {
   const existing = (await loadStored(platform)) ?? {};
+  const aliased: Record<string, unknown> = { ...incoming };
+  if (platform === "meta") {
+    const alias = incoming.META_AD_ACCOUNT_ID;
+    if (
+      typeof alias === "string" &&
+      alias.trim().length > 0 &&
+      !(typeof incoming.META_BUSINESS_ID === "string" && incoming.META_BUSINESS_ID.trim())
+    ) {
+      aliased.META_BUSINESS_ID = alias;
+    }
+  }
   const merged: Record<string, string> = {};
   for (const key of allowedKeys) {
-    const next = incoming[key];
+    const next = aliased[key];
     const prev = existing[key];
     if (typeof next === "string" && next.trim().length > 0) {
-      merged[key] = next.trim();
+      let value = next.trim();
+      if (key === "META_BUSINESS_ID") {
+        value = normalizeMetaAdAccountId(value);
+      }
+      if (key === "GOOGLE_ADS_CUSTOMER_ID" || key === "GOOGLE_ADS_LOGIN_CUSTOMER_ID") {
+        value = normalizeGoogleCustomerId(value);
+      }
+      merged[key] = value;
     } else if (typeof prev === "string" && prev.length > 0) {
       merged[key] = prev;
     }
