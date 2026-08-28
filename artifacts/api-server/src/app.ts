@@ -3,11 +3,10 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import landingRouter from "./routes/landing.js";
-import healthRouter from "./routes/health.js";
 import { logger } from "./lib/logger.js";
 import { runInBackground } from "./lib/background.js";
 import { ensureSeededInBackground } from "./lib/referenceAssets.js";
-import { getPool } from "@workspace/db";
+import { pool } from "@workspace/db";
 import { attachDatabasePool } from "@vercel/functions";
 
 const app: Express = express();
@@ -35,22 +34,17 @@ app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Healthz does not use the DB. Pool construction is deferred to getPool()
-// so a missing DATABASE_URL cannot crash the function at import time.
-app.use(healthRouter);
-app.use("/api", healthRouter);
-
 // On Vercel there is no long-lived listen() process. Seed on first request.
 let vercelBootstrapped = false;
 app.use((_req, _res, next) => {
   if (process.env.VERCEL && !vercelBootstrapped) {
     vercelBootstrapped = true;
     try {
-      attachDatabasePool(getPool());
-      runInBackground(ensureSeededInBackground());
+      attachDatabasePool(pool);
     } catch (err) {
       logger.error({ err }, "Failed to attach Postgres pool");
     }
+    runInBackground(ensureSeededInBackground());
   }
   next();
 });

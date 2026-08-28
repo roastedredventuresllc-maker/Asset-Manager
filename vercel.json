@@ -24,7 +24,6 @@
     }
   },
   "rewrites": [
-    { "source": "/healthz", "destination": { "service": "api" } },
     { "source": "/api/(.*)", "destination": { "service": "api" } },
     { "source": "/p/(.*)", "destination": { "service": "api" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }
