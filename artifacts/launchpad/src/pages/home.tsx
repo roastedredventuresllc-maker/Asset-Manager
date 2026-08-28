@@ -621,7 +621,7 @@ function BriefingState({
               rel="noreferrer"
               className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
             >
-              The live page
+              /p/{campaign.landingSlug}
             </a>
           ) : null}
         </div>

@@ -29,7 +29,8 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.match(home, /\bMedia\b/);
   assert.match(home, /briefing/);
   assert.doesNotMatch(home, /<iframe/);
-  assert.match(home, /The live page/);
+  assert.doesNotMatch(home, /The live page/);
+  assert.match(home, /\/p\/\$\{campaign\.landingSlug\}/);
   assert.doesNotMatch(home, /Writing…|Writing the campaign/);
   assert.match(home, /GENERATE_TIMEOUT_MS/);
 });
@@ -48,6 +49,7 @@ test("landing route does not ship a lettermark kit when stills miss", () => {
   const landingPage = readFileSync(resolve(here, "landingPage.ts"), "utf8");
   assert.match(landingRoute, /pickLandingPhoto/);
   assert.match(landingPage, /failClosedHtml|photography did not come back/i);
+  assert.match(landingPage, /This is not a product page until the stills exist/);
   assert.doesNotMatch(landingPage, /hv-mark/);
   assert.doesNotMatch(landingPage, /★★★★★/);
   assert.doesNotMatch(landingPage, /function initials/);
