@@ -498,9 +498,6 @@ function BriefingState({
   const assetsFailed = (statusRes.adAssets ?? []).some((a) => a.status === "failed");
   const ads = data.ads ?? [];
   const landing = data.landing;
-  const landingPhotoReady = (statusRes.adAssets ?? []).some(
-    (a) => a.status === "done" && Boolean(a.imageUrl),
-  );
   const openBoard = (target: string) => {
     if (assetsGenerating) return;
     setRevisionTarget(target);
@@ -618,22 +615,14 @@ function BriefingState({
             ) : null}
           </button>
           {campaign?.landingSlug ? (
-            <div className="mt-8">
-              <iframe
-                key={landingPhotoReady ? "photo" : "copy"}
-                src={`/p/${campaign.landingSlug}`}
-                title="Landing page"
-                className="w-full h-[28rem] border-0 bg-[#1c1915]"
-              />
-              <a
-                href={`/p/${campaign.landingSlug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
-              >
-                The live page
-              </a>
-            </div>
+            <a
+              href={`/p/${campaign.landingSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
+            >
+              The live page
+            </a>
           ) : null}
         </div>
       ) : null}
