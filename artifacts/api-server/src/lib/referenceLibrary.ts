@@ -280,7 +280,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     surface: "feed-portrait",
     angle: "Problem/Solution",
     imageryStyle: "Clean product UI on a soft, oversized device mock in a calm scene; one highlighted screen, lots of breathing room, single accent color.",
-    hookPattern: "Name the painful manual task in 5–7 words.",
+    hookPattern: "Name the painful manual task in 2–6 words.",
     bodyPattern: "State the time/effort saved as a concrete outcome.",
     ctaPattern: "'Try it free' / 'Start free'.",
     whyItWorks: "Shows the product doing the job and quantifies relief; reduces perceived effort to adopt.",
