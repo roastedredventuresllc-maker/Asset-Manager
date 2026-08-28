@@ -1,3 +1,3 @@
-export { ai } from "./client";
+export { ai, isGeminiConfigured, resolveGeminiAuth } from "./client";
 export { generateImage } from "./image";
 export { batchProcess, batchProcessWithSSE, isRateLimitError, type BatchOptions } from "./batch";

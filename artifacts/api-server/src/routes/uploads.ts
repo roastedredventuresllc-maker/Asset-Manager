@@ -33,7 +33,8 @@ router.post("/product-image", async (req, res) => {
     const id = generateId("img");
     const key = `product-images/${id}.jpg`;
 
-    // Optionally re-encode with sharp if available
+    // Store as JPEG (founder canvas export is JPEG). The image pipeline
+    // sharp-re-encodes to PNG before edit calls so declared MIME matches bytes.
     let finalBuffer: Buffer = buffer;
     try {
       const { default: sharp } = await import("sharp");

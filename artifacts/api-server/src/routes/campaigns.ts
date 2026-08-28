@@ -5,6 +5,7 @@ import { publishCampaignToPlatforms } from "../lib/publish.js";
 import { verifyToken } from "../lib/auth.js";
 import * as svc from "../lib/campaignService.js";
 import { logger } from "../lib/logger.js";
+import { resolveGoogleSharePct } from "../lib/channelSplit.js";
 
 const router = Router();
 
@@ -73,11 +74,12 @@ router.post("/:id/revise", async (req, res) => {
 
 // POST /api/campaigns/:id/publish
 router.post("/:id/publish", async (req, res) => {
-  const { dailyBudgetCents, metaSharePct, tiktokSharePct, successUrl } =
+  const { dailyBudgetCents, metaSharePct, tiktokSharePct, googleSharePct, successUrl } =
     req.body as {
       dailyBudgetCents?: number;
       metaSharePct?: number;
       tiktokSharePct?: number;
+      googleSharePct?: number;
       successUrl?: string | null;
     };
   try {
@@ -85,6 +87,7 @@ router.post("/:id/publish", async (req, res) => {
       dailyBudgetCents: dailyBudgetCents as number,
       metaSharePct: metaSharePct as number,
       tiktokSharePct: tiktokSharePct as number,
+      googleSharePct: resolveGoogleSharePct(metaSharePct as number, tiktokSharePct as number, googleSharePct),
       successUrl,
     });
     return res.json(result);
@@ -96,17 +99,18 @@ router.post("/:id/publish", async (req, res) => {
 // POST /api/campaigns/:id/test-publish — DEV ONLY.
 // Runs the paid-social publishing pipeline directly, bypassing Stripe, so the
 // publish → live → metrics → pause flow can be tested end-to-end (in mock mode,
-// or against real platforms once META_*/TIKTOK_* + ADS_MODE=live are set).
+// or against real platforms once Meta/TikTok/Google credentials + ADS_MODE=live are set).
 // Disabled in production.
 router.post("/:id/test-publish", async (req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(403).json({ error: "test-publish is disabled in production" });
   }
 
-  const { dailyBudgetCents, metaSharePct, tiktokSharePct } = req.body as {
+  const { dailyBudgetCents, metaSharePct, tiktokSharePct, googleSharePct } = req.body as {
     dailyBudgetCents?: number;
     metaSharePct?: number;
     tiktokSharePct?: number;
+    googleSharePct?: number;
   };
 
   const campaign = await db.query.campaignsTable.findFirst({
@@ -121,8 +125,9 @@ router.post("/:id/test-publish", async (req, res) => {
   try {
     result = await publishCampaignToPlatforms(req.params.id, {
       dailyBudgetCents: dailyBudgetCents ?? 7500,
-      metaSharePct: metaSharePct ?? 60,
-      tiktokSharePct: tiktokSharePct ?? 40,
+      metaSharePct: metaSharePct ?? 40,
+      tiktokSharePct: tiktokSharePct ?? 30,
+      googleSharePct: resolveGoogleSharePct(metaSharePct ?? 40, tiktokSharePct ?? 30, googleSharePct),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

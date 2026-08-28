@@ -1,14 +1,11 @@
 import type { AdPlatform, PublishInput, PublishResult, Metrics } from "./types.js";
 
 const NOT_IMPLEMENTED =
-  "Live publishing to LinkedIn Ads is not yet implemented. Keep ADS_MODE=mock, " +
-  "or publish via Meta/TikTok. Connect LinkedIn in the admin Connectors section to prepare credentials.";
+  "LinkedIn Ads is out of v1 ship and is not implemented. v1 channels are Meta, TikTok, and Google.";
 
 /**
- * Live LinkedIn Ads platform. The factory recognizes LinkedIn so it can be
- * connected and surfaced in the admin Connectors UI, but the deep
- * campaign-publishing implementation is intentionally out of scope for now and
- * each method fails loudly rather than silently no-op'ing.
+ * Live LinkedIn Ads platform. LinkedIn is out of v1 ship — kept unimplemented
+ * and hidden from the admin Connectors UI. Do not wire it into budget split.
  */
 export class LinkedInAdPlatform implements AdPlatform {
   async publishCampaign(_input: PublishInput): Promise<PublishResult> {

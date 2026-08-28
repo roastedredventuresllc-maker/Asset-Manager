@@ -10,7 +10,7 @@
  */
 
 export type AdSurface =
-  | "feed-square"
+  | "feed-portrait"
   | "vertical"
   | "tiktok-infeed"
   | "landing";
@@ -64,18 +64,18 @@ export interface AdSlotContract {
 }
 
 export const PLACEMENT_SPECS: Record<AdSurface, PlacementSpec> = {
-  "feed-square": {
-    id: "feed-square",
-    name: "Meta / Instagram Feed",
-    platforms: "Facebook Feed, Instagram Feed",
-    aspectRatio: "1:1",
-    dimensions: "1080 x 1080",
+  "feed-portrait": {
+    id: "feed-portrait",
+    name: "Meta / Instagram / Google Display (4:5)",
+    platforms: "Facebook Feed, Instagram Feed, Google Display",
+    aspectRatio: "4:5",
+    dimensions: "1080 x 1350",
     safeZone:
-      "Keep the focal subject within the central 90%; the bottom strip is partly covered by the headline + CTA overlay.",
+      "Product occupies 40–60% of frame, grounded. Designed empty negative space in the TOP ~32% for a 2–6 word billboard. Never place the product in that top band.",
     imageryNotes:
-      "One dominant, thumb-stopping subject with high focal contrast and generous negative space. Lifestyle-in-context beats packshots. Reads instantly at small size and sound-off.",
+      "Photoreal product photography, contact shadow, real light. Hero or tight crop of the SAME campaign product. No neon void, no plastic sheen, no floating product.",
     copyNorms:
-      "Hook 5–8 words, front-loaded. Body 10–15 words, one concrete benefit. CTA 2–4 words, action-led.",
+      "Hook is a 2–6 word billboard. Body 10–15 words, one concrete benefit. CTA 2–4 words, action-led.",
   },
   vertical: {
     id: "vertical",
@@ -250,24 +250,24 @@ export const WEBSITE_REFERENCES: WebsiteReference[] = [
 export const AD_SLOT_CONTRACTS: AdSlotContract[] = [
   {
     idx: 0,
-    label: "Ad 1 — Meta / Instagram Feed",
-    placement: "feed-square",
+    label: "Ad 1 — hero (4:5)",
+    placement: "feed-portrait",
     direction:
-      "The flagship feed ad. Strongest single benefit, most polished hero image.",
+      "Hero pack-shot of THIS product. Same light family as ads 2 and 3. Product 40–60% of frame, contact shadow, empty top third for type.",
   },
   {
     idx: 1,
-    label: "Ad 2 — Reels / Stories / TikTok (vertical)",
+    label: "Ad 2 — context (9:16)",
     placement: "vertical",
     direction:
-      "Native vertical creative. Punchier, more authentic energy; respect vertical safe zones. Since this also runs on TikTok, keep key elements out of the right ~12% (action rail) and bottom ~25% (caption).",
+      "Context shot of the SAME product in a real environment. Same light family and color temperature as Ad 1. Product 40–60% of frame. Empty top band for type. Keep lower-right clear of the product (platform chrome).",
   },
   {
     idx: 2,
-    label: "Ad 3 — Meta / Instagram Feed (alternate angle)",
-    placement: "feed-square",
+    label: "Ad 3 — tight crop (4:5)",
+    placement: "feed-portrait",
     direction:
-      "A clearly DIFFERENT angle and visual treatment from Ad 1 (e.g. social proof, FOMO, or transformation).",
+      "Tight crop of the SAME product, closer, more tactile. Same campaign light as Ad 1. Not a different board.",
   },
 ];
 
@@ -277,10 +277,10 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Clarity-first SaaS demo",
     vertical: "saas",
     keywords: ["saas", "software", "app", "tool", "platform", "dashboard", "workflow", "productivity", "b2b", "automation", "ai tool", "invoicing", "crm"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Problem/Solution",
     imageryStyle: "Clean product UI on a soft, oversized device mock in a calm scene; one highlighted screen, lots of breathing room, single accent color.",
-    hookPattern: "Name the painful manual task in 5–7 words.",
+    hookPattern: "Name the painful manual task in 2–6 words.",
     bodyPattern: "State the time/effort saved as a concrete outcome.",
     ctaPattern: "'Try it free' / 'Start free'.",
     whyItWorks: "Shows the product doing the job and quantifies relief; reduces perceived effort to adopt.",
@@ -303,7 +303,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Problem-Agitate-Relief (wellness)",
     vertical: "wellness",
     keywords: ["wellness", "supplement", "sleep", "health", "vitamin", "calm", "stress", "anxiety", "gut", "energy", "mental health", "self care"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Problem/Solution",
     imageryStyle: "Warm, soft natural light; product held in-hand in a serene morning/evening moment; muted earthy palette.",
     hookPattern: "Voice the felt problem ('Tired of 3am wake-ups?').",
@@ -329,7 +329,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Editorial drop",
     vertical: "fashion",
     keywords: ["fashion", "clothing", "apparel", "wear", "style", "outfit", "streetwear", "sustainable clothing", "accessories", "denim", "brand"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Aspirational Identity",
     imageryStyle: "Magazine-grade editorial styling, confident model or flat-lay, strong negative space, refined two-tone palette.",
     hookPattern: "A short identity statement, not a discount.",
@@ -355,7 +355,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Appetite-appeal hero",
     vertical: "food-bev",
     keywords: ["food", "drink", "beverage", "coffee", "snack", "meal", "cold brew", "tea", "recipe", "kitchen", "cpg", "grocery", "delivery"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Sensory Desire",
     imageryStyle: "Hyper-fresh hero shot — condensation, steam, pour or bite moment; rich color, shallow depth of field.",
     hookPattern: "Evoke the craving in 4–6 words.",
@@ -381,7 +381,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Trust-led fintech",
     vertical: "fintech",
     keywords: ["fintech", "finance", "money", "bank", "invest", "savings", "budget", "crypto", "payments", "card", "wealth"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Authority/Trust",
     imageryStyle: "Confident, minimal, high-contrast; clean card/number motif; restrained palette with one bold accent.",
     hookPattern: "Lead with a concrete financial outcome or number.",
@@ -394,7 +394,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "In-context home transformation",
     vertical: "home",
     keywords: ["home", "furniture", "decor", "kitchen", "cleaning", "appliance", "diy", "interior", "garden", "mattress", "bedding"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Transformation",
     imageryStyle: "Product styled in a real, beautiful room; warm light, aspirational-but-attainable staging.",
     hookPattern: "Promise the upgraded everyday moment.",
@@ -420,7 +420,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Proof-driven sustainability",
     vertical: "sustainability",
     keywords: ["sustainable", "eco", "green", "recycled", "carbon", "ethical", "reusable", "plant", "climate", "organic", "zero waste"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Values/Proof",
     imageryStyle: "Tactile, natural materials in honest daylight; show the real thing, not greenwash graphics.",
     hookPattern: "State the concrete impact, not a vague claim.",
@@ -433,7 +433,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Scarcity / launch FOMO",
     vertical: "general",
     keywords: ["launch", "drop", "limited", "new", "preorder", "waitlist", "exclusive", "early access", "founder"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "FOMO",
     imageryStyle: "Bold, high-energy hero with a clear 'new/limited' visual cue; confident single accent color.",
     hookPattern: "Signal newness or scarcity in 4–6 words.",
@@ -472,7 +472,7 @@ export const REFERENCE_ARCHETYPES: ReferenceArchetype[] = [
     title: "Us-vs-old-way comparison",
     vertical: "general",
     keywords: ["alternative", "switch", "vs", "replace", "better than", "save", "ditch", "upgrade from"],
-    surface: "feed-square",
+    surface: "feed-portrait",
     angle: "Problem/Solution",
     imageryStyle: "Clean visual contrast of the old painful way vs the new product; one accent color carries the eye.",
     hookPattern: "Frame the tired status quo.",
@@ -607,7 +607,7 @@ export function buildReferencePlaybook(brief: string, category?: string): string
   const principles = DESIGN_PRINCIPLES_2026.map((p) => `- ${p}`).join("\n");
 
   const placements = [
-    PLACEMENT_SPECS["feed-square"],
+    PLACEMENT_SPECS["feed-portrait"],
     PLACEMENT_SPECS["vertical"],
     PLACEMENT_SPECS["tiktok-infeed"],
   ]

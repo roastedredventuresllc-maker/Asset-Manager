@@ -6,6 +6,7 @@ import { sendMagicLinkEmail } from "../lib/email.js";
 import { generateId } from "../lib/ids.js";
 import { runModerationCheck } from "../lib/moderation.js";
 import { logger } from "../lib/logger.js";
+import { resolveGoogleSharePct } from "../lib/channelSplit.js";
 
 const router = Router();
 
@@ -77,7 +78,7 @@ async function handleCheckoutComplete(
   stripe: import("stripe").default,
   session: import("stripe").Stripe.Checkout.Session,
 ) {
-  const { campaignId, dailyBudgetCents, metaSharePct, tiktokSharePct } =
+  const { campaignId, dailyBudgetCents, metaSharePct, tiktokSharePct, googleSharePct } =
     session.metadata ?? {};
 
   if (!campaignId) {
@@ -128,11 +129,18 @@ async function handleCheckoutComplete(
   // OUR house ad accounts, so nothing goes live until an admin approves it.
   // The publish options chosen at checkout are persisted so approval can
   // publish later with the exact same settings.
-  const dailyBudget = parseInt(dailyBudgetCents ?? "7500");
+  const dailyBudget = parseInt(dailyBudgetCents ?? "7500", 10);
+  const meta = parseInt(metaSharePct ?? "40", 10);
+  const tiktok = parseInt(tiktokSharePct ?? "30", 10);
+  const googleParsed =
+    googleSharePct != null && googleSharePct !== ""
+      ? parseInt(googleSharePct, 10)
+      : undefined;
   const pendingPublish = {
     dailyBudgetCents: dailyBudget,
-    metaSharePct: parseInt(metaSharePct ?? "60"),
-    tiktokSharePct: parseInt(tiktokSharePct ?? "40"),
+    metaSharePct: meta,
+    tiktokSharePct: tiktok,
+    googleSharePct: resolveGoogleSharePct(meta, tiktok, googleParsed),
   };
 
   await db

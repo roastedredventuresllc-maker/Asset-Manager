@@ -21,6 +21,7 @@ export {
   CONNECTOR_SPECS,
   connectorStatuses,
   adsMode,
+  V1_PLATFORM_IDS,
   type ConnectorSpec,
   type ConnectorStatus,
 } from "./connectors.js";
@@ -50,8 +51,10 @@ export async function getAdPlatform(platform: AdPlatformId): Promise<AdPlatform>
       const { values } = await resolveCredentials("tiktok", keysFor("tiktok"));
       return new TikTokAdPlatform(values);
     }
-    case "google":
-      return new GoogleAdsAdPlatform();
+    case "google": {
+      const { values } = await resolveCredentials("google", keysFor("google"));
+      return new GoogleAdsAdPlatform(values);
+    }
     case "linkedin":
       return new LinkedInAdPlatform();
     default: {

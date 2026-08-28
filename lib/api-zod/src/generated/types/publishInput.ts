@@ -13,6 +13,8 @@ export interface PublishInput {
   metaSharePct: number;
   /** Percentage of budget going to TikTok (0-100) */
   tiktokSharePct: number;
+  /** Percentage of budget going to Google Ads (0-100) */
+  googleSharePct?: number;
   /**
      * URL to redirect to after successful checkout
      * @nullable

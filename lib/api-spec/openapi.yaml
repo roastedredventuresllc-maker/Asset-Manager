@@ -330,6 +330,9 @@ components:
         tiktokSharePct:
           type: integer
           description: Percentage of budget going to TikTok (0-100)
+        googleSharePct:
+          type: integer
+          description: Percentage of budget going to Google Ads (0-100)
         successUrl:
           type: ["string", "null"]
           description: URL to redirect to after successful checkout
@@ -411,11 +414,13 @@ components:
               type: string
         channelSplit:
           type: object
-          required: [metaPct, tiktokPct, rationale]
+          required: [metaPct, tiktokPct, googlePct, rationale]
           properties:
             metaPct:
               type: integer
             tiktokPct:
+              type: integer
+            googlePct:
               type: integer
             rationale:
               type: string

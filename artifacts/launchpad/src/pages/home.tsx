@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
 import {
   useGenerateCampaign,
   useGetCampaignStatus,
@@ -20,35 +19,59 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { InSituAd } from "@/components/ad-mockups";
 
+const POST_CHECKOUT_KEY = "launchpad_post_checkout";
+
 export default function Home() {
-  const [location, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const successUrlParam = searchParams.get("success");
   const urlCampaignId = searchParams.get("campaignId");
 
-  const [campaignId, setCampaignId] = useState<string | null>(
+  const [campaignId, setCampaignIdState] = useState<string | null>(
     urlCampaignId || localStorage.getItem("launchpad_campaign_id")
   );
+
+  const [postCheckout, setPostCheckout] = useState(() => {
+    if (successUrlParam === "true") return true;
+    const stored = localStorage.getItem(POST_CHECKOUT_KEY);
+    const id = urlCampaignId || localStorage.getItem("launchpad_campaign_id");
+    return !!id && stored === id;
+  });
 
   useEffect(() => {
     if (campaignId) {
       localStorage.setItem("launchpad_campaign_id", campaignId);
     } else {
       localStorage.removeItem("launchpad_campaign_id");
+      localStorage.removeItem(POST_CHECKOUT_KEY);
     }
   }, [campaignId]);
 
-  if (successUrlParam === "true" && campaignId) {
-    // After checkout the campaign enters the review queue (it is NOT live
-    // yet) — route through the status router so the right screen shows.
-    return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} postCheckout />;
-  }
+  useEffect(() => {
+    if (successUrlParam === "true" && campaignId) {
+      localStorage.setItem(POST_CHECKOUT_KEY, campaignId);
+      setPostCheckout(true);
+    }
+  }, [successUrlParam, campaignId]);
+
+  const setCampaignId = (id: string | null) => {
+    if (!id) {
+      localStorage.removeItem(POST_CHECKOUT_KEY);
+      setPostCheckout(false);
+    }
+    setCampaignIdState(id);
+  };
 
   if (!campaignId) {
     return <InputState setCampaignId={setCampaignId} />;
   }
 
-  return <ActiveCampaignRouter campaignId={campaignId} setCampaignId={setCampaignId} />;
+  return (
+    <ActiveCampaignRouter
+      campaignId={campaignId}
+      setCampaignId={setCampaignId}
+      postCheckout={postCheckout || successUrlParam === "true"}
+    />
+  );
 }
 
 function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { campaignId: string, setCampaignId: (id: string | null) => void, postCheckout?: boolean }) {
@@ -91,6 +114,16 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <ReviewState setCampaignId={setCampaignId} />;
   }
 
+  if (statusRes.status === "publishing") {
+    // Checkout session exists. Webhook may not have flipped in_review yet.
+    // Never drop back into BriefingState / the ship UI.
+    return <ReviewState setCampaignId={setCampaignId} />;
+  }
+
+  if (postCheckout && statusRes.status === "ready") {
+    return <ReviewState setCampaignId={setCampaignId} />;
+  }
+
   if (statusRes.status === "rejected") {
     return <RejectedState reason={statusRes.rejectionReason ?? null} setCampaignId={setCampaignId} />;
   }
@@ -99,13 +132,7 @@ function ActiveCampaignRouter({ campaignId, setCampaignId, postCheckout }: { cam
     return <LiveState campaignId={campaignId} setCampaignId={setCampaignId} />;
   }
 
-  if (postCheckout && statusRes.status === "ready") {
-    // Payment done but the webhook hasn't landed yet — show a holding screen
-    // instead of dropping back into the editing view.
-    return <WorkingState />;
-  }
-
-  // Ready or Draft or Publishing
+  // Ready or Draft
   return <BriefingState campaignId={campaignId} setCampaignId={setCampaignId} statusRes={statusRes} />;
 }
 
@@ -424,7 +451,7 @@ function ErrorState({ setCampaignId }: { setCampaignId: (id: string | null) => v
       <p className="font-serif text-3xl mb-3">Something went wrong</p>
       <p className="font-sans text-muted-foreground text-sm mb-8 text-center max-w-xs">
         The AI couldn't generate your campaign. Make sure the server has a valid{" "}
-        <code className="bg-secondary px-1 rounded text-xs">ANTHROPIC_API_KEY</code> and try again.
+        <code className="bg-secondary px-1 rounded text-xs">AI_INTEGRATIONS_ANTHROPIC_API_KEY</code> and try again.
       </p>
       <button
         onClick={() => setCampaignId(null)}
@@ -471,6 +498,9 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
   const assetsGenerating = (statusRes.adAssets ?? []).some(
     (a: any) => a.status !== "done" && a.status !== "failed",
   );
+  const assetsFailed = (statusRes.adAssets ?? []).some(
+    (a: any) => a.status === "failed",
+  );
 
   return (
     <div className="min-h-[100dvh] bg-background pb-32 animate-in fade-in duration-1000">
@@ -505,10 +535,15 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
             <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35">Three Ads</div>
             <div className="text-[11px] font-sans text-muted-foreground hidden sm:block">Previewed in-feed — switch platforms on each ad</div>
           </div>
+          {assetsFailed && (
+            <p className="mb-8 text-center font-sans text-sm text-red-700">
+              Generation failed. A branded gradient is not an ad — retry from the start.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-14 items-start">
             {data.ads.map((ad: any, i: number) => {
               const asset = statusRes.adAssets?.find((a: any) => a.idx === i);
-              const placement: "square" | "vertical" = i === 1 ? "vertical" : "square";
+              const placement: "portrait" | "vertical" = i === 1 ? "vertical" : "portrait";
               return (
                 <div key={i} className="flex flex-col gap-5">
                   <InSituAd
@@ -558,10 +593,10 @@ function BriefingState({ campaignId, setCampaignId, statusRes }: { campaignId: s
         <div className="flex flex-col items-center gap-6">
           <button 
             onClick={() => setShowLaunch(true)}
-            disabled={assetsGenerating}
+            disabled={assetsGenerating || assetsFailed}
             className="bg-foreground text-background px-8 py-4 rounded-full font-sans font-medium text-lg flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {assetsGenerating ? "Finishing images…" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
+            {assetsGenerating ? "Finishing images…" : assetsFailed ? "Generation failed" : <>Continue to launch <ArrowRight className="w-5 h-5" /></>}
           </button>
           
           <button 
@@ -709,7 +744,9 @@ function shipErrorMessage(err: unknown): string {
 
 function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: any; onBack: () => void }) {
   const [budget, setBudget] = useState(data.recommendedBudgetPreset === 'scale' ? 20000 : data.recommendedBudgetPreset === 'starter' ? 2500 : 7500);
-  const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 50);
+  const [metaPct, setMetaPct] = useState(data.channelSplit?.metaPct || 40);
+  const [tiktokPct, setTiktokPct] = useState(data.channelSplit?.tiktokPct || 30);
+  const googlePct = Math.max(0, 100 - metaPct - tiktokPct);
   const [showAdjust, setShowAdjust] = useState(false);
   const [shipError, setShipError] = useState<string | null>(null);
   const publish = usePublishCampaign();
@@ -721,7 +758,8 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
       data: { 
         dailyBudgetCents: budget, 
         metaSharePct: metaPct, 
-        tiktokSharePct: 100 - metaPct,
+        tiktokSharePct: tiktokPct,
+        googleSharePct: googlePct,
         successUrl: window.location.origin + "/?success=true&campaignId=" + campaignId
       }
     }, {
@@ -778,21 +816,43 @@ function LaunchPage({ campaignId, data, onBack }: { campaignId: string; data: an
         <div className="mb-12">
           <div className="text-[11px] font-sans uppercase tracking-[2px] opacity-35 mb-6 text-center">Channels</div>
           <div className="text-center font-sans text-sm mb-4">
-            Running {metaPct}% Meta · {100 - metaPct}% TikTok — picked for your audience
+            Running {metaPct}% Meta · {tiktokPct}% TikTok · {googlePct}% Google — picked for your audience
             {!showAdjust && <button onClick={() => setShowAdjust(true)} className="ml-2 text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border">Adjust</button>}
           </div>
           {showAdjust && (
-            <div className="px-12 py-4">
-              <Slider 
-                value={[metaPct]} 
-                onValueChange={(v) => setMetaPct(v[0])} 
-                max={100} 
-                step={5} 
-                className="w-full"
-              />
-              <div className="flex justify-between mt-2 text-xs font-sans text-muted-foreground">
-                <span>Meta</span>
-                <span>TikTok</span>
+            <div className="px-12 py-4 flex flex-col gap-6">
+              <div>
+                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
+                  <span>Meta</span><span>{metaPct}%</span>
+                </div>
+                <Slider
+                  value={[metaPct]}
+                  onValueChange={(v) => {
+                    const next = Math.min(v[0], 100 - tiktokPct);
+                    setMetaPct(next);
+                  }}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs font-sans text-muted-foreground mb-2">
+                  <span>TikTok</span><span>{tiktokPct}%</span>
+                </div>
+                <Slider
+                  value={[tiktokPct]}
+                  onValueChange={(v) => {
+                    const next = Math.min(v[0], 100 - metaPct);
+                    setTiktokPct(next);
+                  }}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex justify-between text-xs font-sans text-muted-foreground">
+                <span>Google</span><span>{googlePct}%</span>
               </div>
             </div>
           )}

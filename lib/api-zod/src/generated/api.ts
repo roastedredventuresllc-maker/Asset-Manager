@@ -73,6 +73,7 @@ export const GetCampaignResponse = zod.object({
   "channelSplit": zod.object({
   "metaPct": zod.number(),
   "tiktokPct": zod.number(),
+  "googlePct": zod.number(),
   "rationale": zod.string()
 }),
   "recommendedBudgetPreset": zod.enum(['starter', 'growth', 'scale']),
@@ -136,6 +137,7 @@ export const ReviseCampaignResponse = zod.object({
   "channelSplit": zod.object({
   "metaPct": zod.number(),
   "tiktokPct": zod.number(),
+  "googlePct": zod.number(),
   "rationale": zod.string()
 }),
   "recommendedBudgetPreset": zod.enum(['starter', 'growth', 'scale']),
@@ -180,6 +182,7 @@ export const PublishCampaignBody = zod.object({
   "dailyBudgetCents": zod.number().describe('Daily ad budget in cents (2500, 7500, or 20000 presets)'),
   "metaSharePct": zod.number().describe('Percentage of budget going to Meta (0-100)'),
   "tiktokSharePct": zod.number().describe('Percentage of budget going to TikTok (0-100)'),
+  "googleSharePct": zod.number().optional().describe('Percentage of budget going to Google Ads (0-100)'),
   "successUrl": zod.string().nullish().describe('URL to redirect to after successful checkout')
 })
 
@@ -214,6 +217,7 @@ export const PauseCampaignResponse = zod.object({
   "channelSplit": zod.object({
   "metaPct": zod.number(),
   "tiktokPct": zod.number(),
+  "googlePct": zod.number(),
   "rationale": zod.string()
 }),
   "recommendedBudgetPreset": zod.enum(['starter', 'growth', 'scale']),
@@ -293,6 +297,7 @@ export const GetCampaignStatusResponse = zod.object({
   "channelSplit": zod.object({
   "metaPct": zod.number(),
   "tiktokPct": zod.number(),
+  "googlePct": zod.number(),
   "rationale": zod.string()
 }),
   "recommendedBudgetPreset": zod.enum(['starter', 'growth', 'scale']),

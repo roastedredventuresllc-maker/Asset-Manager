@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
  * each frame reads as the real surface regardless of the surrounding design.
  */
 
-export type AdPlacement = "square" | "vertical";
+export type AdPlacement = "portrait" | "vertical";
 
 type PlatformId =
   | "instagram-feed"
@@ -47,10 +47,9 @@ interface MockupAd {
   status?: string | null;
 }
 
-const SQUARE_PLATFORMS: PlatformId[] = [
+const PORTRAIT_PLATFORMS: PlatformId[] = [
   "instagram-feed",
   "facebook",
-  "linkedin",
   "google",
 ];
 const VERTICAL_PLATFORMS: PlatformId[] = ["instagram-stories", "tiktok"];
@@ -138,8 +137,8 @@ function MediaFill({ ad }: { ad: MockupAd }) {
   }
   if (ad.status === "failed") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-neutral-200 px-3 text-center font-sans text-[11px] text-neutral-600">
-        Image didn't generate
+      <div className="absolute inset-0 flex items-center justify-center bg-neutral-200 px-4 text-center font-sans text-[12px] font-medium text-neutral-700">
+        Generation failed
       </div>
     );
   }
@@ -159,9 +158,9 @@ function MediaFill({ ad }: { ad: MockupAd }) {
   );
 }
 
-function SquareMedia({ ad }: { ad: MockupAd }) {
+function PortraitMedia({ ad }: { ad: MockupAd }) {
   return (
-    <div className="relative aspect-square w-full overflow-hidden bg-neutral-100">
+    <div className="relative aspect-[4/5] w-full overflow-hidden bg-neutral-100">
       <MediaFill ad={ad} />
     </div>
   );
@@ -216,7 +215,7 @@ function InstagramFeed({ ad }: { ad: MockupAd }) {
         <MoreHorizontal className="ml-auto h-4 w-4 text-neutral-700" />
       </div>
 
-      <SquareMedia ad={ad} />
+      <PortraitMedia ad={ad} />
 
       <div className="flex items-center justify-between border-y border-neutral-100 bg-neutral-50 px-3 py-2">
         <span className="font-sans text-[13px] font-semibold text-neutral-900">
@@ -270,7 +269,7 @@ function FacebookFeed({ ad }: { ad: MockupAd }) {
         {ad.body || ad.hook || ad.brandName}
       </p>
 
-      <SquareMedia ad={ad} />
+      <PortraitMedia ad={ad} />
 
       <div className="flex items-center gap-3 bg-neutral-100 px-3 py-2.5">
         <div className="min-w-0 flex-1">
@@ -322,7 +321,7 @@ function LinkedInPost({ ad }: { ad: MockupAd }) {
         {ad.body || ad.hook || ad.brandName}
       </p>
 
-      <SquareMedia ad={ad} />
+      <PortraitMedia ad={ad} />
 
       <div className="flex items-center gap-3 border-t border-neutral-100 bg-neutral-50 px-3 py-3">
         <p className="min-w-0 flex-1 line-clamp-2 font-sans text-[13px] font-semibold leading-snug text-neutral-900">
@@ -355,7 +354,7 @@ function GoogleDisplay({ ad }: { ad: MockupAd }) {
   return (
     <FeedCard>
       <div className="relative">
-        <SquareMedia ad={ad} />
+        <PortraitMedia ad={ad} />
         <span className="absolute left-2 top-2 rounded-sm bg-white/90 px-1.5 py-0.5 font-sans text-[10px] font-bold text-neutral-700">
           Ad
         </span>
@@ -567,7 +566,7 @@ export function InSituAd({
   placement,
 }: InSituAdProps) {
   const platforms =
-    placement === "vertical" ? VERTICAL_PLATFORMS : SQUARE_PLATFORMS;
+    placement === "vertical" ? VERTICAL_PLATFORMS : PORTRAIT_PLATFORMS;
   const [active, setActive] = useState<PlatformId>(platforms[0]);
 
   const ad: MockupAd = {

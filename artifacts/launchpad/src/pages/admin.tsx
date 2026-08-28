@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 const TOKEN_KEY = "lp_admin_token";
 
-type AdSurface = "feed-square" | "vertical" | "tiktok-infeed" | "landing";
+type AdSurface = "feed-portrait" | "vertical" | "tiktok-infeed" | "landing";
 
 interface PlacementSpec {
   id: AdSurface;
@@ -99,6 +99,7 @@ interface ConnectorStatus {
   optionalPresentKeys: string[];
   storedKeys: string[];
   source: "stored" | "env" | "none";
+  secretKeyLabels?: Record<string, string>;
   setupSteps: SetupStep[];
   docsUrl: string;
 }
@@ -576,6 +577,7 @@ interface AdminCampaignRow {
   dailyBudgetCents: number | null;
   metaSharePct: number | null;
   tiktokSharePct: number | null;
+  googleSharePct: number | null;
   budgetCapCents: number | null;
   spendCents: number;
   landingSlug: string | null;
@@ -1046,7 +1048,9 @@ function ConnectorCard({
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
 
   // Show the entry form when the platform isn't connected yet, or when the
   // operator chose to edit a connected one.
@@ -1118,6 +1122,38 @@ function ConnectorCard({
       setErr("Network error. Try again.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    setVerifying(true);
+    setErr(null);
+    setVerifyNote(null);
+    try {
+      const res = await fetch(`/api/admin/connectors/${c.id}/verify`, {
+        method: "POST",
+        headers: { "x-admin-token": token },
+      });
+      const d = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        adsMode?: string;
+        error?: string;
+        identity?: { descriptiveName?: string; name?: string; customerId?: string };
+      };
+      if (!res.ok || !d.ok) {
+        setErr(d.error ?? "Couldn't authenticate.");
+        return;
+      }
+      const who = d.identity?.descriptiveName || d.identity?.name || d.identity?.customerId;
+      setVerifyNote(
+        who
+          ? `Authenticated${who ? ` as ${who}` : ""}. Publishing mode is still ADS_MODE=${d.adsMode ?? "mock"}.`
+          : `Authenticated. Publishing mode is still ADS_MODE=${d.adsMode ?? "mock"}.`,
+      );
+    } catch {
+      setErr("Network error. Try again.");
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -1214,6 +1250,11 @@ function ConnectorCard({
                     <span className="text-muted-foreground/60"> (optional)</span>
                   )}
                 </span>
+                {c.secretKeyLabels?.[k] && (
+                  <span className="font-sans text-[11px] text-muted-foreground">
+                    {c.secretKeyLabels[k]}
+                  </span>
+                )}
                 <input
                   type="password"
                   autoComplete="off"
@@ -1254,12 +1295,20 @@ function ConnectorCard({
             </p>
           </div>
         ) : (
-          <div className="mt-5 flex items-center gap-2">
+          <div className="mt-5 flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setEditing(true)}
               className="font-sans text-sm rounded-full px-4 py-2 border border-border hover:bg-secondary transition-colors"
             >
               Edit credentials
+            </button>
+            <button
+              onClick={() => void verify()}
+              disabled={verifying}
+              className="inline-flex items-center gap-1.5 font-sans text-sm rounded-full px-4 py-2 border border-border hover:bg-secondary disabled:opacity-50 transition-colors"
+            >
+              {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {verifying ? "Checking…" : "Verify (no spend)"}
             </button>
             {storedHere && (
               <button
@@ -1273,6 +1322,8 @@ function ConnectorCard({
             )}
           </div>
         )}
+
+        {verifyNote && <p className="font-sans text-xs text-emerald-800 mt-2">{verifyNote}</p>}
 
         {err && !showForm && <p className="font-sans text-xs text-red-700 mt-2">{err}</p>}
 
