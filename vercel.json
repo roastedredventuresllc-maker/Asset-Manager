@@ -14,10 +14,11 @@
     "api": {
       "root": "artifacts/api-server",
       "framework": "express",
-      "entrypoint": "src/vercel-entry.cjs",
+      "entrypoint": "dist/vercel-entry.cjs",
       "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+      "buildCommand": "pnpm exec esbuild src/vercel-entry.ts --bundle --platform=node --format=cjs --outfile=dist/vercel-entry.cjs",
       "functions": {
-        "src/vercel-entry.cjs": {
+        "dist/vercel-entry.cjs": {
           "maxDuration": 10
         }
       }
