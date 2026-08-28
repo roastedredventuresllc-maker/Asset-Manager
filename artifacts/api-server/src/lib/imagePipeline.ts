@@ -91,7 +91,10 @@ async function defaultImagine(
     }
     return await xai.generateImagineImage(prompt, aspect);
   } catch (err) {
-    logger.warn({ err, model: GROK_IMAGINE_MODEL }, "Grok Imagine missed");
+    logger.warn(
+      { err, model: GROK_IMAGINE_MODEL, message: err instanceof Error ? err.message : String(err) },
+      "Grok Imagine missed",
+    );
     return null;
   }
 }
@@ -116,7 +119,10 @@ async function defaultGptImage2(
     const portrait = slot.aspectRatio === "9:16" || slot.aspectRatio === "4:5";
     return await openai.generateImageBuffer(prompt, portrait ? "1024x1536" : "1024x1024");
   } catch (err) {
-    logger.warn({ err, model: GPT_IMAGE_FALLBACK_MODEL }, "gpt-image-2 missed");
+    logger.warn(
+      { err, model: GPT_IMAGE_FALLBACK_MODEL, message: err instanceof Error ? err.message : String(err) },
+      "gpt-image-2 missed",
+    );
     return null;
   }
 }

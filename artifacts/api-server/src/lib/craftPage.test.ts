@@ -29,3 +29,16 @@ test("failed photography is not shipped as a gradient ad", () => {
   assert.match(home, /assetsFailed/);
   assert.match(home, /Generation failed/);
 });
+
+test("landing route does not ship a lettermark kit when stills miss", () => {
+  const landingRoute = readFileSync(
+    resolve(here, "../routes/landing.ts"),
+    "utf8",
+  );
+  const landingPage = readFileSync(resolve(here, "landingPage.ts"), "utf8");
+  assert.match(landingRoute, /pickLandingPhoto/);
+  assert.match(landingPage, /failClosedHtml|photography did not come back/i);
+  assert.doesNotMatch(landingPage, /hv-mark/);
+  assert.doesNotMatch(landingPage, /★★★★★/);
+  assert.doesNotMatch(landingPage, /function initials/);
+});

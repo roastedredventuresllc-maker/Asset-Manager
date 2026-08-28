@@ -373,6 +373,7 @@ export async function reviseCampaignById(id: string, request: string) {
       .set({ status: "pending", imageUrl: null })
       .where(eq(adAssetsTable.campaignId, id));
 
+    const jobIds: string[] = [];
     for (let idx = 0; idx < 3; idx++) {
       const ad = updated.ads[idx];
       if (!ad) continue;
@@ -383,8 +384,10 @@ export async function reviseCampaignById(id: string, request: string) {
         ),
       });
       if (!asset) continue;
+      const jobId = generateId("job");
+      jobIds.push(jobId);
       await db.insert(jobsTable).values({
-        id: generateId("job"),
+        id: jobId,
         type: "generate_image",
         payload: {
           campaignId: id,
@@ -399,7 +402,7 @@ export async function reviseCampaignById(id: string, request: string) {
       });
     }
     runInBackground(
-      processPendingJobs(3).catch((err) => {
+      processPendingJobs(3, { jobIds }).catch((err) => {
         logger.error({ err, campaignId: id }, "Image job drain after revise failed");
       }),
     );

@@ -78,6 +78,22 @@ export const openai: OpenAI = new Proxy({} as OpenAI, {
   },
 });
 
+async function bufferFromImageResponse(
+  data: Array<{ b64_json?: string | null; url?: string | null }> | undefined,
+  label: string,
+): Promise<Buffer> {
+  const first = data?.[0];
+  const base64 = first?.b64_json ?? "";
+  if (base64) return Buffer.from(base64, "base64");
+  const url = first?.url?.trim();
+  if (url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${label} URL fetch missed (${res.status})`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  throw new Error(`No image data in ${label} response`);
+}
+
 export async function generateImageBuffer(
   prompt: string,
   size: "1024x1024" | "1024x1536" | "1536x1024" | "512x512" | "256x256" = "1024x1536",
@@ -89,10 +105,9 @@ export async function generateImageBuffer(
     prompt,
     size: size === "512x512" || size === "256x256" ? "1024x1024" : size,
     quality: "high",
+    response_format: "b64_json",
   });
-  const base64 = response.data?.[0]?.b64_json ?? "";
-  if (!base64) throw new Error("No image data in gpt-image-2 response");
-  return Buffer.from(base64, "base64");
+  return bufferFromImageResponse(response.data, "gpt-image-2");
 }
 
 export async function editImages(
@@ -114,11 +129,10 @@ export async function editImages(
     model: modelFor(auth),
     image: images,
     prompt,
+    response_format: "b64_json",
   });
 
-  const imageBase64 = response.data?.[0]?.b64_json ?? "";
-  if (!imageBase64) throw new Error("No image data in gpt-image-2 edit response");
-  const imageBytes = Buffer.from(imageBase64, "base64");
+  const imageBytes = await bufferFromImageResponse(response.data, "gpt-image-2 edit");
 
   if (outputPath) {
     fs.writeFileSync(outputPath, imageBytes);

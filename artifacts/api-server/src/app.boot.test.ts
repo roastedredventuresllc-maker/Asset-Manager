@@ -42,6 +42,8 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /outfile: path.join\(serviceRoot, "server.cjs"\)/);
   assert.match(bundle, /packages: "bundle"/);
   assert.match(bundle, /@vercel\/functions/);
+  assert.match(bundle, /vendorSharp/);
+  assert.match(bundle, /dereference: true/);
 });
 
 test("createCampaign awaits generation on Vercel so the isolate does not freeze", () => {

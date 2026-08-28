@@ -12,10 +12,19 @@ export function isImagineConfigured(): boolean {
   return resolveXaiAuth() !== null;
 }
 
-function bufferFromImageResponse(data: Array<{ b64_json?: string | null }> | undefined): Buffer {
-  const base64 = data?.[0]?.b64_json ?? "";
-  if (!base64) throw new Error("No image data in Grok Imagine response");
-  return Buffer.from(base64, "base64");
+async function bufferFromImageResponse(
+  data: Array<{ b64_json?: string | null; url?: string | null }> | undefined,
+): Promise<Buffer> {
+  const first = data?.[0];
+  const base64 = first?.b64_json ?? "";
+  if (base64) return Buffer.from(base64, "base64");
+  const url = first?.url?.trim();
+  if (url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Grok Imagine URL fetch missed (${res.status})`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  throw new Error("No image data in Grok Imagine response");
 }
 
 /**
@@ -31,6 +40,7 @@ export async function generateImagineImage(
     model: resolveImagineModel(),
     prompt,
     n: 1,
+    response_format: "b64_json",
     // Gateway / xAI Imagine: aspect_ratio, not size.
     ...({ aspect_ratio: aspectRatio } as Record<string, unknown>),
   });
@@ -52,6 +62,7 @@ export async function editImagineImage(
     model: resolveImagineModel(),
     image,
     prompt,
+    response_format: "b64_json",
     ...({ aspect_ratio: aspectRatio } as Record<string, unknown>),
   });
   return bufferFromImageResponse(response.data);

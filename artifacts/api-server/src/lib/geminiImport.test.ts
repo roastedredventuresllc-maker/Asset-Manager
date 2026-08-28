@@ -19,6 +19,7 @@ test("image pipeline source has a hard no on Gemini models", () => {
   const src = readFileSync(join(here, "imagePipeline.ts"), "utf8");
   assert.equal(/gemini-3-pro-image-preview/.test(src), false);
   assert.equal(/@workspace\/integrations-gemini-ai/.test(src), false);
+  assert.match(src, /generateWithImagine/);
 });
 
 test("OpenAI image client does not throw at import without Replit envs", async () => {
