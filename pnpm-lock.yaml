@@ -261,12 +261,6 @@ importers:
         specifier: 'catalog:'
         version: 4.21.0
 
-  artifacts/healthz:
-    dependencies:
-      express:
-        specifier: ^5.2.1
-        version: 5.2.1
-
   artifacts/launchpad:
     devDependencies:
       '@hookform/resolvers':
