@@ -5,6 +5,9 @@ import { join, normalize, extname } from "path";
 
 const LOCAL_ASSETS_DIR = "/tmp/launchpad-assets";
 
+export const VERCEL_BLOB_REQUIRED_MESSAGE =
+  "BLOB_READ_WRITE_TOKEN is required on Vercel so ad images persist across invocations. /tmp does not survive. Set the token from a Vercel Blob store (names only in docs; never commit the value).";
+
 const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -18,17 +21,21 @@ function contentTypeFor(key: string): string {
   return CONTENT_TYPES[extname(key).toLowerCase()] ?? "application/octet-stream";
 }
 
-function blobConfigured(): boolean {
-  return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN ||
-      process.env.VERCEL_BLOB_READ_WRITE_TOKEN ||
-      process.env.VERCEL,
-  );
+function onVercel(): boolean {
+  return Boolean(process.env.VERCEL);
+}
+
+/** True only when a Blob token is present — not merely because VERCEL=1. */
+export function isBlobConfigured(): boolean {
+  const token =
+    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
+    process.env.VERCEL_BLOB_READ_WRITE_TOKEN?.trim();
+  return Boolean(token);
 }
 
 /**
  * Construct a Replit Object Storage client bound to the provisioned bucket.
- * Kept as a fallback when REPL_ID / a bucket is present. Vercel Blob is primary.
+ * Kept as a fallback off Vercel when REPL_ID / a bucket is present.
  */
 async function objectClient() {
   const { Client } = await import("@replit/object-storage");
@@ -47,26 +54,19 @@ async function saveToBlob(
   key: string,
   buffer: Buffer,
   contentType: string,
-): Promise<string | null> {
-  if (!blobConfigured()) return null;
-  try {
-    const { put } = await import("@vercel/blob");
-    await put(key, buffer, {
-      access: "public",
-      contentType,
-      addRandomSuffix: false,
-      allowOverwrite: true,
-    });
-    return publicAssetUrl(key);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ msg, key }, "Vercel Blob upload failed");
-    return null;
-  }
+): Promise<string> {
+  const { put } = await import("@vercel/blob");
+  await put(key, buffer, {
+    access: "public",
+    contentType,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  return publicAssetUrl(key);
 }
 
 async function readFromBlob(key: string): Promise<Buffer | null> {
-  if (!blobConfigured()) return null;
+  if (!isBlobConfigured()) return null;
   try {
     const { head } = await import("@vercel/blob");
     const meta = await head(key);
@@ -84,8 +84,28 @@ export async function uploadBuffer(
   buffer: Buffer,
   contentType: string,
 ): Promise<string> {
-  const blobUrl = await saveToBlob(key, buffer, contentType);
-  if (blobUrl) return blobUrl;
+  if (onVercel()) {
+    if (!isBlobConfigured()) {
+      logger.error({ key }, VERCEL_BLOB_REQUIRED_MESSAGE);
+      throw new Error(VERCEL_BLOB_REQUIRED_MESSAGE);
+    }
+    try {
+      return await saveToBlob(key, buffer, contentType);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ msg, key }, "Vercel Blob upload failed — not falling through to /tmp");
+      throw err instanceof Error ? err : new Error(msg);
+    }
+  }
+
+  if (isBlobConfigured()) {
+    try {
+      return await saveToBlob(key, buffer, contentType);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ msg, key }, "Vercel Blob upload failed");
+    }
+  }
 
   // Replit Object Storage fallback (REPL_ID / provisioned bucket)
   try {

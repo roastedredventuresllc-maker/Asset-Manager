@@ -10,7 +10,7 @@ The product URL is the Vite app in `artifacts/launchpad`. Generate and revise ru
 
 ### Host on Vercel (production)
 
-`vercel.json` defines two services in one project: **frontend** (`artifacts/launchpad`, Vite) and **api** (`artifacts/api-server`, Express). Top-level rewrites send `/api/*` and `/p/*` to the API and everything else to the site. Generate/revise are not a static-only deploy.
+`vercel.json` defines two services in one project: **frontend** (`artifacts/launchpad`, Vite) and **api** (`artifacts/api-server`, Express). Top-level rewrites send `/api/*` and `/p/*` to the API and everything else to the site. Generate/revise are not a static-only deploy. Both services run `installCommand` from the **repo root** (`cd ../.. && pnpm install --frozen-lockfile`) so they use the root `pnpm-lock.yaml` / `pnpm-workspace.yaml` and can resolve `workspace:*` packages. There is no second lockfile inside a package.
 
 1. Import this GitHub repo in Vercel. **Root Directory** = repository root (`.`). **Framework Preset** = **Services**.
 2. Set environment variables (names only — never commit values). Scope them to Production, Preview, and Development as needed:
@@ -23,7 +23,7 @@ The product URL is the Vite app in `artifacts/launchpad`. Generate and revise ru
 | `XAI_API_KEY` | Fallback for copy | Only if Gateway is unavailable. Set in Vercel env; never commit. |
 | `PUBLIC_APP_URL` | Recommended | Production origin, e.g. `https://your-domain.vercel.app` (Stripe return + landing URLs) |
 | `ADMIN_PASSWORD` | For `/admin` | 503 on admin login without it |
-| `BLOB_READ_WRITE_TOKEN` | Recommended | Vercel Blob so generated images persist across invocations |
+| `BLOB_READ_WRITE_TOKEN` | **Yes** (production images) | Vercel Blob. Required on Vercel so generated ads persist across invocations — `/tmp` does not. Names only here; set the value in Vercel env. |
 | `CRON_SECRET` / `WORKER_SECRET` | Optional | Vercel Cron sends `Authorization: Bearer CRON_SECRET` to `/api/jobs/worker` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Payments | Webhook: `https://<deployment>/api/webhooks/stripe` |
 | Image / ad-platform names | Optional until live | Same names as `.env.example` |
@@ -228,7 +228,7 @@ Generate also drains pending image jobs in the same invocation. Add `CRON_SECRET
 - **Database**: PostgreSQL + Drizzle ORM (`DATABASE_URL`, Neon-compatible)
 - **AI copy**: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Writes generate + revise from the founder prompt.
 - **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
-- **Storage**: Vercel Blob (primary), Replit Object Storage fallback, local `/tmp/launchpad-assets`; public URLs are relative `/api/assets/...`
+- **Storage**: Vercel Blob on Vercel (`BLOB_READ_WRITE_TOKEN` required — fail-closed, no `/tmp`). Off Vercel: Replit Object Storage fallback, then local `/tmp/launchpad-assets`. Public URLs are relative `/api/assets/...`
 - **Payments**: Stripe Checkout + subscriptions + metered usage
 - **Ads**: Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
 - **Auth**: Magic links via email (no passwords ever)

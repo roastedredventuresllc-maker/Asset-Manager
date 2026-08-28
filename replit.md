@@ -31,7 +31,7 @@ On Vercel, `DATABASE_URL` is required (Neon pooled URL). Locally, unset `DATABAS
 - DB: PostgreSQL + Drizzle ORM (`DATABASE_URL` required to boot)
 - AI copy: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Anthropic is not required.
 - Image gen: `gemini-3-pro-image-preview` then `gpt-image-1`; fail-closed (no silent SVG). Optional fal.ai for product-photo background removal only.
-- Storage: Vercel Blob (primary), Replit Object Storage fallback, local `/tmp/launchpad-assets`; public URLs are relative `/api/assets/...`
+- Storage: Vercel Blob on Vercel (`BLOB_READ_WRITE_TOKEN` required). Off Vercel: Replit Object Storage fallback, then local `/tmp/launchpad-assets`; public URLs are relative `/api/assets/...`
 - Payments: Stripe Checkout; webhook sets `in_review` (does **not** auto-publish)
 - Ads: Meta + TikTok + Google (v1). LinkedIn unimplemented. Mock by default (`ADS_MODE=mock`). Saving connector creds never flips live. Client brands publish to per-customer ad account IDs; house env IDs are LaunchPad tests only.
 - Auth: magic links via email (log-only in v1)
@@ -77,6 +77,7 @@ The experience is one page that evolves through states:
 
 - `DATABASE_URL` — required on Vercel (Neon pooled URL); local mock falls back to docker-compose Postgres
 - `AI_GATEWAY_API_KEY` / OIDC — preferred for campaign copy (Grok). `XAI_API_KEY` is fallback only.
+- `BLOB_READ_WRITE_TOKEN` — required on Vercel for durable ad images (fail-closed; `/tmp` does not survive)
 - `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` — optional (reference vision only)
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`

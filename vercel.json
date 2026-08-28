@@ -4,7 +4,7 @@
     "frontend": {
       "root": "artifacts/launchpad",
       "framework": "vite",
-      "installCommand": "pnpm install --frozen-lockfile",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
       "buildCommand": "pnpm run build",
       "outputDirectory": "dist/public",
       "rewrites": [
@@ -15,7 +15,7 @@
       "root": "artifacts/api-server",
       "framework": "express",
       "entrypoint": "src/app.ts",
-      "installCommand": "pnpm install --frozen-lockfile",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
       "functions": {
         "src/app.ts": {
           "maxDuration": 300
