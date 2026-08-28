@@ -29,18 +29,18 @@ Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not
 | `STRIPE_WEBHOOK_SECRET` | For webhooks | Run `stripe listen` or add endpoint in Stripe dashboard |
 | `ADMIN_PASSWORD` | Admin + encrypted connectors | Any strong password |
 | `META_SYSTEM_USER_TOKEN` | For Meta ads | See Meta setup below |
-| `META_BUSINESS_ID` | For Meta ads | **Ad Account ID** (digits only, no `act_` prefix), not the Business Manager ID |
+| `META_BUSINESS_ID` | House/test Meta ads | **Ad Account ID** (digits only, no `act_` prefix), not the Business Manager ID. Client brands use per-customer IDs, not this house ID. |
 | `META_DEFAULT_PAGE_ID` | For Meta ads | Your Facebook Page ID |
 | `TIKTOK_ACCESS_TOKEN` | For TikTok ads | See TikTok setup below |
 | `TIKTOK_BC_ID` | For TikTok ads | TikTok Business Center ID |
-| `TIKTOK_ADVERTISER_ID` | For TikTok ads | TikTok Ads Manager advertiser ID |
-| `TIKTOK_IDENTITY_ID` | For TikTok ads | Verified **CUSTOMIZED_USER** identity ID (required for image ads) |
+| `TIKTOK_ADVERTISER_ID` | House/test TikTok ads | TikTok Ads Manager advertiser ID (LaunchPad tests only) |
+| `TIKTOK_IDENTITY_ID` | House/test TikTok ads | Verified **CUSTOMIZED_USER** identity ID (required for image ads) |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | Google Ads API Center |
 | `GOOGLE_ADS_CLIENT_ID` | For Google Ads | Google Cloud OAuth client |
 | `GOOGLE_ADS_CLIENT_SECRET` | For Google Ads | Google Cloud OAuth client |
 | `GOOGLE_ADS_REFRESH_TOKEN` | For Google Ads | OAuth Playground, AdWords scope |
-| `GOOGLE_ADS_CUSTOMER_ID` | For Google Ads | Customer ID (digits; dashes stripped) |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional | Manager account customer ID |
+| `GOOGLE_ADS_CUSTOMER_ID` | House/test Google Ads | House/test Customer ID (digits; dashes stripped). Clients have their own Customer ID. |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | MCC | Manager account customer ID — stays house; used as login-customer-id for every client |
 | `WORKER_SECRET` | Optional | Any random string — secures the job worker endpoint |
 
 ### 3. Environment variables
@@ -81,7 +81,21 @@ Local asset URLs are relative `/api/assets/...` (browser + Vite proxy). Do not e
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`
 
-**To go live**: set `ADS_MODE=live` once Meta, TikTok, and Google credentials are saved. Saving credentials in Admin → Connectors does **not** flip live.
+**To go live**: set `ADS_MODE=live` once Meta, TikTok, and Google credentials are saved **and** each client has On Behalf Of / partner / MCC access granted. Saving credentials in Admin → Connectors does **not** flip live.
+
+---
+
+## Per-customer ad accounts
+
+Client brands never publish through LaunchPad house IDs — even for the first five customers. Store one Meta Ad Account ID, TikTok advertiser ID, and Google Ads Customer ID per client in Admin → Client ad accounts (or on the campaign card). At publish time those IDs overlay the house credential *tokens*:
+
+- **Meta:** LaunchPad system-user token + client's Ad Account ID and Page ID (Business On Behalf Of). `META_BUSINESS_ID` in env is the house/test Ad Account only.
+- **TikTok:** LaunchPad partner access token + client's advertiser and **CUSTOMIZED_USER** identity. House `TIKTOK_ADVERTISER_ID` is tests only.
+- **Google:** MCC is `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (house). Client Customer ID overlays `GOOGLE_ADS_CUSTOMER_ID`.
+
+Humans still have to complete, as named steps (not tokens): Request Business On Behalf Of access; Client BM admin accepts the On Behalf Of request; Send TikTok partner access request; Client accepts partner access; Send MCC manager invitation; Client accepts the manager invitation.
+
+A campaign marked **house test** (or a user flagged as LaunchPad house) may use house env IDs. Client campaigns missing IDs fail closed and do not fall back to house.
 
 ---
 
@@ -146,7 +160,7 @@ Deployed endpoint: `https://your-domain/api/webhooks/stripe` listening to:
 4. Approval: typically 1–2 weeks; you can create and pause campaigns in Standard Access while waiting
 
 ### Step 4: Get IDs
-- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → copy the **Ad Account ID** (digits only, no `act_` prefix). Paste it as `META_BUSINESS_ID` — that field is the Ad Account ID, not the Business Manager ID.
+- `META_BUSINESS_ID`: Business Settings → Accounts → Ad Accounts → copy LaunchPad's **house/test Ad Account ID** (digits only, no `act_` prefix). Paste it as `META_BUSINESS_ID` — that field is the Ad Account ID, not the Business Manager ID. Client brands get their own Ad Account IDs under Admin → Client ad accounts.
 - `META_DEFAULT_PAGE_ID`: Your Facebook Page → About → Page ID
 
 ---
@@ -216,7 +230,7 @@ Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint
 3. In-process worker drains `generate_image` jobs (optional external cron: `POST /api/jobs/worker`)
 4. User clicks Ship → `POST /api/campaigns/:id/publish` → Stripe Checkout (`status=publishing`)
 5. `checkout.session.completed` webhook → claim campaign, set `in_review` + `pendingPublishJson` (does **not** auto-publish)
-6. Admin approves in `/admin` (`ADMIN_PASSWORD`) → publish to Meta/TikTok/Google (still mock unless `ADS_MODE=live`)
+6. Admin stores per-customer ad account IDs (or marks a house test) then approves in `/admin` → publish to those accounts (still mock unless `ADS_MODE=live`)
 7. Frontend shows ReviewState after paid checkout; LiveState after admin approval
 
 ### Landing pages

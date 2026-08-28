@@ -48,7 +48,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     label: "Meta (Facebook & Instagram)",
     blurb:
       "Publish to Facebook and Instagram feeds, stories and reels through the Meta Marketing API.",
-    note: "Requires an approved Meta Business account with a system-user token.",
+    note: "House/test Ad Account only. Client brands publish to per-customer Ad Account IDs via Business On Behalf Of — never through this house ID.",
     requiredSecretKeys: [
       "META_SYSTEM_USER_TOKEN",
       "META_BUSINESS_ID",
@@ -63,7 +63,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     v1: true,
     setupSteps: [
       {
-        text: "Open Business Settings → Accounts → Ad Accounts, select the ad account you advertise from, and copy its Ad Account ID (digits only, no act_ prefix). Paste it as META_BUSINESS_ID — that field is the Ad Account ID, not the Business Manager ID.",
+        text: "Open Business Settings → Accounts → Ad Accounts, select LaunchPad's house/test ad account, and copy its Ad Account ID (digits only, no act_ prefix). Paste it as META_BUSINESS_ID — that field is the Ad Account ID, not the Business Manager ID. Client brands do not use this ID.",
         link: {
           label: "Open Ad Accounts",
           url: "https://business.facebook.com/settings/ad-accounts",
@@ -92,7 +92,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
     label: "TikTok Ads",
     blurb:
       "Publish in-feed video and image ads through the TikTok for Business Marketing API.",
-    note: "Requires an approved TikTok Marketing API app and Business Center access.",
+    note: "House/test advertiser only. Client brands publish to client-owned advertisers via partner access. TIKTOK_IDENTITY_ID must be a CUSTOMIZED_USER identity.",
     requiredSecretKeys: [
       "TIKTOK_ACCESS_TOKEN",
       "TIKTOK_BC_ID",
@@ -117,7 +117,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
         },
       },
       {
-        text: "In Business Center, copy your Business Center ID (TIKTOK_BC_ID), Advertiser ID (TIKTOK_ADVERTISER_ID), and a verified CUSTOMIZED_USER Identity ID (TIKTOK_IDENTITY_ID). Image ads require TIKTOK_IDENTITY_ID.",
+        text: "In Business Center, copy LaunchPad's house/test Business Center ID (TIKTOK_BC_ID), Advertiser ID (TIKTOK_ADVERTISER_ID), and a verified CUSTOMIZED_USER Identity ID (TIKTOK_IDENTITY_ID). Image ads require TIKTOK_IDENTITY_ID. Client advertiser IDs are stored per customer, not here.",
       },
       { text: "Paste the four values into the fields below and press Save." },
     ],
@@ -142,8 +142,8 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
       GOOGLE_ADS_CLIENT_ID: "OAuth client ID from Google Cloud Console",
       GOOGLE_ADS_CLIENT_SECRET: "OAuth client secret from Google Cloud Console",
       GOOGLE_ADS_REFRESH_TOKEN: "Refresh token from OAuth Playground (AdWords scope)",
-      GOOGLE_ADS_CUSTOMER_ID: "Ads Customer ID (digits; dashes are stripped)",
-      GOOGLE_ADS_LOGIN_CUSTOMER_ID: "Manager-account Customer ID, only if you publish through an MCC",
+      GOOGLE_ADS_CUSTOMER_ID: "House/test Ads Customer ID (digits; dashes are stripped)",
+      GOOGLE_ADS_LOGIN_CUSTOMER_ID: "MCC manager Customer ID — used for every client under the MCC",
     },
     v1: true,
     setupSteps: [
@@ -169,7 +169,7 @@ export const CONNECTOR_SPECS: ConnectorSpec[] = [
         },
       },
       {
-        text: "Copy the target account's Customer ID (GOOGLE_ADS_CUSTOMER_ID). Only if you publish through a manager account, also add its ID as GOOGLE_ADS_LOGIN_CUSTOMER_ID.",
+        text: "Copy LaunchPad's house/test Customer ID (GOOGLE_ADS_CUSTOMER_ID). Set the MCC as GOOGLE_ADS_LOGIN_CUSTOMER_ID — that MCC stays house. Client Customer IDs are stored per customer, not here.",
       },
       { text: "Paste the values into the fields below and press Save." },
     ],

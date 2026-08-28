@@ -44,6 +44,8 @@ test("product connector paths never assign ADS_MODE", () => {
     "credentials.ts",
     "connectors.ts",
     "verify.ts",
+    "accountTarget.ts",
+    "clientAccounts.ts",
     "index.ts",
     "google.ts",
     join("..", "routes", "admin.ts"),
@@ -91,6 +93,17 @@ test("TIKTOK_IDENTITY_ID is required CUSTOMIZED_USER identity", () => {
   const blob = tiktok.setupSteps.map((s) => s.text).join(" ");
   assert.match(blob, /TIKTOK_IDENTITY_ID/);
   assert.match(blob, /CUSTOMIZED_USER/);
+});
+
+test("house connector copy says env IDs are LaunchPad tests, not client brands", () => {
+  const meta = CONNECTOR_SPECS.find((s) => s.id === "meta");
+  const tiktok = CONNECTOR_SPECS.find((s) => s.id === "tiktok");
+  const google = CONNECTOR_SPECS.find((s) => s.id === "google");
+  assert.match(meta?.note ?? "", /house\/test/i);
+  assert.match(tiktok?.note ?? "", /CUSTOMIZED_USER/);
+  assert.match(google?.secretKeyLabels?.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "", /MCC/);
+  const googleBlob = google?.setupSteps.map((s) => s.text).join(" ") ?? "";
+  assert.match(googleBlob, /per customer/);
 });
 
 test("Google customer IDs strip dashes from the Ads UI", () => {

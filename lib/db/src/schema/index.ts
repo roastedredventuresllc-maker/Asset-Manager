@@ -8,3 +8,4 @@ export * from "./publishes";
 export * from "./metrics_snapshots";
 export * from "./jobs";
 export * from "./platform_credentials";
+export * from "./client_ad_accounts";

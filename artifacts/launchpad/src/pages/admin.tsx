@@ -426,6 +426,8 @@ export default function Admin() {
 
         <CampaignsSection token={token ?? ""} />
 
+        <ClientAccountsSection token={token ?? ""} />
+
         <ConnectorsSection
           data={connectors}
           loading={connectorsLoading}
@@ -564,8 +566,11 @@ interface AdminRiskFlags {
   error?: string;
 }
 
+type AccessStatus = "none" | "requested" | "granted";
+
 interface AdminCampaignRow {
   id: string;
+  userId: string | null;
   brandName: string;
   tagline: string | null;
   brief: string;
@@ -583,6 +588,41 @@ interface AdminCampaignRow {
   landingSlug: string | null;
   platforms: { platform: string; status: string }[];
   createdAt: string;
+  isHouseTest: boolean;
+  accountScope: "house" | "client";
+  accountIds: {
+    metaAdAccountId?: string;
+    metaPageId?: string;
+    tiktokAdvertiserId?: string;
+    tiktokIdentityId?: string;
+    googleCustomerId?: string;
+  };
+  accountAccess: {
+    metaBoboStatus: AccessStatus;
+    tiktokPartnerStatus: AccessStatus;
+    googleMccLinkStatus: AccessStatus;
+  };
+  missingAccountIds: string[];
+}
+
+interface HumanStep {
+  id: string;
+  name: string;
+}
+
+interface ClientAdAccountRow {
+  userId: string;
+  email: string | null;
+  isHouse: boolean;
+  metaAdAccountId: string | null;
+  metaPageId: string | null;
+  metaClientBusinessId: string | null;
+  metaBoboStatus: AccessStatus;
+  tiktokAdvertiserId: string | null;
+  tiktokIdentityId: string | null;
+  tiktokPartnerStatus: AccessStatus;
+  googleCustomerId: string | null;
+  googleMccLinkStatus: AccessStatus;
 }
 
 const dollars = (cents: number | null | undefined) =>
@@ -604,7 +644,20 @@ function CampaignsSection({ token }: { token: string }) {
       });
       if (!res.ok) throw new Error(`Failed to load (${res.status})`);
       const data = (await res.json()) as { campaigns: AdminCampaignRow[] };
-      setRows(data.campaigns);
+      setRows(
+        data.campaigns.map((c) => ({
+          ...c,
+          isHouseTest: c.isHouseTest ?? false,
+          accountScope: c.accountScope ?? "client",
+          accountIds: c.accountIds ?? {},
+          accountAccess: c.accountAccess ?? {
+            metaBoboStatus: "none",
+            tiktokPartnerStatus: "none",
+            googleMccLinkStatus: "none",
+          },
+          missingAccountIds: c.missingAccountIds ?? [],
+        })),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load campaigns");
     } finally {
@@ -621,7 +674,7 @@ function CampaignsSection({ token }: { token: string }) {
     setActionError(null);
     try {
       const res = await fetch(`/api/admin/campaigns/${id}/${path}`, {
-        method: path === "budget-cap" ? "PATCH" : "POST",
+        method: path === "budget-cap" || path === "ad-accounts" ? "PATCH" : "POST",
         headers: { "x-admin-token": token, "Content-Type": "application/json" },
         body: body ? JSON.stringify(body) : undefined,
       });
@@ -671,8 +724,9 @@ function CampaignsSection({ token }: { token: string }) {
     <Section label="Client campaigns">
       <div className="flex items-center justify-between mb-6 -mt-4">
         <p className="font-sans text-sm text-muted-foreground">
-          Every campaign runs from the house ad accounts — nothing goes live
-          without approval, and spend caps auto-pause overruns.
+          Client brands publish to their own Meta / TikTok / Google accounts.
+          House IDs are LaunchPad tests only. Nothing goes live without
+          approval; spend caps auto-pause overruns.
         </p>
         <button
           onClick={() => void load()}
@@ -712,6 +766,7 @@ function CampaignsSection({ token }: { token: string }) {
                   onPause={() => void act(row.id, "pause")}
                   onResume={() => void act(row.id, "resume")}
                   onEditCap={() => editCap(row)}
+                  onSaveAccounts={(body) => void act(row.id, "ad-accounts", body)}
                 />
               ))}
             </div>
@@ -736,11 +791,248 @@ function CampaignsSection({ token }: { token: string }) {
                   onPause={() => void act(row.id, "pause")}
                   onResume={() => void act(row.id, "resume")}
                   onEditCap={() => editCap(row)}
+                  onSaveAccounts={(body) => void act(row.id, "ad-accounts", body)}
                 />
               ))}
             </div>
           )}
         </>
+      )}
+    </Section>
+  );
+}
+
+function statusSelect(
+  value: AccessStatus,
+  onChange: (v: AccessStatus) => void,
+) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as AccessStatus)}
+      className="font-sans text-xs px-2 py-1.5 rounded-lg border border-border bg-background"
+    >
+      <option value="none">none</option>
+      <option value="requested">requested</option>
+      <option value="granted">granted</option>
+    </select>
+  );
+}
+
+function ClientAccountsSection({ token }: { token: string }) {
+  const [clients, setClients] = useState<ClientAdAccountRow[] | null>(null);
+  const [steps, setSteps] = useState<{
+    meta: HumanStep[];
+    tiktok: HumanStep[];
+    google: HumanStep[];
+  } | null>(null);
+  const [adsModeValue, setAdsModeValue] = useState<string>("mock");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, ClientAdAccountRow>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/clients", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+      const data = (await res.json()) as {
+        adsMode: string;
+        humanSteps: { meta: HumanStep[]; tiktok: HumanStep[]; google: HumanStep[] };
+        clients: ClientAdAccountRow[];
+      };
+      setAdsModeValue(data.adsMode);
+      setSteps(data.humanSteps);
+      setClients(data.clients);
+      setDrafts(Object.fromEntries(data.clients.map((c) => [c.userId, { ...c }])));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load clients");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const save = async (userId: string) => {
+    const draft = drafts[userId];
+    if (!draft) return;
+    setSavingId(userId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/clients/${userId}`, {
+        method: "PUT",
+        headers: { "x-admin-token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isHouse: draft.isHouse,
+          metaAdAccountId: draft.metaAdAccountId,
+          metaPageId: draft.metaPageId,
+          metaClientBusinessId: draft.metaClientBusinessId,
+          metaBoboStatus: draft.metaBoboStatus,
+          tiktokAdvertiserId: draft.tiktokAdvertiserId,
+          tiktokIdentityId: draft.tiktokIdentityId,
+          tiktokPartnerStatus: draft.tiktokPartnerStatus,
+          googleCustomerId: draft.googleCustomerId,
+          googleMccLinkStatus: draft.googleMccLinkStatus,
+        }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || `Save failed (${res.status})`);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const setDraft = (userId: string, patch: Partial<ClientAdAccountRow>) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [userId]: { ...(prev[userId] as ClientAdAccountRow), ...patch },
+    }));
+  };
+
+  const field = (
+    userId: string,
+    key: keyof ClientAdAccountRow,
+    label: string,
+  ) => (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] font-sans uppercase tracking-[1.5px] opacity-40">
+        {label}
+      </span>
+      <input
+        value={String(drafts[userId]?.[key] ?? "")}
+        onChange={(e) => setDraft(userId, { [key]: e.target.value } as Partial<ClientAdAccountRow>)}
+        className="font-mono text-sm px-3 py-2 rounded-xl border border-border bg-background"
+      />
+    </label>
+  );
+
+  return (
+    <Section label="Client ad accounts">
+      <div className="flex items-start justify-between gap-6 mb-6 -mt-4 flex-wrap">
+        <p className="font-sans text-sm text-muted-foreground max-w-2xl leading-relaxed">
+          One Meta Ad Account, TikTok advertiser, and Google Ads customer per client.
+          LaunchPad house env IDs stay on Connectors for our own tests. Saving IDs does
+          not flip live — publishing mode is still{" "}
+          <code className="bg-secondary px-1 rounded text-xs">ADS_MODE={adsModeValue}</code>.
+        </p>
+        <button
+          onClick={() => void load()}
+          className="inline-flex items-center gap-1.5 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /> Refresh
+        </button>
+      </div>
+
+      {steps && (
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          {(
+            [
+              ["Meta · Business On Behalf Of", steps.meta],
+              ["TikTok · partner access", steps.tiktok],
+              ["Google · MCC link", steps.google],
+            ] as const
+          ).map(([title, list]) => (
+            <div key={title} className="bg-card border border-border rounded-2xl p-5">
+              <h4 className="font-sans text-[11px] uppercase tracking-[2px] text-muted-foreground mb-3">
+                {title}
+              </h4>
+              <ol className="flex flex-col gap-2">
+                {list.map((s, i) => (
+                  <li key={s.id} className="flex gap-2 font-sans text-sm leading-relaxed">
+                    <span className="opacity-30 font-serif">{String(i + 1).padStart(2, "0")}</span>
+                    {s.name}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="font-sans text-sm text-red-500 mb-4">{error}</p>}
+
+      {loading && !clients ? (
+        <div className="flex justify-center p-10">
+          <span className="w-6 h-6 rounded-full border-2 border-border border-t-foreground animate-spin" />
+        </div>
+      ) : (clients ?? []).length === 0 ? (
+        <p className="font-sans text-sm text-muted-foreground">
+          No clients yet. After checkout, the customer appears here so you can store
+          their ad account IDs.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {(clients ?? []).map((row) => {
+            const draft = drafts[row.userId] ?? row;
+            return (
+              <div key={row.userId} className="bg-card border border-border rounded-2xl p-6">
+                <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+                  <div>
+                    <h4 className="font-serif text-2xl leading-tight">
+                      {row.email ?? row.userId}
+                    </h4>
+                    <p className="font-sans text-xs text-muted-foreground">{row.userId}</p>
+                  </div>
+                  <label className="inline-flex items-center gap-2 font-sans text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.isHouse}
+                      onChange={(e) => setDraft(row.userId, { isHouse: e.target.checked })}
+                    />
+                    LaunchPad house user
+                  </label>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {field(row.userId, "metaAdAccountId", "Meta Ad Account ID")}
+                  {field(row.userId, "metaPageId", "Meta Page ID")}
+                  {field(row.userId, "metaClientBusinessId", "Client Business Manager ID")}
+                  {field(row.userId, "tiktokAdvertiserId", "TikTok Advertiser ID")}
+                  {field(row.userId, "tiktokIdentityId", "TikTok CUSTOMIZED_USER Identity ID")}
+                  {field(row.userId, "googleCustomerId", "Google Ads Customer ID")}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-4 items-center">
+                  <label className="flex items-center gap-2 font-sans text-xs">
+                    On Behalf Of
+                    {statusSelect(draft.metaBoboStatus, (v) =>
+                      setDraft(row.userId, { metaBoboStatus: v }),
+                    )}
+                  </label>
+                  <label className="flex items-center gap-2 font-sans text-xs">
+                    TikTok partner
+                    {statusSelect(draft.tiktokPartnerStatus, (v) =>
+                      setDraft(row.userId, { tiktokPartnerStatus: v }),
+                    )}
+                  </label>
+                  <label className="flex items-center gap-2 font-sans text-xs">
+                    Google MCC link
+                    {statusSelect(draft.googleMccLinkStatus, (v) =>
+                      setDraft(row.userId, { googleMccLinkStatus: v }),
+                    )}
+                  </label>
+                  <button
+                    disabled={savingId === row.userId}
+                    onClick={() => void save(row.userId)}
+                    className="ml-auto font-sans text-sm px-4 py-2 rounded-xl border border-border hover:border-foreground/40 disabled:opacity-40"
+                  >
+                    {savingId === row.userId ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </Section>
   );
@@ -801,6 +1093,7 @@ function AdminCampaignCard({
   onPause,
   onResume,
   onEditCap,
+  onSaveAccounts,
 }: {
   row: AdminCampaignRow;
   busy: boolean;
@@ -809,9 +1102,20 @@ function AdminCampaignCard({
   onPause: () => void;
   onResume: () => void;
   onEditCap: () => void;
+  onSaveAccounts: (body: Record<string, unknown>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingAccounts, setEditingAccounts] = useState(false);
+  const [ids, setIds] = useState({
+    metaAdAccountId: row.accountIds.metaAdAccountId ?? "",
+    metaPageId: row.accountIds.metaPageId ?? "",
+    tiktokAdvertiserId: row.accountIds.tiktokAdvertiserId ?? "",
+    tiktokIdentityId: row.accountIds.tiktokIdentityId ?? "",
+    googleCustomerId: row.accountIds.googleCustomerId ?? "",
+  });
   const risk = row.riskFlags;
+  const blocked =
+    row.accountScope === "client" && row.missingAccountIds.length > 0 && !row.isHouseTest;
 
   const btn =
     "font-sans text-sm px-4 py-2 rounded-xl border border-border hover:border-foreground/40 transition-colors disabled:opacity-40";
@@ -826,12 +1130,22 @@ function AdminCampaignCard({
             {(row.status === "in_review" || row.status === "rejected") && (
               <RiskBadge risk={risk} />
             )}
+            <span className="text-[11px] font-sans rounded-full px-2.5 py-1 bg-secondary text-muted-foreground">
+              {row.isHouseTest || row.accountScope === "house"
+                ? "house test"
+                : "client account"}
+            </span>
           </div>
           <p className="font-sans text-xs text-muted-foreground">
             {row.clientEmail ?? "no client email"} ·{" "}
             {new Date(row.createdAt).toLocaleDateString()}
             {row.platforms.length > 0 &&
               ` · ${row.platforms.map((p) => `${p.platform}:${p.status}`).join(" ")}`}
+          </p>
+          <p className="font-sans text-xs text-muted-foreground mt-1">
+            Meta {row.accountIds.metaAdAccountId ?? "—"} · TikTok{" "}
+            {row.accountIds.tiktokAdvertiserId ?? "—"} · Google{" "}
+            {row.accountIds.googleCustomerId ?? "—"}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
@@ -843,6 +1157,13 @@ function AdminCampaignCard({
           </div>
         </div>
       </div>
+
+      {blocked && (
+        <p className="mt-3 font-sans text-sm text-amber-700">
+          Assign per-customer ad account IDs before publish. Missing:{" "}
+          {row.missingAccountIds.join(", ")}.
+        </p>
+      )}
 
       {risk && (risk.summary || risk.flags.length > 0) && row.status === "in_review" && (
         <div className="mt-4 bg-secondary/50 rounded-xl p-4">
@@ -868,11 +1189,51 @@ function AdminCampaignCard({
         </p>
       )}
 
+      {editingAccounts && (
+        <form
+          className="mt-4 grid sm:grid-cols-2 gap-3 border-t border-border pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSaveAccounts({ ...ids, isHouseTest: row.isHouseTest });
+            setEditingAccounts(false);
+          }}
+        >
+          {(
+            [
+              ["metaAdAccountId", "Meta Ad Account ID"],
+              ["metaPageId", "Meta Page ID"],
+              ["tiktokAdvertiserId", "TikTok Advertiser ID"],
+              ["tiktokIdentityId", "TikTok CUSTOMIZED_USER Identity ID"],
+              ["googleCustomerId", "Google Ads Customer ID"],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key} className="flex flex-col gap-1">
+              <span className="text-[10px] font-sans uppercase tracking-[1.5px] opacity-40">
+                {label}
+              </span>
+              <input
+                value={ids[key]}
+                onChange={(e) => setIds((p) => ({ ...p, [key]: e.target.value }))}
+                className="font-mono text-sm px-3 py-2 rounded-xl border border-border bg-background"
+              />
+            </label>
+          ))}
+          <div className="sm:col-span-2 flex gap-2">
+            <button type="submit" disabled={busy} className={btn}>
+              Save account IDs
+            </button>
+            <button type="button" className={btn} onClick={() => setEditingAccounts(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="mt-4 flex items-center gap-3 flex-wrap">
         {row.status === "in_review" && (
           <>
             <button
-              disabled={busy}
+              disabled={busy || blocked}
               onClick={onApprove}
               className="font-sans text-sm px-4 py-2 rounded-xl bg-foreground text-background hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
@@ -895,6 +1256,16 @@ function AdminCampaignCard({
         )}
         <button disabled={busy} onClick={onEditCap} className={btn}>
           Edit cap
+        </button>
+        <button disabled={busy} onClick={() => setEditingAccounts((v) => !v)} className={btn}>
+          {editingAccounts ? "Close accounts" : "Ad accounts"}
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onSaveAccounts({ isHouseTest: !row.isHouseTest })}
+          className={btn}
+        >
+          {row.isHouseTest ? "Unmark house test" : "Mark house test"}
         </button>
         {row.landingSlug && (
           <a
@@ -940,13 +1311,12 @@ function ConnectorsSection({
     <Section label="Ad platform connectors">
       <div className="-mt-4 mb-8 flex items-start justify-between gap-6 flex-wrap">
         <p className="max-w-2xl font-sans text-sm text-muted-foreground leading-relaxed">
-          The ad networks LaunchPad can publish to. Enter each platform's credentials below — they're
-          encrypted before they're stored and never shown again — or set them as server secrets. A
-          platform needs its credentials connected and{" "}
-          <code className="bg-secondary px-1 rounded text-xs">ADS_MODE</code> set to{" "}
-          <code className="bg-secondary px-1 rounded text-xs">live</code> before real campaigns run;
-          otherwise everything stays in safe <code className="bg-secondary px-1 rounded text-xs">mock</code>{" "}
-          simulation.
+          The house credentials LaunchPad uses for its own test campaigns. Client
+          brands do not publish here — store their Ad Account / advertiser / Customer
+          IDs under Client ad accounts. Saving credentials never flips{" "}
+          <code className="bg-secondary px-1 rounded text-xs">ADS_MODE</code> (stays{" "}
+          <code className="bg-secondary px-1 rounded text-xs">mock</code> until you
+          set live).
         </p>
         <button
           onClick={onRefresh}

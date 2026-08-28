@@ -1,11 +1,13 @@
 import { db, campaignsTable, publishesTable, adAssetsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getAdPlatform } from "../ads/index.js";
+import { getAdPlatformForCampaign } from "../ads/index.js";
+import { AccountIsolationError } from "../ads/accountTarget.js";
 import { generateId } from "./ids.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
 import { publicOrigin } from "./assetUrl.js";
 import type { CampaignData } from "./claude.js";
+import type { PublicAccountTarget } from "../ads/accountTarget.js";
 
 export interface PublishOptions {
   dailyBudgetCents: number;
@@ -19,13 +21,14 @@ export interface PublishOutcome {
   ok: boolean;
   externalCampaignId?: string;
   error?: string;
+  targetAccount?: PublicAccountTarget;
 }
 
 /**
  * Publish a generated campaign to the configured ad platforms and record the
- * results. Shared by the Stripe checkout webhook (real flow) and the dev-only
- * test-publish endpoint. Honors ADS_MODE (mock by default). Marks the campaign
- * "live" if at least one platform succeeds.
+ * results. Shared by admin approval and the dev-only test-publish endpoint.
+ * Honors ADS_MODE (mock by default). Client brands publish to stored
+ * per-customer account IDs; house env IDs are LaunchPad tests only.
  */
 export async function publishCampaignToPlatforms(
   campaignId: string,
@@ -44,9 +47,6 @@ export async function publishCampaignToPlatforms(
     ? `${origin}/p/${campaign.landingSlug}`
     : origin;
 
-  // House-account model: every client campaign lives in OUR ad accounts, so
-  // platform-side campaign names carry a per-client tag for clean filtering
-  // and reporting inside Meta/TikTok ads managers.
   let clientTag = "anon";
   if (campaign.userId) {
     const user = await db.query.usersTable.findFirst({
@@ -60,7 +60,6 @@ export async function publishCampaignToPlatforms(
   }
   const platformCampaignName = `LP · ${clientTag} · ${campaignId} — ${cj.brandName}`;
 
-  // Attach generated image URLs to each ad so platforms can use them.
   const assets = await db.query.adAssetsTable.findMany({
     where: eq(adAssetsTable.campaignId, campaignId),
   });
@@ -80,6 +79,12 @@ export async function publishCampaignToPlatforms(
   if (googlePct > 0) platforms.push("google");
 
   const outcomes: PublishOutcome[] = [];
+  const snapshot: PublicAccountTarget = {
+    scope: campaign.isHouseTest ? "house" : "client",
+  };
+
+  const allowUnclaimedHouse =
+    !campaign.userId && process.env.NODE_ENV !== "production";
 
   for (const platform of platforms) {
     const share =
@@ -91,7 +96,14 @@ export async function publishCampaignToPlatforms(
     const platformBudget = Math.round((opts.dailyBudgetCents * share) / 100);
 
     try {
-      const adPlatform = await getAdPlatform(platform);
+      const { adPlatform, target } = await getAdPlatformForCampaign(
+        platform,
+        campaign,
+        { allowUnclaimedHouse, useSnapshot: false },
+      );
+      Object.assign(snapshot, target.publicTarget);
+      snapshot.scope = target.scope;
+
       const result = await adPlatform.publishCampaign({
         campaignId,
         brandName: cj.brandName,
@@ -101,6 +113,12 @@ export async function publishCampaignToPlatforms(
         dailyBudgetCents: platformBudget,
         audience: cj.audience,
         ads: adsWithImages,
+        targetAccount: {
+          scope: target.scope,
+          metaAdAccountId: target.publicTarget.metaAdAccountId,
+          tiktokAdvertiserId: target.publicTarget.tiktokAdvertiserId,
+          googleCustomerId: target.publicTarget.googleCustomerId,
+        },
       });
 
       await db.insert(publishesTable).values({
@@ -115,12 +133,21 @@ export async function publishCampaignToPlatforms(
         publishedAt: new Date(),
       });
 
-      outcomes.push({ platform, ok: true, externalCampaignId: result.externalCampaignId });
-      logger.info({ campaignId, platform, result }, "Campaign published");
+      outcomes.push({
+        platform,
+        ok: true,
+        externalCampaignId: result.externalCampaignId,
+        targetAccount: target.publicTarget,
+      });
+      logger.info(
+        { campaignId, platform, result, targetAccount: target.publicTarget },
+        "Campaign published",
+      );
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      const code = err instanceof AccountIsolationError ? err.code : undefined;
       outcomes.push({ platform, ok: false, error });
-      logger.error({ err, campaignId, platform }, "Failed to publish to platform");
+      logger.error({ err, campaignId, platform, code }, "Failed to publish to platform");
     }
   }
 
@@ -128,7 +155,11 @@ export async function publishCampaignToPlatforms(
   if (live) {
     await db
       .update(campaignsTable)
-      .set({ status: "live", pausedReason: null })
+      .set({
+        status: "live",
+        pausedReason: null,
+        publishedAccountJson: snapshot,
+      })
       .where(eq(campaignsTable.id, campaignId));
   }
 

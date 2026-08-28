@@ -1,17 +1,15 @@
 import { db, campaignsTable, publishesTable, metricsSnapshotsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { getAdPlatform } from "../ads/index.js";
+import { getAdPlatformForCampaign } from "../ads/index.js";
 import { generateId } from "./ids.js";
 import { pauseCampaignById, getLifetimeSpendCents } from "./campaignService.js";
 import { logger } from "./logger.js";
 
 /**
- * Spend guard: the automatic safety net of the house-account model. On an
- * interval it polls platform metrics for every live campaign, records
- * per-platform + total snapshots (the spend history the admin roster and
- * client dashboard read), and auto-pauses any campaign whose lifetime spend
- * has reached its budget cap — so a client can never spend more than they
- * paid for, even if no human is watching.
+ * Spend guard: polls platform metrics for every live campaign, records
+ * per-platform + total snapshots, and auto-pauses any campaign whose lifetime
+ * spend has reached its budget cap. Metrics are fetched against the same
+ * per-customer (or house-test) account the campaign was published to.
  */
 
 export interface SpendGuardResult {
@@ -44,8 +42,12 @@ export async function runSpendGuardOnce(): Promise<SpendGuardResult> {
       for (const pub of publishes) {
         if (!pub.externalCampaignId) continue;
         try {
-          const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
-          const m = await platform.getMetrics(pub.externalCampaignId);
+          const { adPlatform } = await getAdPlatformForCampaign(
+            pub.platform as "meta" | "tiktok" | "google",
+            campaign,
+            { useSnapshot: true, allowUnclaimedHouse: !campaign.userId },
+          );
+          const m = await adPlatform.getMetrics(pub.externalCampaignId);
           anyMetrics = true;
           totalImpressions += m.impressions;
           totalClicks += m.clicks;
