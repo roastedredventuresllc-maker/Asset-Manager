@@ -5,6 +5,9 @@ import { join, normalize, extname } from "path";
 
 const LOCAL_ASSETS_DIR = "/tmp/launchpad-assets";
 
+export const VERCEL_BLOB_REQUIRED_MESSAGE =
+  "BLOB_READ_WRITE_TOKEN is required on Vercel so ad images persist across invocations. /tmp does not survive. Set the token from a Vercel Blob store (names only in docs; never commit the value).";
+
 const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -18,11 +21,21 @@ function contentTypeFor(key: string): string {
   return CONTENT_TYPES[extname(key).toLowerCase()] ?? "application/octet-stream";
 }
 
+function onVercel(): boolean {
+  return Boolean(process.env.VERCEL);
+}
+
+/** True only when a Blob token is present — not merely because VERCEL=1. */
+export function isBlobConfigured(): boolean {
+  const token =
+    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
+    process.env.VERCEL_BLOB_READ_WRITE_TOKEN?.trim();
+  return Boolean(token);
+}
+
 /**
  * Construct a Replit Object Storage client bound to the provisioned bucket.
- * The bucket id is injected via DEFAULT_OBJECT_STORAGE_BUCKET_ID (set when the
- * bucket is provisioned); without it the client has no default bucket and every
- * call fails, forcing the ephemeral local fallback.
+ * Kept as a fallback off Vercel when REPL_ID / a bucket is present.
  */
 async function objectClient() {
   const { Client } = await import("@replit/object-storage");
@@ -37,15 +50,67 @@ async function saveLocally(key: string, buffer: Buffer): Promise<string> {
   return publicAssetUrl(key);
 }
 
+async function saveToBlob(
+  key: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  const { put } = await import("@vercel/blob");
+  await put(key, buffer, {
+    access: "public",
+    contentType,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  return publicAssetUrl(key);
+}
+
+async function readFromBlob(key: string): Promise<Buffer | null> {
+  if (!isBlobConfigured()) return null;
+  try {
+    const { head } = await import("@vercel/blob");
+    const meta = await head(key);
+    if (!meta?.url) return null;
+    const res = await fetch(meta.url);
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadBuffer(
   key: string,
   buffer: Buffer,
   contentType: string,
 ): Promise<string> {
-  // Try Replit Object Storage first
+  if (onVercel()) {
+    if (!isBlobConfigured()) {
+      logger.error({ key }, VERCEL_BLOB_REQUIRED_MESSAGE);
+      throw new Error(VERCEL_BLOB_REQUIRED_MESSAGE);
+    }
+    try {
+      return await saveToBlob(key, buffer, contentType);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ msg, key }, "Vercel Blob upload failed — not falling through to /tmp");
+      throw err instanceof Error ? err : new Error(msg);
+    }
+  }
+
+  if (isBlobConfigured()) {
+    try {
+      return await saveToBlob(key, buffer, contentType);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ msg, key }, "Vercel Blob upload failed");
+    }
+  }
+
+  // Replit Object Storage fallback (REPL_ID / provisioned bucket)
   try {
     const client = await objectClient();
-    void contentType; // Object Storage infers content type from the key
+    void contentType;
     await client.uploadFromBytes(key, buffer);
     return publicAssetUrl(key);
   } catch (err: unknown) {
@@ -53,7 +118,6 @@ export async function uploadBuffer(
     logger.warn({ msg }, "Object storage unavailable — falling back to local filesystem");
   }
 
-  // Local filesystem fallback (dev / no bucket configured)
   return saveLocally(key, buffer);
 }
 
@@ -66,28 +130,28 @@ export async function uploadFromUrl(key: string, url: string): Promise<string> {
 }
 
 /**
- * Fetch a stored asset by key. Tries the local filesystem first (where
- * uploadBuffer writes when no bucket is configured), then Replit Object
- * Storage. Returns null if not found anywhere. Rejects path traversal.
+ * Fetch a stored asset by key. Local filesystem first (same-instance /tmp),
+ * then Vercel Blob, then Replit Object Storage. Returns null if not found.
+ * Rejects path traversal.
  */
 export async function getAsset(
   key: string,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   const contentType = contentTypeFor(key);
 
-  // Guard against path traversal (e.g. ../../etc/passwd)
   const safeKey = normalize(key).replace(/^(\.\.(\/|\\|$))+/, "");
   if (safeKey.includes("..")) return null;
 
-  // Local filesystem (primary in dev / no bucket)
   try {
     const buffer = await readFile(join(LOCAL_ASSETS_DIR, safeKey));
     return { buffer, contentType };
   } catch {
-    // fall through to object storage
+    // fall through
   }
 
-  // Replit Object Storage (production with a bucket)
+  const fromBlob = await readFromBlob(safeKey);
+  if (fromBlob) return { buffer: fromBlob, contentType };
+
   try {
     const client = await objectClient();
     const result = (await client.downloadAsBytes(safeKey)) as {

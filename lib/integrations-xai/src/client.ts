@@ -8,10 +8,10 @@ export function getXaiClient(): OpenAI {
   const auth = resolveXaiAuth();
   if (!auth) {
     throw new Error(
-      "xAI is not configured. Set XAI_API_KEY to generate campaign copy with Grok.",
+      "Grok is not configured. On Vercel, enable AI Gateway (OIDC or AI_GATEWAY_API_KEY). Fallback: set XAI_API_KEY.",
     );
   }
-  const cacheKey = `${auth.baseURL}::${auth.apiKey}`;
+  const cacheKey = `${auth.via}::${auth.baseURL}::${auth.apiKey}`;
   if (!cached || cachedKey !== cacheKey) {
     cached = new OpenAI({ apiKey: auth.apiKey, baseURL: auth.baseURL });
     cachedKey = cacheKey;

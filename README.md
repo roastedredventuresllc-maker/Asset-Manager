@@ -2,13 +2,53 @@
 
 Founders describe their product, get a complete AI-generated ad campaign in 30 seconds, and push it live to Meta, TikTok, and Google — without ever touching an ad platform.
 
+The product URL is the Vite app in `artifacts/launchpad`. Generate and revise run on the Express API in `artifacts/api-server`. Production host is **Vercel** (one deployment: site + `/api`). Replit is not required.
+
 ---
 
 ## Setup
 
-### Boot locally (`ADS_MODE=mock`, no Replit)
+### Host on Vercel (production)
 
-Postgres is required for `db push` and the API. House ad accounts stay test-only; this path does not flip live or spend.
+`vercel.json` defines two services in one project: **frontend** (`artifacts/launchpad`, Vite) and **api** (`artifacts/api-server`, Express). Top-level rewrites send `/api/*` and `/p/*` to the API and everything else to the site. Generate/revise are not a static-only deploy. Both services run `installCommand` from the **repo root** (`cd ../.. && pnpm install --frozen-lockfile`) so they use the root `pnpm-lock.yaml` / `pnpm-workspace.yaml` and can resolve `workspace:*` packages. There is no second lockfile inside a package.
+
+1. Import this GitHub repo in Vercel. **Root Directory** = repository root (`.`). **Framework Preset** = **Services**.
+2. Set environment variables (names only — never commit values). Scope them to Production, Preview, and Development as needed:
+
+| Name | Required | Notes |
+|------|----------|--------|
+| `DATABASE_URL` | **Yes** | Neon/Vercel Postgres **pooled** URL (`sslmode=require`). No docker-compose in production. |
+| `ADS_MODE` | **Yes** | `mock` — no live ad spend |
+| `AI_GATEWAY_API_KEY` | Preferred for copy | Vercel AI Gateway. On Vercel, OIDC (`VERCEL_OIDC_TOKEN`) is injected — enable Secure backend access with OIDC + AI Gateway so Grok (`xai/grok-4.6`) works without a pasted xAI console key. |
+| `XAI_API_KEY` | Fallback for copy | Only if Gateway is unavailable. Set in Vercel env; never commit. |
+| `PUBLIC_APP_URL` | Recommended | Production origin, e.g. `https://your-domain.vercel.app` (Stripe return + landing URLs) |
+| `ADMIN_PASSWORD` | For `/admin` | 503 on admin login without it |
+| `BLOB_READ_WRITE_TOKEN` | **Yes** (production images) | Vercel Blob. Required on Vercel so generated ads persist across invocations — `/tmp` does not. Names only here; set the value in Vercel env. |
+| `CRON_SECRET` / `WORKER_SECRET` | Optional | Vercel Cron sends `Authorization: Bearer CRON_SECRET` to `/api/jobs/worker` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Payments | Webhook: `https://<deployment>/api/webhooks/stripe` |
+| Image / ad-platform names | Optional until live | Same names as `.env.example` |
+
+3. Provision Postgres: Vercel Marketplace Neon (`vercel integration add neon`) or paste a Neon pooled `DATABASE_URL`.
+4. **Schema push** (not part of the Vercel build). From a machine with the production URL:
+
+```bash
+# after `vercel env pull .env.local --yes` or exporting DATABASE_URL
+pnpm --filter @workspace/db run push
+```
+
+5. Deploy (`git push` with Vercel Git integration, or `vercel --prod`). Confirm:
+
+```bash
+curl -s https://<deployment>/api/healthz   # {"status":"ok"}
+```
+
+Then open the deployment URL and run generate/revise — `/api` is the same origin.
+
+`vercel.json` also registers a daily cron for `/api/jobs/worker` (image queue backup). Generate already drains image jobs in the same invocation via `waitUntil`. Add `/api/jobs/spend-guard` as another cron if you want hourly spend snapshots (Pro plans allow more frequent schedules).
+
+### Boot locally (`ADS_MODE=mock`)
+
+Postgres is required for `db push` and the API. House ad accounts stay test-only; this path does not flip live or spend. docker-compose is **local only**.
 
 ```bash
 pnpm install
@@ -19,52 +59,15 @@ pnpm --filter @workspace/api-server run dev    # API, default 8080
 pnpm --filter @workspace/launchpad run dev     # frontend, 5173, proxies /api
 ```
 
-If `DATABASE_URL` is unset off Replit, drizzle and the API use `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad` (the compose database). Put a real URL in `.env` when you are not using compose. Keep `ADS_MODE=mock`.
+If `DATABASE_URL` is unset **and** you are not on Vercel/Replit, drizzle and the API use `postgres://launchpad:launchpad@127.0.0.1:5432/launchpad`. On Vercel, `DATABASE_URL` is required. Keep `ADS_MODE=mock`.
 
 Confirm the API: `curl -s http://127.0.0.1:8080/api/healthz` → `{"status":"ok"}`.
 
-### 1. Install dependencies
-```bash
-pnpm install
-```
+Prefer Gateway locally too: `vercel link` then `vercel env pull .env.local --yes` (OIDC token, ~24h). Or set `AI_GATEWAY_API_KEY`. Fallback: `XAI_API_KEY`.
 
-### 2. Configure secrets
+### Environment variables
 
-Secrets live in Replit Secrets (padlock) or a repo-root `.env`. The API will not boot without `DATABASE_URL`. Campaign copy is written by Grok from the founder prompt — set `XAI_API_KEY`. No Anthropic key is required to generate or revise. Everything else is optional until you go live.
-
-| Secret | Required | Where to get it |
-|--------|----------|-----------------|
-| `DATABASE_URL` | **Yes** (API boot) | Postgres connection string |
-| `PORT` | API listen (Vite on Replit too) | Local default 8080 for the API if unset |
-| `BASE_PATH` | Vite base | Local default `/` if unset |
-| `XAI_API_KEY` | **Yes** for copy | [console.x.ai](https://console.x.ai) → API Keys. Grok writes generate + revise from the founder prompt. |
-| `XAI_BASE_URL` | Optional | Defaults to `https://api.x.ai/v1` |
-| `XAI_MODEL` | Optional | Defaults to `grok-4.6` (JSON chat) |
-| `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | Optional | Reference-image vision only. Not required to generate. |
-| `GEMINI_API_KEY` | For photoreal ads (or `AI_INTEGRATIONS_GEMINI_API_KEY`) | [aistudio.google.com](https://aistudio.google.com) → API keys. Quality path is `gemini-3-pro-image-preview`. |
-| `OPENAI_API_KEY` | Fallback images (or `AI_INTEGRATIONS_OPENAI_API_KEY`) | [platform.openai.com](https://platform.openai.com) → API keys |
-| `FAL_API_KEY` | Optional | [fal.ai/dashboard](https://fal.ai/dashboard) — background removal only |
-| `STRIPE_SECRET_KEY` | For payments | [dashboard.stripe.com](https://dashboard.stripe.com) → Developers → API Keys |
-| `STRIPE_WEBHOOK_SECRET` | For webhooks | Run `stripe listen` or add endpoint in Stripe dashboard |
-| `ADMIN_PASSWORD` | Admin + encrypted connectors | Any strong password |
-| `META_SYSTEM_USER_TOKEN` | For Meta ads | See Meta setup below |
-| `META_BUSINESS_ID` | House/test Meta ads | **Ad Account ID** (digits only, no `act_` prefix), not the Business Manager ID. Client brands use per-customer IDs, not this house ID. |
-| `META_DEFAULT_PAGE_ID` | For Meta ads | Your Facebook Page ID |
-| `TIKTOK_ACCESS_TOKEN` | For TikTok ads | See TikTok setup below |
-| `TIKTOK_BC_ID` | For TikTok ads | TikTok Business Center ID |
-| `TIKTOK_ADVERTISER_ID` | House/test TikTok ads | TikTok Ads Manager advertiser ID (LaunchPad tests only) |
-| `TIKTOK_IDENTITY_ID` | House/test TikTok ads | Verified **CUSTOMIZED_USER** identity ID (required for image ads) |
-| `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | Google Ads API Center |
-| `GOOGLE_ADS_CLIENT_ID` | For Google Ads | Google Cloud OAuth client |
-| `GOOGLE_ADS_CLIENT_SECRET` | For Google Ads | Google Cloud OAuth client |
-| `GOOGLE_ADS_REFRESH_TOKEN` | For Google Ads | OAuth Playground, AdWords scope |
-| `GOOGLE_ADS_CUSTOMER_ID` | House/test Google Ads | House/test Customer ID (digits; dashes stripped). Clients have their own Customer ID. |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | MCC | Manager account customer ID — stays house; used as login-customer-id for every client |
-| `WORKER_SECRET` | Optional | Any random string — secures the job worker endpoint |
-
-### 3. Environment variables
-
-Copy `.env.example` to `.env` in the repo root. Names only — no values in the example except `ADS_MODE=mock`. The API loads `.env` on boot if present (existing env/Replit Secrets win). Vite reads the same file (`envDir` = repo root).
+Copy `.env.example` to `.env` in the repo root. Names only — no values in the example except `ADS_MODE=mock`. The API loads `.env` on boot if present (existing env / Vercel env win). Vite reads the same file (`envDir` = repo root).
 
 ```
 ADS_MODE=mock
@@ -74,28 +77,16 @@ ADS_MODE=mock
 
 Local Stripe return uses `PUBLIC_APP_URL` if set, otherwise Vite (`http://127.0.0.1:5173`). If the webhook has not flipped status yet, Home still shows ReviewState (not the ship UI) while status is `publishing`.
 
-### 4. Push database schema
-```bash
-pnpm --filter @workspace/db run push
-```
-
-### 5. Run the app
-```bash
-# API server (API_PORT, default 8080). Loads repo-root .env.
-pnpm --filter @workspace/api-server run dev
-
-# Frontend (5173 locally; proxies /api to the API)
-pnpm --filter @workspace/launchpad run dev
-```
-
 Local asset URLs are relative `/api/assets/...` (browser + Vite proxy). Do not expect `https://localhost`.
+
+Optional names (same as `.env.example`): `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FAL_API_KEY`, Meta / TikTok / Google house IDs, `XAI_BASE_URL`, `XAI_MODEL` (defaults `grok-4.6`; Gateway uses `xai/grok-4.6`).
 
 ---
 
 ## Mock Mode vs Live Mode
 
 `ADS_MODE=mock` (the default) makes publishing work end-to-end without spending:
-- Campaign copy: Grok writes generate + revise from the founder prompt when `XAI_API_KEY` is set. No Anthropic key required.
+- Campaign copy: Grok writes generate + revise from the founder prompt when AI Gateway (or `XAI_API_KEY`) is configured. No Anthropic key required.
 - Image generation uses `gemini-3-pro-image-preview`, then `gpt-image-1`. If both miss, the job **fails** — a branded gradient is not an ad
 - Publishing logs realistic fake API request bodies and returns deterministic mock IDs/metrics
 - Stripe checkout works with `STRIPE_SECRET_KEY`
@@ -218,27 +209,26 @@ v1 channel. Saving these in Admin → Connectors does **not** turn on live spend
 
 ---
 
-After deploying, set up four scheduled deployments in Replit:
+After deploying, Vercel Cron (see `vercel.json`) hits:
 
 | Name | URL | Schedule | Purpose |
 |------|-----|----------|---------|
-| Image Worker | `POST /api/jobs/worker` | Every 1 min | Process image generation queue |
-| Metrics Snapshot | `GET /api/campaigns/{id}/metrics` | Every 15 min | Refresh campaign metrics |
-| Spend Reconciliation | custom | Nightly | Report metered Stripe usage |
-| Weekly Summary | custom | Weekly | Email campaign summaries (stub — logs in v1) |
+| Image Worker | `GET /api/jobs/worker` | Daily | Drain image generation queue (backup) |
+| Spend Guard | `GET /api/jobs/spend-guard` | Optional extra cron | Snapshot metrics / pause at cap |
 
-Add `X-Worker-Secret: <your WORKER_SECRET>` header to secure the worker endpoint.
+Generate also drains pending image jobs in the same invocation. Add `CRON_SECRET` (Vercel Cron `Authorization: Bearer`) or `WORKER_SECRET` (`X-Worker-Secret`) to lock the worker.
 
 ---
 
 ## Architecture
 
-- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui — one page, six states
-- **Backend**: Express 5 + Node.js 24 + TypeScript
-- **Database**: PostgreSQL + Drizzle ORM
-- **AI copy**: Grok (`XAI_API_KEY`, `https://api.x.ai/v1`) writes generate + revise from the founder prompt. Not a template composer.
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui — one page, six states (`artifacts/launchpad`)
+- **Backend**: Express 5 + Node.js 22+ + TypeScript (`artifacts/api-server`)
+- **Host**: Vercel Services — one project, rewrites `/api` and `/p` to Express
+- **Database**: PostgreSQL + Drizzle ORM (`DATABASE_URL`, Neon-compatible)
+- **AI copy**: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Writes generate + revise from the founder prompt.
 - **Image gen**: `gemini-3-pro-image-preview` then `gpt-image-1`. Fail-closed — a branded gradient is not an ad. Type is composited in designed negative space.
-- **Storage**: Replit Object Storage
+- **Storage**: Vercel Blob on Vercel (`BLOB_READ_WRITE_TOKEN` required — fail-closed, no `/tmp`). Off Vercel: Replit Object Storage fallback, then local `/tmp/launchpad-assets`. Public URLs are relative `/api/assets/...`
 - **Payments**: Stripe Checkout + subscriptions + metered usage
 - **Ads**: Meta + TikTok + Google (mock mode by default; LinkedIn is out of v1)
 - **Auth**: Magic links via email (no passwords ever)

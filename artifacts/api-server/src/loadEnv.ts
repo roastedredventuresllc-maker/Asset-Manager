@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Load a repo-root `.env` if present. Does not override variables already set
- * (Replit Secrets / the shell win). Missing file is a no-op so production
+ * (Vercel env / Replit Secrets / the shell win). Missing file is a no-op so production
  * boot does not require dotenv.
  */
 function parseEnvFile(text: string): void {

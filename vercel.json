@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "artifacts/launchpad",
+      "framework": "vite",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+      "buildCommand": "pnpm run build",
+      "outputDirectory": "dist/public",
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/index.html" }
+      ]
+    },
+    "api": {
+      "root": "artifacts/api-server",
+      "framework": "express",
+      "entrypoint": "src/app.ts",
+      "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+      "functions": {
+        "src/app.ts": {
+          "maxDuration": 300
+        }
+      }
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/p/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ],
+  "crons": [
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
