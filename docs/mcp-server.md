@@ -117,7 +117,7 @@ Tool results are returned as JSON text content. Failures (not found, forbidden, 
 - **`pause_campaign` takes effect immediately** — it stops a running campaign's ad spend across all platforms.
 - Always confirm the daily budget and channel split with the user before publishing, and confirm before pausing an actively running campaign.
 
-In development the app runs with `ADS_MODE=mock`, so no real ad spend occurs even though the full flow (including Stripe Checkout) executes. Set `ADS_MODE=live` only after Meta/TikTok/Google credentials are in place. Saving connector credentials does not flip live.
+In development the app runs with `ADS_MODE=mock`, so no real ad spend occurs even though the full flow (including Stripe Checkout) executes. Client brands publish to per-customer ad account IDs, not LaunchPad house env IDs. Set `ADS_MODE=live` only after Meta/TikTok/Google credentials are in place and On Behalf Of / partner / MCC access is granted. Saving connector credentials does not flip live.
 
 ---
 

@@ -14,6 +14,10 @@ available from EITHER stored (encrypted, admin-entered) credentials OR server en
 Replit integration. One credential model works uniformly for v1 channels.
 
 **Durable rules / tradeoffs:**
+- **House `META_*` / `TIKTOK_*` / `GOOGLE_*` env (and Admin → Connectors) is LaunchPad's own
+  test accounts only.** Client brands publish to per-customer Meta Ad Account IDs (Business On
+  Behalf Of), TikTok advertiser IDs (partner access), and Google Ads Customer IDs under our MCC
+  (`GOOGLE_ADS_LOGIN_CUSTOMER_ID`). Never overlay a client campaign onto house IDs — fail closed.
 - **`ADS_MODE` (default `mock`) — not connection status — controls mock-vs-live.** Saving credentials
   must NEVER flip to live. This is a deliberate safety boundary; preserve it in any refactor.
 - **Stored credentials are encrypted with a key derived from `ADMIN_PASSWORD`.** Therefore rotating

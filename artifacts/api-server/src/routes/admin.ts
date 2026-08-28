@@ -12,8 +12,22 @@ import {
 import { connectorStatuses, adsMode, CONNECTOR_SPECS } from "../ads/connectors.js";
 import { saveCredentials, deleteCredentials } from "../ads/credentials.js";
 import { verifyConnector } from "../ads/verify.js";
+import {
+  HUMAN_ONBOARDING_STEPS,
+  listClientAdAccounts,
+  publicClientView,
+  upsertClientAdAccount,
+  type ClientAdAccountInput,
+} from "../ads/clientAccounts.js";
+import {
+  isAccessStatus,
+  parseClientAccountIds,
+  parsePublishedSnapshot,
+  previewClientReadiness,
+} from "../ads/accountTarget.js";
+import { resolveGoogleSharePct } from "../lib/channelSplit.js";
 import { db, campaignsTable, usersTable, publishesTable } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   ServiceError,
   approveCampaignById,
@@ -204,6 +218,125 @@ router.post("/connectors/:platform/verify", requireAdmin, async (req: Request, r
   return res.json(result);
 });
 
+// GET /api/admin/clients — per-customer ad account IDs (identifiers, never tokens).
+router.get("/clients", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const clients = await listClientAdAccounts();
+    return res.json({
+      adsMode: adsMode(),
+      humanSteps: HUMAN_ONBOARDING_STEPS,
+      clients: clients.map(publicClientView),
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to list client ad accounts");
+    return res.status(500).json({ error: "Couldn't load client ad accounts." });
+  }
+});
+
+// PUT /api/admin/clients/:userId — save per-customer IDs and access-step status.
+// Does not change ADS_MODE. Does not accept tokens.
+router.put("/clients/:userId", requireAdmin, async (req: Request, res: Response) => {
+  const userId = String(req.params.userId ?? "").trim();
+  if (!userId) return res.status(400).json({ error: "userId required." });
+
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+  const incoming: ClientAdAccountInput = {};
+  if (typeof raw.isHouse === "boolean") incoming.isHouse = raw.isHouse;
+  if ("metaAdAccountId" in raw) {
+    incoming.metaAdAccountId = typeof raw.metaAdAccountId === "string" ? raw.metaAdAccountId : null;
+  }
+  if ("metaPageId" in raw) {
+    incoming.metaPageId = typeof raw.metaPageId === "string" ? raw.metaPageId : null;
+  }
+  if ("metaClientBusinessId" in raw) {
+    incoming.metaClientBusinessId =
+      typeof raw.metaClientBusinessId === "string" ? raw.metaClientBusinessId : null;
+  }
+  if ("tiktokAdvertiserId" in raw) {
+    incoming.tiktokAdvertiserId =
+      typeof raw.tiktokAdvertiserId === "string" ? raw.tiktokAdvertiserId : null;
+  }
+  if ("tiktokIdentityId" in raw) {
+    incoming.tiktokIdentityId =
+      typeof raw.tiktokIdentityId === "string" ? raw.tiktokIdentityId : null;
+  }
+  if ("googleCustomerId" in raw) {
+    incoming.googleCustomerId =
+      typeof raw.googleCustomerId === "string" ? raw.googleCustomerId : null;
+  }
+  if (isAccessStatus(raw.metaBoboStatus)) incoming.metaBoboStatus = raw.metaBoboStatus;
+  if (isAccessStatus(raw.tiktokPartnerStatus)) {
+    incoming.tiktokPartnerStatus = raw.tiktokPartnerStatus;
+  }
+  if (isAccessStatus(raw.googleMccLinkStatus)) {
+    incoming.googleMccLinkStatus = raw.googleMccLinkStatus;
+  }
+
+  try {
+    const saved = await upsertClientAdAccount(userId, incoming);
+    return res.json({
+      ok: true,
+      adsMode: adsMode(),
+      client: publicClientView(saved),
+    });
+  } catch (err) {
+    logger.error({ err, userId }, "Failed to save client ad account");
+    return res.status(500).json({ error: "Couldn't save client ad account." });
+  }
+});
+
+// PATCH /api/admin/campaigns/:id/ad-accounts — per-campaign override + house-test flag.
+router.patch("/campaigns/:id/ad-accounts", requireAdmin, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const campaign = await db.query.campaignsTable.findFirst({
+    where: eq(campaignsTable.id, id),
+  });
+  if (!campaign) return res.status(404).json({ error: "Campaign not found." });
+
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+  const clientIncoming: ClientAdAccountInput = {};
+  const override: Record<string, string> = {};
+  const take = (key: keyof ClientAdAccountInput, rawKey: string) => {
+    const nested =
+      raw.adAccountJson && typeof raw.adAccountJson === "object"
+        ? (raw.adAccountJson as Record<string, unknown>)
+        : null;
+    if (!(rawKey in raw) && !(nested && rawKey in nested)) return;
+    const v = nested && rawKey in nested ? nested[rawKey] : raw[rawKey];
+    if (typeof v === "string") {
+      (clientIncoming as Record<string, string | null>)[key] = v;
+      if (v.trim()) override[rawKey] = v.trim();
+    }
+  };
+  take("metaAdAccountId", "metaAdAccountId");
+  take("metaPageId", "metaPageId");
+  take("metaClientBusinessId", "metaClientBusinessId");
+  take("tiktokAdvertiserId", "tiktokAdvertiserId");
+  take("tiktokIdentityId", "tiktokIdentityId");
+  take("googleCustomerId", "googleCustomerId");
+
+  try {
+    if (campaign.userId && Object.keys(clientIncoming).length > 0 && raw.isHouseTest !== true) {
+      await upsertClientAdAccount(campaign.userId, clientIncoming);
+    }
+
+    await db
+      .update(campaignsTable)
+      .set({
+        ...(typeof raw.isHouseTest === "boolean" ? { isHouseTest: raw.isHouseTest } : {}),
+        ...(Object.keys(override).length > 0 || raw.adAccountJson !== undefined
+          ? { adAccountJson: { ...(parseClientAccountIds(campaign.adAccountJson) ?? {}), ...override } }
+          : {}),
+      })
+      .where(eq(campaignsTable.id, id));
+
+    return res.json({ ok: true, adsMode: adsMode() });
+  } catch (err) {
+    logger.error({ err, campaignId: id }, "Failed to save campaign ad accounts");
+    return res.status(500).json({ error: "Couldn't save ad accounts." });
+  }
+});
+
 // GET /api/admin/reference-library — the curated reference library, gated.
 router.get("/reference-library", requireAdmin, (_req: Request, res: Response) => {
   return res.json(getReferenceLibrary());
@@ -282,9 +415,8 @@ router.post("/reference-assets/seed", requireAdmin, async (_req: Request, res: R
 });
 
 // ---------------------------------------------------------------------------
-// Client campaign management (media-agency controls). All client ads run from
-// the house ad accounts, so the admin reviews every campaign before it goes
-// live, and can pause/resume or adjust the spend cap per client at any time.
+// Client campaign management. Client brands publish to per-customer ad
+// accounts (BOBO / partner / MCC). House env IDs are LaunchPad tests only.
 // ---------------------------------------------------------------------------
 
 function handleServiceError(res: Response, err: unknown) {
@@ -304,6 +436,8 @@ router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
     const users = await db.query.usersTable.findMany();
     const emailById = new Map(users.map((u) => [u.id, u.email]));
     const allPublishes = await db.query.publishesTable.findMany();
+    const clientRows = await listClientAdAccounts();
+    const clientByUser = new Map(clientRows.map((r) => [r.userId, r]));
 
     const rows = await Promise.all(
       campaigns.map(async (c) => {
@@ -317,9 +451,33 @@ router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
         } | null;
         const hasSpend = c.status === "live" || c.status === "paused";
         const spendCents = hasSpend ? await getLifetimeSpendCents(c.id) : 0;
+        const googleSharePct = pending
+          ? resolveGoogleSharePct(
+              pending.metaSharePct ?? 0,
+              pending.tiktokSharePct ?? 0,
+              pending.googleSharePct,
+            )
+          : null;
+        const platformsForSplit: Array<"meta" | "tiktok" | "google"> = [];
+        if ((pending?.metaSharePct ?? 0) > 0) platformsForSplit.push("meta");
+        if ((pending?.tiktokSharePct ?? 0) > 0) platformsForSplit.push("tiktok");
+        if ((googleSharePct ?? 0) > 0) platformsForSplit.push("google");
+        if (platformsForSplit.length === 0) {
+          platformsForSplit.push("meta", "tiktok", "google");
+        }
+        const client = c.userId ? (clientByUser.get(c.userId) ?? null) : null;
+        const readiness = previewClientReadiness({
+          isHouseTest: c.isHouseTest === true,
+          userId: c.userId,
+          client,
+          campaignOverride: parseClientAccountIds(c.adAccountJson),
+          publishedSnapshot: parsePublishedSnapshot(c.publishedAccountJson),
+          platforms: platformsForSplit,
+        });
 
         return {
           id: c.id,
+          userId: c.userId,
           brandName: cj?.brandName ?? "Untitled",
           tagline: cj?.tagline ?? null,
           brief: c.brief,
@@ -331,12 +489,17 @@ router.get("/campaigns", requireAdmin, async (_req: Request, res: Response) => {
           dailyBudgetCents: pending?.dailyBudgetCents ?? null,
           metaSharePct: pending?.metaSharePct ?? null,
           tiktokSharePct: pending?.tiktokSharePct ?? null,
-          googleSharePct: pending?.googleSharePct ?? null,
+          googleSharePct: pending?.googleSharePct ?? googleSharePct,
           budgetCapCents: c.budgetCapCents,
           spendCents,
           landingSlug: c.landingSlug,
           platforms: pubs.map((p) => ({ platform: p.platform, status: p.status })),
           createdAt: c.createdAt.toISOString(),
+          isHouseTest: c.isHouseTest === true,
+          accountScope: readiness.scope,
+          accountIds: readiness.ids,
+          accountAccess: readiness.access,
+          missingAccountIds: readiness.missing,
         };
       }),
     );

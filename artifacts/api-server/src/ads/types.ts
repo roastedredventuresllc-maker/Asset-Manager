@@ -22,9 +22,8 @@ export interface PublishInput {
   campaignId: string;
   brandName: string;
   /**
-   * Full campaign name used on the ad platform. In the house-account model all
-   * client campaigns live in one ad account, so this carries a per-client
-   * prefix (e.g. "LP · jane · cmp_abc — Acme") for clean reporting/filtering.
+   * Full campaign name used on the ad platform. Client brands publish into
+   * their own ad accounts; the prefix still tags the campaign for reporting.
    * Falls back to a brandName-based name when absent.
    */
   campaignName?: string;
@@ -34,6 +33,13 @@ export interface PublishInput {
   audience: AudienceSpec;
   ads: CampaignAd[];
   pageId?: string;
+  /** Public account targeting (IDs only, never tokens) for mock logs and isolation. */
+  targetAccount?: {
+    scope: "house" | "client";
+    metaAdAccountId?: string;
+    tiktokAdvertiserId?: string;
+    googleCustomerId?: string;
+  };
 }
 
 export interface PublishResult {

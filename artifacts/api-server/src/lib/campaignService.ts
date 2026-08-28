@@ -8,7 +8,7 @@ import {
 import { eq, desc, and, sql } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "./claude.js";
 import { generateId, generateSlug } from "./ids.js";
-import { getAdPlatform } from "../ads/index.js";
+import { getAdPlatformForCampaign } from "../ads/index.js";
 import { publishCampaignToPlatforms, type PublishOptions } from "./publish.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
@@ -482,8 +482,12 @@ export async function pauseCampaignById(
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
-      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
-      await platform.pauseCampaign(pub.externalCampaignId);
+      const { adPlatform } = await getAdPlatformForCampaign(
+        pub.platform as "meta" | "tiktok" | "google",
+        campaign,
+        { useSnapshot: true, allowUnclaimedHouse: !campaign.userId },
+      );
+      await adPlatform.pauseCampaign(pub.externalCampaignId);
       await db
         .update(publishesTable)
         .set({ status: "paused" })
@@ -552,8 +556,12 @@ export async function resumeCampaignById(id: string) {
   for (const pub of publishes) {
     if (!pub.externalCampaignId) continue;
     try {
-      const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
-      await platform.resumeCampaign(pub.externalCampaignId);
+      const { adPlatform } = await getAdPlatformForCampaign(
+        pub.platform as "meta" | "tiktok" | "google",
+        campaign,
+        { useSnapshot: true, allowUnclaimedHouse: !campaign.userId },
+      );
+      await adPlatform.resumeCampaign(pub.externalCampaignId);
       await db
         .update(publishesTable)
         .set({ status: "active" })
@@ -709,8 +717,12 @@ export async function getCampaignMetrics(id: string) {
     for (const pub of publishes) {
       if (!pub.externalCampaignId) continue;
       try {
-        const platform = await getAdPlatform(pub.platform as "meta" | "tiktok" | "google");
-        const m = await platform.getMetrics(pub.externalCampaignId);
+        const { adPlatform } = await getAdPlatformForCampaign(
+          pub.platform as "meta" | "tiktok" | "google",
+          campaign,
+          { useSnapshot: true, allowUnclaimedHouse: !campaign.userId },
+        );
+        const m = await adPlatform.getMetrics(pub.externalCampaignId);
         totalImpressions += m.impressions;
         totalClicks += m.clicks;
         totalSpendCents += m.spendCents;

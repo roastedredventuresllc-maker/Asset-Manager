@@ -33,9 +33,10 @@ export class MockAdPlatform implements AdPlatform {
         audience: input.audience,
         adCount: input.ads.length,
         landingUrl: input.landingUrl,
+        targetAccount: input.targetAccount ?? null,
         result,
       },
-      "[MOCK] publishCampaign — would send to platform API",
+      "[MOCK] publishCampaign — would send to platform API (no spend)",
     );
 
     return result;

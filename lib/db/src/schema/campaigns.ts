@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,10 +12,17 @@ export const campaignsTable = pgTable("campaigns", {
   landingSlug: text("landing_slug"),
   revisionsUsed: integer("revisions_used").notNull().default(0),
   revisionsAllowed: integer("revisions_allowed").notNull().default(3),
-  // Media-agency guardrails (house-account model)
+  // Media-agency guardrails. Client brands use per-customer ad accounts;
+  // house env IDs are LaunchPad's own tests only.
   budgetCapCents: integer("budget_cap_cents"), // total spend cap; auto-pause when reached
   pendingPublishJson: jsonb("pending_publish_json"), // publish options stored at checkout, used on admin approval
   riskFlagsJson: jsonb("risk_flags_json"), // AI moderation pre-check result
+  /** When true, this campaign is a LaunchPad house test and may use house env IDs. */
+  isHouseTest: boolean("is_house_test").notNull().default(false),
+  /** Optional per-campaign ID override (wins over the client's stored row). Identifiers only. */
+  adAccountJson: jsonb("ad_account_json"),
+  /** Snapshot of the account IDs actually used at publish time (no tokens). */
+  publishedAccountJson: jsonb("published_account_json"),
   rejectionReason: text("rejection_reason"), // set when an admin rejects the campaign
   pausedReason: text("paused_reason"), // "budget_cap" | "admin" | "user"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
