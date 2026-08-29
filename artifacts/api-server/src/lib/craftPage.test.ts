@@ -30,7 +30,7 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.match(home, /briefing/);
   assert.doesNotMatch(home, /<iframe/);
   assert.doesNotMatch(home, /The live page/);
-  assert.match(home, /\/p\/\$\{campaign\.landingSlug\}/);
+  assert.match(home, /The page/);
   assert.doesNotMatch(home, /Writing…|Writing the campaign/);
   assert.match(home, /GENERATE_TIMEOUT_MS/);
 });
