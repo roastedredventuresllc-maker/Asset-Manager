@@ -21,7 +21,18 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.doesNotMatch(board, /linear-gradient/);
   assert.match(home, /What's off|What’s off/);
   assert.doesNotMatch(home, /InSituAd/);
-  assert.doesNotMatch(home, /CAMPAIGN_STEPS/);
+  assert.match(home, /AGENCY_STEPS/);
+  assert.match(home, /Research/);
+  assert.match(home, /\bBrief\b/);
+  assert.match(home, /\bCopy\b/);
+  assert.match(home, /Creative/);
+  assert.match(home, /\bMedia\b/);
+  assert.match(home, /briefing/);
+  assert.doesNotMatch(home, /<iframe/);
+  assert.doesNotMatch(home, /The live page/);
+  assert.match(home, /The page/);
+  assert.doesNotMatch(home, /Writing…|Writing the campaign/);
+  assert.match(home, /GENERATE_TIMEOUT_MS/);
 });
 
 test("failed photography is not shipped as a gradient ad", () => {
@@ -38,6 +49,7 @@ test("landing route does not ship a lettermark kit when stills miss", () => {
   const landingPage = readFileSync(resolve(here, "landingPage.ts"), "utf8");
   assert.match(landingRoute, /pickLandingPhoto/);
   assert.match(landingPage, /failClosedHtml|photography did not come back/i);
+  assert.match(landingPage, /This is not a product page until the stills exist/);
   assert.doesNotMatch(landingPage, /hv-mark/);
   assert.doesNotMatch(landingPage, /★★★★★/);
   assert.doesNotMatch(landingPage, /function initials/);

@@ -1,15 +1,27 @@
 import { db, jobsTable } from "@workspace/db";
-import { eq, and, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, lte, desc, inArray, sql } from "drizzle-orm";
 import { processImageJob } from "./imagePipeline.js";
 import { logger } from "./logger.js";
 import { JOB_STATUS } from "./jobStatus.js";
 
 const MAX_ATTEMPTS = 2;
+/** Vercel can freeze mid-job; reclaim processing rows older than this. */
+const STALE_PROCESSING_MS = 90_000;
 
 export interface WorkerResult {
   processed: number;
   succeeded: number;
   failed: number;
+}
+
+async function reclaimStaleProcessingJobs(): Promise<void> {
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS);
+  await db
+    .update(jobsTable)
+    .set({ status: JOB_STATUS.pending })
+    .where(
+      and(eq(jobsTable.status, JOB_STATUS.processing), lte(jobsTable.updatedAt, cutoff)),
+    );
 }
 
 /**
@@ -18,18 +30,27 @@ export interface WorkerResult {
  */
 export async function processPendingJobs(
   limit = 5,
-  opts?: { jobIds?: string[] },
+  opts?: { jobIds?: string[]; campaignId?: string },
 ): Promise<WorkerResult> {
-  const pendingJobs = await db.query.jobsTable.findMany({
-    where: opts?.jobIds?.length
+  await reclaimStaleProcessingJobs();
+
+  const pendingWhere = opts?.jobIds?.length
+    ? and(
+        inArray(jobsTable.id, opts.jobIds),
+        eq(jobsTable.status, JOB_STATUS.pending),
+      )
+    : opts?.campaignId
       ? and(
-          inArray(jobsTable.id, opts.jobIds),
           eq(jobsTable.status, JOB_STATUS.pending),
+          sql`${jobsTable.payload}->>'campaignId' = ${opts.campaignId}`,
         )
       : and(
           eq(jobsTable.status, JOB_STATUS.pending),
           lte(jobsTable.attempts, MAX_ATTEMPTS),
-        ),
+        );
+
+  const pendingJobs = await db.query.jobsTable.findMany({
+    where: pendingWhere,
     orderBy: [desc(jobsTable.createdAt)],
     limit,
   });
@@ -38,11 +59,13 @@ export async function processPendingJobs(
   // (~15-20s each), so running the 3 ad images in parallel keeps the whole
   // campaign under the latency budget instead of summing each one.
   const results = await Promise.all(
-    pendingJobs.map(async (job): Promise<"succeeded" | "failed"> => {
-      await db
+    pendingJobs.map(async (job): Promise<"succeeded" | "failed" | "skipped"> => {
+      const claimed = await db
         .update(jobsTable)
         .set({ status: JOB_STATUS.processing, attempts: job.attempts + 1 })
-        .where(eq(jobsTable.id, job.id));
+        .where(and(eq(jobsTable.id, job.id), eq(jobsTable.status, JOB_STATUS.pending)))
+        .returning({ id: jobsTable.id });
+      if (claimed.length === 0) return "skipped";
 
       try {
         if (job.type === "generate_image") {
@@ -79,10 +102,12 @@ export async function processPendingJobs(
     }),
   );
 
+  const succeeded = results.filter((r) => r === "succeeded").length;
+  const failed = results.filter((r) => r === "failed").length;
   return {
-    processed: results.length,
-    succeeded: results.filter((r) => r === "succeeded").length,
-    failed: results.filter((r) => r === "failed").length,
+    processed: succeeded + failed,
+    succeeded,
+    failed,
   };
 }
 

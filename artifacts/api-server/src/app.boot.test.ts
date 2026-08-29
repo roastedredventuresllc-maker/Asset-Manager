@@ -46,10 +46,16 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /dereference: true/);
 });
 
-test("createCampaign awaits generation on Vercel so the isolate does not freeze", () => {
+test("createCampaign awaits Grok copy, not the stills drain", () => {
   const src = readFileSync(join(here, "lib/campaignService.ts"), "utf8");
-  assert.match(src, /if \(process\.env\.VERCEL\)/);
-  assert.match(src, /await work/);
+  const createStart = src.indexOf("export async function createCampaign");
+  const createEnd = src.indexOf("export async function renderCampaignStills");
+  const createFn = src.slice(createStart, createEnd);
+  assert.match(createFn, /await writeCampaignCopy/);
+  assert.doesNotMatch(createFn, /await processPendingJobs/);
+  assert.match(createFn, /runInBackground/);
+  assert.match(src, /renderCampaignStills/);
+  assert.match(src, /campaignId: id/);
 });
 
 test("index.ts does not statically import the DB/worker graph", () => {
@@ -64,6 +70,8 @@ test("worker does not retry generate_image (one Imagine + one gpt-image-2 alread
   assert.match(src, /failNow/);
   assert.match(src, /generate_image/);
   assert.match(src, /jobIds/);
+  assert.match(src, /campaignId/);
+  assert.match(src, /reclaimStaleProcessingJobs/);
 });
 
 test("mock publish skips Stripe and allows unclaimed house in production", () => {
@@ -78,6 +86,7 @@ test("mock publish skips Stripe and allows unclaimed house in production", () =>
   assert.ok(mockIdx >= 0 && stripeIdx > mockIdx, "Stripe must run only after the mock branch");
   const routes = readFileSync(join(here, "routes/campaigns.ts"), "utf8");
   assert.match(routes, /adsMode\(\) === "live"/);
+  assert.match(routes, /render-stills/);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(service), false);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(publish), false);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(routes), false);

@@ -96,7 +96,7 @@ Clients that don't support remote URLs directly can use the `mcp-remote` bridge 
 
 | Tool | Purpose | Inputs | Output |
 |------|---------|--------|--------|
-| `generate_campaign` | Generate a complete campaign from a product brief. Returns immediately with status `generating`; poll `get_campaign_status` until `ready`. | `brief` (string, ≥5 chars), `productImageUrl` (string URL, optional) | Campaign object (`id`, `status`, `landingUrl`, …) |
+| `generate_campaign` | Generate a complete campaign from a product brief. Returns when copy is ready; stills may still be rendering — poll `get_campaign_status` for image URLs. | `brief` (string, ≥5 chars), `productImageUrl` (string URL, optional) | Campaign object (`id`, `status`, `landingUrl`, …) |
 | `list_campaigns` | List all of your campaigns, newest first. | _none_ | Array of `{ id, brandName, status, spendTodayCents, createdAt }` |
 | `get_campaign` | Get full details of one campaign. | `id` (string) | Campaign object incl. AI-generated `campaignData` |
 | `get_campaign_status` | Poll generation + per-ad image status. | `id` (string) | `{ id, status, campaignData, adAssets[] }` |

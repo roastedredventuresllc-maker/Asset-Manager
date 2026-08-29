@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 const TOOLS: { name: string; warn?: boolean; purpose: string; inputs: string; output: string }[] = [
   {
     name: "generate_campaign",
-    purpose: "Generate a complete campaign from a product brief. Returns immediately with status generating; poll status until ready.",
+    purpose: "Generate a complete campaign from a product brief. Returns when copy is ready; stills may still be rendering.",
     inputs: "brief (string, ≥5 chars), productImageUrl (URL, optional)",
     output: "Campaign object (id, status, landingUrl, …)",
   },
