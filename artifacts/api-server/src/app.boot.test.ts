@@ -57,10 +57,12 @@ test("createCampaign awaits Grok copy, not the stills drain", () => {
   assert.match(src, /renderCampaignStills/);
   assert.match(src, /campaignId: id/);
   const renderStart = src.indexOf("export async function renderCampaignStills");
-  const renderFn = src.slice(renderStart, renderStart + 1800);
+  const renderFn = src.slice(renderStart, renderStart + 2800);
   assert.match(renderFn, /JOB_STATUS.pending/);
   assert.match(renderFn, /generate_image/);
+  assert.match(renderFn, /lastErrors/);
   assert.doesNotMatch(renderFn, /writeCampaignCopy/);
+  assert.match(src, /lastError: errorByIdx/);
 });
 
 test("index.ts does not statically import the DB/worker graph", () => {

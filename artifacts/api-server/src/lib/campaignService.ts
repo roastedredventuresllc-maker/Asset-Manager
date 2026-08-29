@@ -306,7 +306,21 @@ export async function renderCampaignStills(id: string) {
     }
   }
 
-  return processPendingJobs(3, { campaignId: id });
+  const drained = await processPendingJobs(3, { campaignId: id });
+  const failedJobs = await db.query.jobsTable.findMany({
+    where: and(
+      eq(jobsTable.status, JOB_STATUS.failed),
+      sql`${jobsTable.payload}->>'campaignId' = ${id}`,
+    ),
+    orderBy: [desc(jobsTable.createdAt)],
+    limit: 3,
+  });
+  return {
+    ...drained,
+    lastErrors: failedJobs
+      .map((j) => j.lastError)
+      .filter((e): e is string => Boolean(e)),
+  };
 }
 
 /** List campaign summaries for a user, newest first. */
@@ -380,6 +394,19 @@ export async function getCampaignStatus(id: string) {
       ? await getLifetimeSpendCents(id)
       : null;
 
+  const { jobsTable } = await import("@workspace/db");
+  const recentJobs = await db.query.jobsTable.findMany({
+    where: sql`${jobsTable.payload}->>'campaignId' = ${id}`,
+    orderBy: [desc(jobsTable.createdAt)],
+    limit: 12,
+  });
+  const errorByIdx = new Map<number, string | null>();
+  for (const job of recentJobs) {
+    const payload = job.payload as { idx?: number };
+    if (typeof payload.idx !== "number" || errorByIdx.has(payload.idx)) continue;
+    errorByIdx.set(payload.idx, job.lastError ?? null);
+  }
+
   return {
     id: campaign.id,
     status: campaign.status,
@@ -393,6 +420,7 @@ export async function getCampaignStatus(id: string) {
       imageUrl: a.imageUrl ?? null,
       status: a.status,
       model: a.model ?? null,
+      lastError: errorByIdx.get(a.idx) ?? null,
     })),
   };
 }
