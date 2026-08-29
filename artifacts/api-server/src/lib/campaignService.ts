@@ -249,12 +249,63 @@ export async function createCampaign(input: {
 }
 
 /**
- * Await this campaign's stills jobs. Used by POST /campaigns/:id/render-stills
- * so photography keeps running after generate returns copy.
+ * Drain this campaign's stills. If copy exists but the three frames already
+ * failed (or never queued), enqueue one new Imagine→gpt-image-2 job per
+ * missing still — do not POST generate again.
  */
 export async function renderCampaignStills(id: string) {
   const campaign = await getCampaignRecord(id);
   if (!campaign) throw new ServiceError(404, "not_found", "Campaign not found");
+  if (!campaign.campaignJson) {
+    throw new ServiceError(400, "not_generated", "campaign not generated yet");
+  }
+
+  const { jobsTable } = await import("@workspace/db");
+  const alreadyPending = await db.query.jobsTable.findMany({
+    where: and(
+      eq(jobsTable.status, JOB_STATUS.pending),
+      sql`${jobsTable.payload}->>'campaignId' = ${id}`,
+    ),
+    limit: 3,
+  });
+
+  if (alreadyPending.length === 0) {
+    const cj = campaign.campaignJson as {
+      brandName?: string;
+      ads?: Array<Record<string, unknown>>;
+    };
+    const assets = await db.query.adAssetsTable.findMany({
+      where: eq(adAssetsTable.campaignId, id),
+      orderBy: [adAssetsTable.idx],
+    });
+
+    for (const asset of assets) {
+      if (asset.status === JOB_STATUS.done && asset.imageUrl) continue;
+      const ad = cj.ads?.[asset.idx];
+      if (!ad) continue;
+
+      await db
+        .update(adAssetsTable)
+        .set({ status: "pending", imageUrl: null, model: null })
+        .where(eq(adAssetsTable.id, asset.id));
+
+      await db.insert(jobsTable).values({
+        id: generateId("job"),
+        type: "generate_image",
+        payload: {
+          campaignId: id,
+          adAssetId: asset.id,
+          idx: asset.idx,
+          ad,
+          brandName: cj.brandName ?? "",
+          productImageUrl: campaign.productImageUrl,
+          productImageNoBgUrl: null,
+        },
+        status: JOB_STATUS.pending,
+      });
+    }
+  }
+
   return processPendingJobs(3, { campaignId: id });
 }
 
