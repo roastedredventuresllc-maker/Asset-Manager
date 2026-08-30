@@ -39,7 +39,8 @@ export function platformLabel(slug: string): string {
 /** Normalise any incoming image to a sane JPEG so storage + vision are consistent. */
 async function toJpeg(input: Buffer): Promise<Buffer> {
   try {
-    const { default: sharp } = await import("sharp");
+    const { loadSharp } = await import("./loadSharp.js");
+    const sharp = await loadSharp();
     return await sharp(input)
       .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 82 })

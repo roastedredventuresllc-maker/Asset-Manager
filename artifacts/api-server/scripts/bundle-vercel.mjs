@@ -31,33 +31,61 @@ await build({
   legalComments: "none",
   packages: "bundle",
   external: ["sharp", "*.node", "pg-native", "@vercel/functions"],
+  banner: {
+    js: `var import_meta_url = require("node:url").pathToFileURL(__filename).href;`,
+  },
+  define: {
+    "import.meta.url": "import_meta_url",
+  },
   footer: {
     js: "module.exports = module.exports.default || module.exports;",
   },
 });
 
 vendorSharp();
+await assertVendoredSharpCallable();
 
 function vendorSharp() {
-  const sharpPkg = path.dirname(require.resolve("sharp/package.json"));
   const dest = path.join(serviceRoot, "node_modules", "sharp");
+  const repoSharp = path.resolve(serviceRoot, "../../node_modules/sharp");
+  const resolved = fs.existsSync(path.join(repoSharp, "package.json"))
+    ? repoSharp
+    : path.dirname(require.resolve("sharp/package.json"));
+  if (path.resolve(resolved) === path.resolve(dest)) {
+    throw new Error(
+      "vendor-sharp: refuse to copy sharp onto itself (ENOENT after rm). Resolve from repo-root node_modules/sharp.",
+    );
+  }
+
+  // Copy into a sibling first. rm+cp on dest after a prior vendor made
+  // require("sharp") === dest and stat'd a deleted tree (ENOENT cache race).
+  const staging = `${dest}.staging`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(resolved, staging, { recursive: true, dereference: true });
   fs.rmSync(dest, { recursive: true, force: true });
-  fs.cpSync(sharpPkg, dest, { recursive: true, dereference: true });
+  fs.renameSync(staging, dest);
 
   const nested = path.join(dest, "node_modules");
   fs.mkdirSync(nested, { recursive: true });
 
-  const imgSrc = path.join(path.dirname(sharpPkg), "@img");
-  if (fs.existsSync(imgSrc)) {
+  const imgCandidates = [
+    path.join(path.dirname(resolved), "@img"),
+    path.resolve(serviceRoot, "../../node_modules/@img"),
+  ];
+  for (const imgSrc of imgCandidates) {
+    if (!fs.existsSync(imgSrc)) continue;
     fs.cpSync(imgSrc, path.join(nested, "@img"), {
       recursive: true,
       dereference: true,
     });
+    break;
   }
 
   for (const dep of ["detect-libc", "semver"]) {
     try {
       const depRoot = path.dirname(require.resolve(`${dep}/package.json`));
+      if (path.resolve(depRoot) === path.join(nested, dep)) continue;
       fs.cpSync(depRoot, path.join(nested, dep), {
         recursive: true,
         dereference: true,
@@ -73,4 +101,36 @@ function vendorSharp() {
   } else {
     console.log("vendor-sharp: copied sharp + linux-x64 into service node_modules");
   }
+}
+
+/**
+ * File existence is not enough — production died with
+ * `TypeError: sharp is not a function` inside rejectIfFlatGradient.
+ * Fail the Vercel build if the vendored module is not callable.
+ */
+async function assertVendoredSharpCallable() {
+  const req = createRequire(path.join(serviceRoot, "server.cjs"));
+  const raw = req("sharp");
+  let sharp = raw;
+  for (let i = 0; i < 4 && typeof sharp !== "function"; i++) {
+    sharp = sharp && typeof sharp === "object" ? sharp.default : undefined;
+  }
+  if (typeof sharp !== "function") {
+    throw new Error(
+      `vendored sharp is not a function (got ${typeof sharp}). Craft lock would reject Imagine plates.`,
+    );
+  }
+  const buf = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: "#336699" },
+  })
+    .png()
+    .toBuffer();
+  if (!buf || buf[0] !== 0x89) {
+    throw new Error("vendored sharp() did not produce a PNG");
+  }
+  const stats = await sharp(buf).stats();
+  if (!stats?.channels?.length) {
+    throw new Error("vendored sharp().stats() failed — rejectIfFlatGradient would throw");
+  }
+  console.log("vendor-sharp: sharp() is a function and produced a PNG");
 }

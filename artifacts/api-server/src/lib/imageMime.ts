@@ -1,3 +1,5 @@
+import { loadSharp } from "./loadSharp.js";
+
 /**
  * JPEG/PNG product-photo trap.
  *
@@ -36,7 +38,7 @@ export function detectImageMime(buf: Buffer): ImageMime | null {
 
 /** Re-encode any raster (including JPEG uploads) to PNG for edit calls. */
 export async function reencodeToPng(input: Buffer): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   return sharp(input).png().toBuffer();
 }
 

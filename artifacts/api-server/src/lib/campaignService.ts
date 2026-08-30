@@ -162,7 +162,12 @@ export async function writeCampaignCopy(
       .update(campaignsTable)
       .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
-    return [];
+    if (err instanceof ServiceError) throw err;
+    throw new ServiceError(
+      502,
+      "copy_failed",
+      err instanceof Error ? err.message : "Campaign copy failed",
+    );
   }
 }
 
@@ -188,8 +193,9 @@ export async function generateCampaignAsync(
 }
 
 /**
- * Create a campaign record (status: generating) plus three placeholder ad
- * assets, then kick off async generation. `userId` is optional — anonymous web
+ * Create a campaign record plus three placeholder ad assets, then write copy.
+ * Returns `{ campaign, stillsJobIds }` so the HTTP handler can flush JSON
+ * before any Imagine/Craft/sharp work. `userId` is optional — anonymous web
  * users create campaigns with a null userId (claimed later via checkout), while
  * MCP callers pass their authenticated userId so the campaign is owned up-front.
  */
@@ -227,25 +233,28 @@ export async function createCampaign(input: {
     });
   }
 
-  // Await copy so POST /generate returns a presentable campaign (status ready
-  // or error). Do not await stills — Hobby will time out, and the briefing
-  // should present while photography is still landing.
-  const jobIds = await writeCampaignCopy(
+  // Await copy only. The HTTP handler must res.json before any stills
+  // drain — waitUntil before the 201 held the Hobby response until Craft
+  // finished (~127s) and the founder UI died at ~60s with 0 bytes.
+  const stillsJobIds = await writeCampaignCopy(
     id,
     brief,
     productImageUrl,
     productImageNoBgUrl,
   );
-  if (jobIds.length > 0) {
-    runInBackground(
-      processPendingJobs(3, { jobIds }).catch((err) => {
-        logger.error({ err, campaignId: id }, "Image job drain after generate failed");
-      }),
-    );
-  }
 
   const campaign = await getCampaignRecord(id);
-  return toCampaignResponse(campaign!);
+  return { campaign: toCampaignResponse(campaign!), stillsJobIds };
+}
+
+/** Start Imagine→gpt-image-2 after the generate JSON has already been sent. */
+export function drainStillsInBackground(campaignId: string, jobIds: string[]): void {
+  if (jobIds.length === 0) return;
+  runInBackground(
+    processPendingJobs(3, { jobIds }).catch((err) => {
+      logger.error({ err, campaignId }, "Image job drain after generate failed");
+    }),
+  );
 }
 
 /**

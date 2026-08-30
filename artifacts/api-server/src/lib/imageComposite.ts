@@ -1,5 +1,6 @@
 import type { CampaignAd } from "../ads/types.js";
 import { billboardLine } from "./craft.js";
+import { loadSharp } from "./loadSharp.js";
 
 export interface CompositeOptions {
   ad: CampaignAd;
@@ -39,7 +40,7 @@ function ctaPillSvg(cx: number, rectTopY: number, rawText: string, fontSize = 15
  * Never draws type over the lower ~68% of the frame (the product lives there).
  */
 export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   const { ad, brandName, sourceImageBuffer, width, height } = opts;
 
   if (!sourceImageBuffer || sourceImageBuffer.length === 0) {
@@ -93,7 +94,7 @@ export async function makeSvgFallbackKillOnSight(opts: {
   width: number;
   height: number;
 }): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   const { ad, brandName, width, height } = opts;
   const hex1 = ad.gradientHex1 ?? "#1a1a2e";
   const hex2 = ad.gradientHex2 ?? "#16213e";

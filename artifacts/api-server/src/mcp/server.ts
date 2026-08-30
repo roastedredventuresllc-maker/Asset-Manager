@@ -96,11 +96,12 @@ export function buildMcpServer(auth: McpAuth): McpServer {
       },
     },
     tool(async (args) => {
-      const campaign = await svc.createCampaign({
+      const { campaign, stillsJobIds } = await svc.createCampaign({
         brief: args.brief as string,
         productImageUrl: (args.productImageUrl as string | null) ?? null,
         userId: auth.userId,
       });
+      svc.drainStillsInBackground(campaign.id, stillsJobIds);
       return ok(campaign);
     }),
   );
