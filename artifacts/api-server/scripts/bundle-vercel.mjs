@@ -73,4 +73,18 @@ function vendorSharp() {
   } else {
     console.log("vendor-sharp: copied sharp + linux-x64 into service node_modules");
   }
+
+  const loaded = require(dest);
+  const factory =
+    typeof loaded === "function"
+      ? loaded
+      : typeof loaded?.default === "function"
+        ? loaded.default
+        : typeof loaded?.default?.default === "function"
+          ? loaded.default.default
+          : null;
+  if (typeof factory !== "function") {
+    throw new Error("vendor-sharp: required module is not callable");
+  }
+  console.log("vendor-sharp: require('sharp') is callable");
 }

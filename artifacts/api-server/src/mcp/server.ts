@@ -101,6 +101,7 @@ export function buildMcpServer(auth: McpAuth): McpServer {
         productImageUrl: (args.productImageUrl as string | null) ?? null,
         userId: auth.userId,
       });
+      svc.drainCampaignStillsInBackground(campaign.id);
       return ok(campaign);
     }),
   );

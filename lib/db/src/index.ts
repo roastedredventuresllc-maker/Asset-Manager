@@ -34,6 +34,7 @@ function poolConnectionString(): string {
 export const pool = new Pool({
   connectionString: poolConnectionString(),
   max: poolMax(),
+  connectionTimeoutMillis: 5_000,
 });
 export const db = drizzle(pool, { schema });
 

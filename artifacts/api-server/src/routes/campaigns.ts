@@ -10,6 +10,9 @@ import { resolveGoogleSharePct } from "../lib/channelSplit.js";
 
 const router = Router();
 
+/** Hard cap so Hobby never kills the isolate with an empty body. */
+export const GENERATE_DEADLINE_MS = 25_000;
+
 function handleError(err: unknown, res: import("express").Response): void {
   if (err instanceof svc.ServiceError) {
     res.status(err.status).json({ error: err.code, message: err.message });
@@ -17,6 +20,22 @@ function handleError(err: unknown, res: import("express").Response): void {
   }
   logger.error({ err }, "Campaign route error");
   res.status(500).json({ error: "internal_error" });
+}
+
+function withDeadline<T>(work: Promise<T>, ms: number, err: svc.ServiceError): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(err), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (reason) => {
+        clearTimeout(timer);
+        reject(reason);
+      },
+    );
+  });
 }
 
 // POST /api/campaigns/generate
@@ -27,12 +46,18 @@ router.post("/generate", async (req, res) => {
     productImageNoBgUrl?: string | null;
   };
   try {
-    const campaign = await svc.createCampaign({
-      brief: brief ?? "",
-      productImageUrl,
-      productImageNoBgUrl,
-    });
-    return res.status(201).json(campaign);
+    const campaign = await withDeadline(
+      svc.createCampaign({
+        brief: brief ?? "",
+        productImageUrl,
+        productImageNoBgUrl,
+      }),
+      GENERATE_DEADLINE_MS,
+      new svc.ServiceError(504, "generate_timeout", "Copy took too long. Try again."),
+    );
+    res.status(201).json(campaign);
+    svc.drainCampaignStillsInBackground(campaign.id);
+    return;
   } catch (err) {
     return handleError(err, res);
   }

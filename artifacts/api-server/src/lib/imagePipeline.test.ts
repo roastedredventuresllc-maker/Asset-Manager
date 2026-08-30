@@ -64,6 +64,8 @@ test("pipeline never calls Gemini", () => {
   assert.match(src, /generateWithGptImage2/);
   assert.match(src, /GROK_IMAGINE_MODEL/);
   assert.match(src, /GPT_IMAGE_FALLBACK_MODEL/);
+  assert.match(src, /imageUrl/);
+  assert.match(src, /status: "done"/);
 });
 
 test("fail-closed: both models miss → generation failed, never an SVG", async () => {

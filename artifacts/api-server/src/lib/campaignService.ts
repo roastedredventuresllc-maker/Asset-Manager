@@ -100,30 +100,54 @@ export async function getCampaignRecord(
  * Does not wait for photography — the briefing can present as soon as copy
  * is `ready`. Returns job ids so the caller can drain stills in the background.
  */
+function grokCopyError(err: unknown): ServiceError {
+  const message = err instanceof Error ? err.message : String(err);
+  const timedOut = /timeout|timed out|aborted/i.test(message);
+  const missing = /not configured/i.test(message);
+  if (timedOut) {
+    return new ServiceError(504, "grok_timeout", "Copy took too long. Try again.");
+  }
+  if (missing) {
+    return new ServiceError(503, "grok_unavailable", "Copy is not available. Try again later.");
+  }
+  return new ServiceError(502, "grok_failed", "Could not write the campaign. Try again.");
+}
+
 export async function writeCampaignCopy(
   campaignId: string,
   brief: string,
   productImageUrl: string | null,
   productImageNoBgUrl?: string | null,
 ): Promise<string[]> {
+  let campaignData;
   try {
-    const campaignData = await generateCampaign(brief, {
+    campaignData = await generateCampaign(brief, {
       hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
     });
-    const landingSlug = generateSlug(campaignData.brandName);
-
+  } catch (err) {
+    logger.error({ err, campaignId }, "Campaign generation error");
     await db
       .update(campaignsTable)
-      .set({
-        campaignJson: campaignData as object,
-        status: "ready",
-        landingSlug,
-      })
+      .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
+    throw grokCopyError(err);
+  }
 
-    const { jobsTable } = await import("@workspace/db");
-    const jobIds: string[] = [];
+  const landingSlug = generateSlug(campaignData.brandName);
 
+  await db
+    .update(campaignsTable)
+    .set({
+      campaignJson: campaignData as object,
+      status: "ready",
+      landingSlug,
+    })
+    .where(eq(campaignsTable.id, campaignId));
+
+  const { jobsTable } = await import("@workspace/db");
+  const jobIds: string[] = [];
+
+  try {
     for (let idx = 0; idx < 3; idx++) {
       const ad = campaignData.ads[idx];
       if (!ad) continue;
@@ -153,17 +177,12 @@ export async function writeCampaignCopy(
         status: JOB_STATUS.pending,
       });
     }
-
-    logger.info({ campaignId }, "Campaign copy ready; stills enqueued");
-    return jobIds;
   } catch (err) {
-    logger.error({ err, campaignId }, "Campaign generation error");
-    await db
-      .update(campaignsTable)
-      .set({ status: "error" })
-      .where(eq(campaignsTable.id, campaignId));
-    return [];
+    logger.error({ err, campaignId }, "Stills enqueue after copy failed");
   }
+
+  logger.info({ campaignId }, "Campaign copy ready; stills enqueued");
+  return jobIds;
 }
 
 /** @deprecated Prefer writeCampaignCopy + a background stills drain. */
@@ -227,25 +246,27 @@ export async function createCampaign(input: {
     });
   }
 
-  // Await copy so POST /generate returns a presentable campaign (status ready
-  // or error). Do not await stills — Hobby will time out, and the briefing
-  // should present while photography is still landing.
-  const jobIds = await writeCampaignCopy(
+  // Copy only. The generate route must res.json before stills start —
+  // starting processPendingJobs here keeps the isolate busy and Express
+  // does not flush the 201 until Imagine + Craft + fallback finish.
+  await writeCampaignCopy(
     id,
     brief,
     productImageUrl,
     productImageNoBgUrl,
   );
-  if (jobIds.length > 0) {
-    runInBackground(
-      processPendingJobs(3, { jobIds }).catch((err) => {
-        logger.error({ err, campaignId: id }, "Image job drain after generate failed");
-      }),
-    );
-  }
 
   const campaign = await getCampaignRecord(id);
   return toCampaignResponse(campaign!);
+}
+
+/** Kick photography after the generate 201 has been sent. */
+export function drainCampaignStillsInBackground(campaignId: string): void {
+  runInBackground(
+    processPendingJobs(3, { campaignId }).catch((err) => {
+      logger.error({ err, campaignId }, "Image job drain after generate failed");
+    }),
+  );
 }
 
 /**

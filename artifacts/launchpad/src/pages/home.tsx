@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { CampaignBoard, beatForIndex } from "@/components/campaign-board";
 
 const POST_CHECKOUT_KEY = "launchpad_post_checkout";
-const GENERATE_TIMEOUT_MS = 55_000;
+const GENERATE_TIMEOUT_MS = 30_000;
 
 /** Sequential desks an agency runs before it presents. Hold the last step until copy is ready. */
 const AGENCY_STEPS = [
