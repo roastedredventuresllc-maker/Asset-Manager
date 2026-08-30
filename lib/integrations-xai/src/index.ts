@@ -2,6 +2,7 @@ export {
   xai,
   getXaiClient,
   grokJsonChat,
+  GROK_CHAT_TIMEOUT_MS,
   parseJsonObject,
   isXaiConfigured,
   resolveXaiAuth,
@@ -20,5 +21,7 @@ export {
   generateImagineImage,
   editImagineImage,
   isImagineConfigured,
+  toImagineAspect,
+  IMAGINE_ASPECTS,
 } from "./image";
 

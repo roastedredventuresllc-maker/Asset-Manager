@@ -200,7 +200,7 @@ export async function generateCampaign(
   const text = await chat({
     system: `${GENERATE_SYSTEM}\n\n${playbook}${indexedNotes}`,
     user: `Product description: ${brief}${photoNote}`,
-    maxTokens: 4096,
+    maxTokens: 2048,
     temperature: 0.75,
   });
 

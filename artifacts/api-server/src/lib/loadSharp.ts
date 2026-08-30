@@ -7,63 +7,70 @@ export type SharpFn = typeof import("sharp");
 let cached: SharpFn | null = null;
 
 /**
- * esbuild CJS (`server.cjs`) leaves `await import("sharp")` as a native
- * dynamic import. Node then yields `{ default: SharpFn }`. If the bundle
- * also runs that namespace through `__toESM` (no `__esModule` flag),
- * `default` becomes the namespace object — `TypeError: sharp is not a
- * function` in rejectIfFlatGradient after Imagine already produced a plate.
+ * Production (`dpl_4YqDeAUDCRVqXaQnCU59ycvE54k2`): walking `.default` on the
+ * ESM namespace still ended as `{ default: … }` / a property bag —
+ * `Error: sharp is not a function (got object)` in rejectIfFlatGradient.
  *
- * require("sharp") is the CJS function. Walk `.default` until we have it.
+ * The lambda must `require()` the CommonJS constructor. The unbundled
+ * `sharp-fn.cjs` next to server.cjs does exactly that. Never `import("sharp")`.
  */
 export function unwrapSharpExport(mod: unknown): SharpFn {
-  let current: unknown = mod;
-  for (let i = 0; i < 4; i++) {
-    if (typeof current === "function") return current as SharpFn;
-    if (current && typeof current === "object" && "default" in current) {
-      current = (current as { default: unknown }).default;
-      continue;
+  if (typeof mod === "function") return mod as SharpFn;
+  if (mod && typeof mod === "object" && "default" in mod) {
+    const inner = (mod as { default: unknown }).default;
+    if (typeof inner === "function") return inner as SharpFn;
+    if (inner && typeof inner === "object" && "default" in inner) {
+      const nested = (inner as { default: unknown }).default;
+      if (typeof nested === "function") return nested as SharpFn;
     }
-    break;
   }
   throw new Error(
-    `sharp is not a function (got ${typeof current}). Craft cannot inspect Imagine plates.`,
+    `sharp is not a function (got ${typeof mod}). Craft cannot inspect Imagine plates.`,
   );
 }
 
-function requireSharp(): unknown {
+function requireCjsSharp(): unknown {
+  const injected = (globalThis as { __launchpadSharp?: unknown }).__launchpadSharp;
+  if (typeof injected === "function") return injected;
+
   const anchors: string[] = [];
-  const meta = import.meta.url;
-  if (typeof meta === "string" && meta.startsWith("file:")) {
-    anchors.push(fileURLToPath(meta));
-  }
   const bundled = (globalThis as { __filename?: string }).__filename;
   if (typeof bundled === "string" && bundled.length > 0) {
     anchors.push(bundled);
+  }
+  const meta = import.meta.url;
+  if (typeof meta === "string" && meta.startsWith("file:")) {
+    anchors.push(fileURLToPath(meta));
   }
   anchors.push(path.join(process.cwd(), "server.cjs"));
   anchors.push(path.join(process.cwd(), "package.json"));
 
   let lastErr: unknown;
   for (const anchor of anchors) {
+    const req = createRequire(anchor);
     try {
-      return createRequire(anchor)("sharp");
+      const shim = req("./sharp-fn.cjs");
+      if (typeof shim === "function") return shim;
+    } catch (err) {
+      lastErr = err;
+    }
+    try {
+      const raw = req("sharp");
+      if (typeof raw === "function") return raw;
+      if (raw && typeof (raw as { default?: unknown }).default === "function") {
+        return (raw as { default: unknown }).default;
+      }
     } catch (err) {
       lastErr = err;
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error("Cannot require sharp");
+  throw lastErr instanceof Error ? lastErr : new Error("Cannot require sharp CJS export");
 }
 
 /** Load sharp as a callable function. Verified at runtime, not by file existence. */
 export async function loadSharp(): Promise<SharpFn> {
   if (cached) return cached;
-  let raw: unknown;
-  try {
-    raw = requireSharp();
-  } catch {
-    raw = await import("sharp");
-  }
-  cached = unwrapSharpExport(raw);
+  cached = unwrapSharpExport(requireCjsSharp());
   return cached;
 }
 

@@ -28,13 +28,19 @@ router.post("/generate", async (req, res) => {
   };
   res.setHeader("Content-Type", "application/json");
   try {
-    const { campaign, stillsJobIds } = await svc.createCampaign({
-      brief: brief ?? "",
-      productImageUrl,
-      productImageNoBgUrl,
-    });
-    // Flush campaign + copy now. Stills (Imagine / Craft / sharp) start after
-    // the body is on the wire — waitUntil before json held generate ~127s.
+    // Race the whole create so a Grok hang cannot keep res.json from running.
+    // writeCampaignCopy also has this wall; this is the handler's last word.
+    const { campaign, stillsJobIds } = await svc.withDeadline(
+      svc.createCampaign({
+        brief: brief ?? "",
+        productImageUrl,
+        productImageNoBgUrl,
+      }),
+      svc.COPY_DEADLINE_MS,
+      () =>
+        new svc.ServiceError(504, "copy_timeout", "Grok copy timed out"),
+    );
+    // Flush campaign + copy now. Stills start after the body is on the wire.
     res.status(201).json(campaign);
     svc.drainStillsInBackground(campaign.id, stillsJobIds);
   } catch (err) {

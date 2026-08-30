@@ -50,6 +50,12 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /import_meta_url/);
   assert.match(bundle, /staging/);
   assert.match(bundle, /ENOENT/);
+  assert.match(bundle, /sharp-fn\.cjs/);
+  assert.match(bundle, /__launchpadSharp/);
+  assert.match(bundle, /typeof fromShim !== "function"/);
+  assert.match(bundle, /typeof fromDirect !== "function"/);
+  assert.match(bundle, /import\("sharp"\)/);
+  assert.equal(vercel.services.api.functions["server.cjs"].includeFiles, "{node_modules/sharp/**,sharp-fn.cjs}");
 });
 
 test("createCampaign awaits Grok copy and does not start stills", () => {
@@ -114,6 +120,8 @@ test("POST /generate flushes JSON before any stills drain", () => {
   const gen = routes.slice(genStart, genEnd);
   assert.match(gen, /Content-Type/);
   assert.match(gen, /application\/json/);
+  assert.match(gen, /withDeadline/);
+  assert.match(gen, /COPY_DEADLINE_MS/);
   assert.match(gen, /res\.status\(201\)\.json\(campaign\)/);
   const jsonAt = gen.indexOf("res.status(201).json(campaign)");
   const drainAt = gen.indexOf("drainStillsInBackground");

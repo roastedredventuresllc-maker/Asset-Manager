@@ -1,16 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import {
   isXaiConfigured,
   resolveXaiAuth,
   resolveXaiModel,
   resolveImagineModel,
+  GROK_CHAT_TIMEOUT_MS,
+  toImagineAspect,
+  IMAGINE_ASPECTS,
   DEFAULT_GATEWAY_BASE_URL,
   DEFAULT_GATEWAY_MODEL,
   DEFAULT_GATEWAY_IMAGINE_MODEL,
   DEFAULT_XAI_BASE_URL,
   DEFAULT_XAI_MODEL,
 } from "@workspace/integrations-xai";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const KEYS = [
   "AI_GATEWAY_API_KEY",
@@ -99,6 +107,20 @@ test("bare XAI_MODEL is prefixed for Gateway", () => {
       assert.equal(resolveXaiModel(), "xai/grok-4.6");
     },
   );
+});
+
+test("Grok chat aborts well under 20s and does not retry", () => {
+  assert.ok(GROK_CHAT_TIMEOUT_MS > 0 && GROK_CHAT_TIMEOUT_MS < 20_000);
+  const src = readFileSync(join(here, "../../../../lib/integrations-xai/src/client.ts"), "utf8");
+  assert.match(src, /AbortController/);
+  assert.match(src, /maxRetries:\s*0/);
+  assert.match(src, /timeout:\s*GROK_CHAT_TIMEOUT_MS/);
+});
+
+test("toImagineAspect maps hero 4:5 onto a legal Imagine variant", () => {
+  assert.equal(toImagineAspect("4:5"), "3:4");
+  assert.ok((IMAGINE_ASPECTS as readonly string[]).includes("3:4"));
+  assert.ok(!(IMAGINE_ASPECTS as readonly string[]).includes("4:5"));
 });
 
 test("Imagine model is Gateway GA id by default", () => {

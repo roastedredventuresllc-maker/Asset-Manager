@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -54,6 +55,29 @@ test("rejectIfFlatGradient calls sharp() as a function (the production crash)", 
     .png()
     .toBuffer();
   await rejectIfFlatGradient(noisy);
+});
+
+test("loadSharp requires the CJS constructor, never import(\"sharp\")", () => {
+  const src = readFileSync(join(here, "loadSharp.ts"), "utf8");
+  assert.doesNotMatch(src, /await import\(["']sharp["']\)/);
+  assert.match(src, /sharp-fn\.cjs/);
+  assert.match(src, /createRequire/);
+  assert.match(src, /__launchpadSharp/);
+  const shim = readFileSync(join(here, "../../sharp-fn.cjs"), "utf8");
+  assert.match(shim, /require\(["']sharp["']\)/);
+  assert.match(shim, /module\.exports = fn/);
+});
+
+test("sharp-fn.cjs require() is a function at runtime (the lambda contract)", async () => {
+  const req = createRequire(join(here, "../../server.cjs"));
+  const fn = req("./sharp-fn.cjs");
+  assert.equal(typeof fn, "function");
+  const buf = await fn({
+    create: { width: 8, height: 8, channels: 3, background: "#112233" },
+  })
+    .png()
+    .toBuffer();
+  assert.equal(buf[0], 0x89);
 });
 
 test("Craft and the image pipeline load sharp through unwrap, not default destructure", () => {

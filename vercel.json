@@ -20,7 +20,7 @@
       "functions": {
         "server.cjs": {
           "maxDuration": 300,
-          "includeFiles": "node_modules/sharp/**"
+          "includeFiles": "{node_modules/sharp/**,sharp-fn.cjs}"
         }
       }
     }

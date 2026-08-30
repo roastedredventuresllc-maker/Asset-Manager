@@ -21,6 +21,9 @@ import { publicOrigin } from "./assetUrl.js";
 import { JOB_STATUS } from "./jobStatus.js";
 import { runInBackground } from "./background.js";
 import { processPendingJobs } from "./worker.js";
+import { COPY_DEADLINE_MS, withDeadline } from "./copyDeadline.js";
+
+export { COPY_DEADLINE_MS, withDeadline } from "./copyDeadline.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -107,9 +110,14 @@ export async function writeCampaignCopy(
   productImageNoBgUrl?: string | null,
 ): Promise<string[]> {
   try {
-    const campaignData = await generateCampaign(brief, {
-      hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
-    });
+    const campaignData = await withDeadline(
+      generateCampaign(brief, {
+        hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
+      }),
+      COPY_DEADLINE_MS,
+      () =>
+        new ServiceError(504, "copy_timeout", "Grok copy timed out"),
+    );
     const landingSlug = generateSlug(campaignData.brandName);
 
     await db
@@ -163,11 +171,11 @@ export async function writeCampaignCopy(
       .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
     if (err instanceof ServiceError) throw err;
-    throw new ServiceError(
-      502,
-      "copy_failed",
-      err instanceof Error ? err.message : "Campaign copy failed",
-    );
+    const message = err instanceof Error ? err.message : "Campaign copy failed";
+    if (/timed out/i.test(message)) {
+      throw new ServiceError(504, "copy_timeout", message);
+    }
+    throw new ServiceError(502, "copy_failed", message);
   }
 }
 

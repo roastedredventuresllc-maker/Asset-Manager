@@ -32,7 +32,9 @@ await build({
   packages: "bundle",
   external: ["sharp", "*.node", "pg-native", "@vercel/functions"],
   banner: {
-    js: `var import_meta_url = require("node:url").pathToFileURL(__filename).href;`,
+    js: `var import_meta_url = require("node:url").pathToFileURL(__filename).href;
+var __launchpadSharp = require("./sharp-fn.cjs");
+if (typeof globalThis === "object") globalThis.__launchpadSharp = __launchpadSharp;`,
   },
   define: {
     "import.meta.url": "import_meta_url",
@@ -110,17 +112,19 @@ function vendorSharp() {
  */
 async function assertVendoredSharpCallable() {
   const req = createRequire(path.join(serviceRoot, "server.cjs"));
-  const raw = req("sharp");
-  let sharp = raw;
-  for (let i = 0; i < 4 && typeof sharp !== "function"; i++) {
-    sharp = sharp && typeof sharp === "object" ? sharp.default : undefined;
-  }
-  if (typeof sharp !== "function") {
+  const fromShim = req("./sharp-fn.cjs");
+  if (typeof fromShim !== "function") {
     throw new Error(
-      `vendored sharp is not a function (got ${typeof sharp}). Craft lock would reject Imagine plates.`,
+      `sharp-fn.cjs did not export a function (got ${typeof fromShim}). Craft lock would reject Imagine plates.`,
     );
   }
-  const buf = await sharp({
+  const fromDirect = req("sharp");
+  if (typeof fromDirect !== "function") {
+    throw new Error(
+      `require("sharp") is not a function (got ${typeof fromDirect}). Do not use the ESM namespace in the lambda.`,
+    );
+  }
+  const buf = await fromShim({
     create: { width: 8, height: 8, channels: 3, background: "#336699" },
   })
     .png()
@@ -128,9 +132,18 @@ async function assertVendoredSharpCallable() {
   if (!buf || buf[0] !== 0x89) {
     throw new Error("vendored sharp() did not produce a PNG");
   }
-  const stats = await sharp(buf).stats();
+  const stats = await fromShim(buf).stats();
   if (!stats?.channels?.length) {
     throw new Error("vendored sharp().stats() failed — rejectIfFlatGradient would throw");
   }
-  console.log("vendor-sharp: sharp() is a function and produced a PNG");
+  const bundled = fs.readFileSync(path.join(serviceRoot, "server.cjs"), "utf8");
+  if (!bundled.includes('require("./sharp-fn.cjs")')) {
+    throw new Error(
+      "server.cjs does not require(\"./sharp-fn.cjs\") — lambda would import the ESM namespace again",
+    );
+  }
+  if (bundled.includes('import("sharp")') || bundled.includes("import('sharp')")) {
+    throw new Error("server.cjs still dynamic-imports sharp — Craft would get an object");
+  }
+  console.log("vendor-sharp: sharp() is a function (CJS shim + require) and produced a PNG");
 }
