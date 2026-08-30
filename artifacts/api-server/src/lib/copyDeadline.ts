@@ -1,9 +1,10 @@
 /**
- * Hard wall for founder generate. Grok has no default timeout; preview
- * POST /generate sat 90s with 0 bytes because createCampaign awaited copy.
- * Well under 20s so the handler can always write JSON.
+ * Grok attempt wall. Preview FffLCyMhqR9LaR4V2TymR8rLYJcV aborted at 12s
+ * and 504'd copy_timeout at 13.6s — briefing never got ads. 17s still
+ * leaves persist + res.json under the 20s HTTP contract. On miss,
+ * writeCampaignCopy fail-closes from the brief instead of 504.
  */
-export const COPY_DEADLINE_MS = 15_000;
+export const COPY_DEADLINE_MS = 17_000;
 
 export async function withDeadline<T>(
   work: Promise<T>,

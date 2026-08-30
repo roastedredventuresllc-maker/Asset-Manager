@@ -7,8 +7,8 @@ import { COPY_DEADLINE_MS, withDeadline } from "./copyDeadline.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-test("copy deadline is well under 20s", () => {
-  assert.ok(COPY_DEADLINE_MS > 0 && COPY_DEADLINE_MS < 20_000);
+test("copy deadline is well under 20s and longer than the 12s miss", () => {
+  assert.ok(COPY_DEADLINE_MS >= 16_000 && COPY_DEADLINE_MS < 20_000);
 });
 
 test("withDeadline returns the work when it finishes first", async () => {
@@ -34,15 +34,13 @@ test("withDeadline rejects while a hang is still pending — never waits it out"
   assert.equal(hangSettled, false);
 });
 
-test("generate route races createCampaign and Grok chat aborts", () => {
+test("generate returns campaign JSON; Grok miss fail-closes instead of copy_timeout", () => {
   const routes = readFileSync(join(here, "../routes/campaigns.ts"), "utf8");
   const gen = routes.slice(
     routes.indexOf('router.post("/generate"'),
     routes.indexOf('router.get("/")'),
   );
-  assert.match(gen, /withDeadline/);
-  assert.match(gen, /COPY_DEADLINE_MS/);
-  assert.match(gen, /copy_timeout/);
+  assert.doesNotMatch(gen, /copy_timeout/);
   assert.match(gen, /Content-Type/);
   assert.match(gen, /res\.status\(201\)\.json\(campaign\)/);
 
@@ -53,7 +51,9 @@ test("generate route races createCampaign and Grok chat aborts", () => {
   );
   assert.match(writeFn, /withDeadline/);
   assert.match(writeFn, /COPY_DEADLINE_MS/);
-  assert.match(writeFn, /copy_timeout/);
+  assert.match(writeFn, /failClosedCampaignFromBrief/);
+  assert.doesNotMatch(writeFn, /copy_timeout/);
+  assert.match(writeFn, /status: "ready"/);
 
   const grok = readFileSync(join(here, "../../../../lib/integrations-xai/src/client.ts"), "utf8");
   assert.match(grok, /GROK_CHAT_TIMEOUT_MS/);

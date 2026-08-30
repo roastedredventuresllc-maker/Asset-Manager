@@ -110,7 +110,7 @@ test("bare XAI_MODEL is prefixed for Gateway", () => {
 });
 
 test("Grok chat aborts well under 20s and does not retry", () => {
-  assert.ok(GROK_CHAT_TIMEOUT_MS > 0 && GROK_CHAT_TIMEOUT_MS < 20_000);
+  assert.ok(GROK_CHAT_TIMEOUT_MS >= 15_000 && GROK_CHAT_TIMEOUT_MS < 20_000);
   const src = readFileSync(join(here, "../../../../lib/integrations-xai/src/client.ts"), "utf8");
   assert.match(src, /AbortController/);
   assert.match(src, /maxRetries:\s*0/);

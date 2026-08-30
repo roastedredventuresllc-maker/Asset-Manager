@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "./claude.js";
+import { failClosedCampaignFromBrief } from "./failClosedCampaign.js";
 import { generateId, generateSlug } from "./ids.js";
 import { getAdPlatformForCampaign } from "../ads/index.js";
 import { adsMode } from "../ads/connectors.js";
@@ -109,15 +110,24 @@ export async function writeCampaignCopy(
   productImageUrl: string | null,
   productImageNoBgUrl?: string | null,
 ): Promise<string[]> {
+  let campaignData;
   try {
-    const campaignData = await withDeadline(
+    campaignData = await withDeadline(
       generateCampaign(brief, {
         hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
       }),
       COPY_DEADLINE_MS,
-      () =>
-        new ServiceError(504, "copy_timeout", "Grok copy timed out"),
+      () => new Error("Grok copy timed out"),
     );
+  } catch (err) {
+    logger.warn(
+      { err, campaignId },
+      "Grok copy missed the generate window; fail-closed campaign from brief",
+    );
+    campaignData = failClosedCampaignFromBrief(brief);
+  }
+
+  try {
     const landingSlug = generateSlug(campaignData.brandName);
 
     await db
@@ -165,16 +175,13 @@ export async function writeCampaignCopy(
     logger.info({ campaignId }, "Campaign copy ready; stills enqueued");
     return jobIds;
   } catch (err) {
-    logger.error({ err, campaignId }, "Campaign generation error");
+    logger.error({ err, campaignId }, "Campaign persist error after copy");
     await db
       .update(campaignsTable)
       .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
     if (err instanceof ServiceError) throw err;
     const message = err instanceof Error ? err.message : "Campaign copy failed";
-    if (/timed out/i.test(message)) {
-      throw new ServiceError(504, "copy_timeout", message);
-    }
     throw new ServiceError(502, "copy_failed", message);
   }
 }

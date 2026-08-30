@@ -120,9 +120,8 @@ test("POST /generate flushes JSON before any stills drain", () => {
   const gen = routes.slice(genStart, genEnd);
   assert.match(gen, /Content-Type/);
   assert.match(gen, /application\/json/);
-  assert.match(gen, /withDeadline/);
-  assert.match(gen, /COPY_DEADLINE_MS/);
   assert.match(gen, /res\.status\(201\)\.json\(campaign\)/);
+  assert.doesNotMatch(gen, /copy_timeout/);
   const jsonAt = gen.indexOf("res.status(201).json(campaign)");
   const drainAt = gen.indexOf("drainStillsInBackground");
   assert.ok(jsonAt >= 0 && drainAt > jsonAt, "stills drain must run after res.json");

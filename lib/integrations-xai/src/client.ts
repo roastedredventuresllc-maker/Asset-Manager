@@ -28,8 +28,8 @@ export const xai: OpenAI = new Proxy({} as OpenAI, {
 
 export { isXaiConfigured, resolveXaiAuth, resolveXaiModel, resolveImagineModel } from "./auth";
 
-/** Well under the 20s generate budget. No SDK retries that would multiply past it. */
-export const GROK_CHAT_TIMEOUT_MS = 12_000;
+/** Under the 20s generate HTTP budget. 12s on preview FffLCyMhqR9LaR4V2TymR8rLYJcV missed real copy. */
+export const GROK_CHAT_TIMEOUT_MS = 16_000;
 
 /**
  * Chat completion constrained to a JSON object. The founder brief is the
