@@ -14,6 +14,7 @@ test("db Pool construction catches missing DATABASE_URL on Vercel", () => {
   const src = readFileSync(join(here, "../../../lib/db/src/index.ts"), "utf8");
   assert.match(src, /poolConnectionString/);
   assert.match(src, /launchpad_unconfigured/);
+  assert.match(src, /connectionTimeoutMillis/);
 });
 
 test("app.ts does not statically import the DB or campaign routes", () => {
@@ -44,18 +45,20 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /@vercel\/functions/);
   assert.match(bundle, /vendorSharp/);
   assert.match(bundle, /dereference: true/);
+  assert.match(bundle, /require\('sharp'\) is callable/);
 });
 
 test("createCampaign awaits Grok copy, not the stills drain", () => {
   const src = readFileSync(join(here, "lib/campaignService.ts"), "utf8");
   const createStart = src.indexOf("export async function createCampaign");
-  const createEnd = src.indexOf("export async function renderCampaignStills");
+  const createEnd = src.indexOf("export function drainCampaignStillsInBackground");
+  assert.ok(createStart >= 0 && createEnd > createStart);
   const createFn = src.slice(createStart, createEnd);
   assert.match(createFn, /await writeCampaignCopy/);
-  assert.doesNotMatch(createFn, /await processPendingJobs/);
-  assert.match(createFn, /runInBackground/);
+  assert.doesNotMatch(createFn, /processPendingJobs\(/);
+  assert.doesNotMatch(createFn, /runInBackground\(/);
+  assert.match(src, /drainCampaignStillsInBackground/);
   assert.match(src, /renderCampaignStills/);
-  assert.match(src, /campaignId: id/);
   const renderStart = src.indexOf("export async function renderCampaignStills");
   const renderFn = src.slice(renderStart, renderStart + 2800);
   assert.match(renderFn, /JOB_STATUS.pending/);
@@ -63,6 +66,17 @@ test("createCampaign awaits Grok copy, not the stills drain", () => {
   assert.match(renderFn, /lastErrors/);
   assert.doesNotMatch(renderFn, /writeCampaignCopy/);
   assert.match(src, /lastError: errorByIdx/);
+
+  const routes = readFileSync(join(here, "routes/campaigns.ts"), "utf8");
+  const genStart = routes.indexOf('router.post("/generate"');
+  const genFn = routes.slice(genStart, genStart + 1600);
+  assert.match(genFn, /res\.status\(201\)\.json\(campaign\)/);
+  assert.match(genFn, /drainCampaignStillsInBackground/);
+  assert.ok(
+    genFn.indexOf("res.status(201).json") < genFn.indexOf("drainCampaignStillsInBackground"),
+    "generate must res.json before stills start",
+  );
+  assert.match(genFn, /GENERATE_DEADLINE_MS/);
 });
 
 test("index.ts does not statically import the DB/worker graph", () => {

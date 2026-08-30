@@ -115,7 +115,8 @@ const BG_REMOVAL_PROMPT =
 
 async function removeWithGemini(imageUrl: string): Promise<Buffer> {
   const { editImage } = await import("@workspace/integrations-gemini-ai/image");
-  const { default: sharp } = await import("sharp");
+  const { loadSharp } = await import("./loadSharp.js");
+  const sharp = await loadSharp();
 
   // Fetch and normalise the source image to PNG
   const res = await fetch(imageUrl);
