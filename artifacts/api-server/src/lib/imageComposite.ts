@@ -1,6 +1,11 @@
 import type { CampaignAd } from "../ads/types.js";
 import { billboardLine } from "./craft.js";
 import { loadSharp } from "./loadSharp.js";
+import {
+  COMPOSITE_FONT_FAMILY,
+  compositeFontFaceCss,
+  ensureCompositeFontconfig,
+} from "./loadCompositeFonts.js";
 
 export interface CompositeOptions {
   ad: CampaignAd;
@@ -32,15 +37,17 @@ function ctaPillSvg(cx: number, rectTopY: number, rawText: string, fontSize = 15
   const x = cx - pillW / 2;
   const textY = rectTopY + Math.round(pillH / 2) + Math.round(fontSize * 0.35);
   return `<rect x="${x}" y="${rectTopY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="white"/>
-  <text x="${cx}" y="${textY}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" fill="#111111" font-weight="700">${escapeXml(display)}</text>`;
+  <text x="${cx}" y="${textY}" text-anchor="middle" font-family="${COMPOSITE_FONT_FAMILY}" font-size="${fontSize}" fill="#111111" font-weight="700">${escapeXml(display)}</text>`;
 }
 
 /**
  * Composite a 2–6 word billboard into designed TOP negative space.
  * Never draws type over the lower ~68% of the frame (the product lives there).
+ * Type is Inter Regular + Bold from vendored TTFs — never a system serif or CDN.
  */
 export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> {
   const sharp = await loadSharp();
+  ensureCompositeFontconfig();
   const { ad, brandName, sourceImageBuffer, width, height } = opts;
 
   if (!sourceImageBuffer || sourceImageBuffer.length === 0) {
@@ -58,6 +65,7 @@ export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> 
   const svgOverlay = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
+    <style type="text/css">${compositeFontFaceCss()}</style>
     <linearGradient id="neg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#000000" stop-opacity="0.55"/>
       <stop offset="70%" stop-color="#000000" stop-opacity="0.18"/>
@@ -66,12 +74,12 @@ export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> 
   </defs>
   <rect width="${width}" height="${bandH}" fill="url(#neg)"/>
   <text x="${cx}" y="${brandY}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,0.75)"
-    letter-spacing="3" font-weight="600">
+    font-family="${COMPOSITE_FONT_FAMILY}" font-size="13" fill="rgba(255,255,255,0.75)"
+    letter-spacing="3" font-weight="400">
     ${escapeXml(brandName.toUpperCase())}
   </text>
   <text x="${cx}" y="${hookY}" text-anchor="middle"
-    font-family="Georgia, serif" font-size="${hookSize}" fill="white" font-weight="400">
+    font-family="${COMPOSITE_FONT_FAMILY}" font-size="${hookSize}" fill="white" font-weight="400">
     ${escapeXml(line)}
   </text>
   ${ctaPillSvg(cx, ctaY, ad.cta, 14)}
@@ -95,11 +103,13 @@ export async function makeSvgFallbackKillOnSight(opts: {
   height: number;
 }): Promise<Buffer> {
   const sharp = await loadSharp();
+  ensureCompositeFontconfig();
   const { ad, brandName, width, height } = opts;
   const hex1 = ad.gradientHex1 ?? "#1a1a2e";
   const hex2 = ad.gradientHex2 ?? "#16213e";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
+    <style type="text/css">${compositeFontFaceCss()}</style>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="${escapeXml(hex1)}"/>
       <stop offset="100%" stop-color="${escapeXml(hex2)}"/>
@@ -107,9 +117,9 @@ export async function makeSvgFallbackKillOnSight(opts: {
   </defs>
   <rect width="${width}" height="${height}" fill="url(#bg)"/>
   <text x="${width / 2}" y="${height * 0.5}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="22" fill="white">KILL-ON-SIGHT — not an ad</text>
+    font-family="${COMPOSITE_FONT_FAMILY}" font-size="22" fill="white" font-weight="700">KILL-ON-SIGHT — not an ad</text>
   <text x="${width / 2}" y="${height * 0.56}" text-anchor="middle"
-    font-family="Inter, Arial, sans-serif" font-size="14" fill="rgba(255,255,255,0.7)">${escapeXml(brandName)}</text>
+    font-family="${COMPOSITE_FONT_FAMILY}" font-size="14" fill="rgba(255,255,255,0.7)" font-weight="400">${escapeXml(brandName)}</text>
 </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * Vercel Express services file-trace from the service root. pnpm puts
@@ -54,6 +54,7 @@ if (typeof globalThis === "object") globalThis.__launchpadSharp = __launchpadSha
 
 vendorSharp();
 await assertVendoredSharpCallable();
+await assertCompositeInterNotTofu();
 
 function resolvePackageRoot(name, fromRequire = require) {
   try {
@@ -222,4 +223,48 @@ async function assertVendoredSharpCallable() {
   console.log(
     "vendor-sharp: require('detect-libc') + sharp() work from staged lambda layout (not repo-root hoist)",
   );
+}
+
+/**
+ * Preview E9Aeksku burned Inter/Times as tofu — the lambda had no glyphs.
+ * Fail the build if a known string still composites to hollow boxes.
+ */
+async function assertCompositeInterNotTofu() {
+  const regular = path.join(serviceRoot, "fonts", "Inter-Regular.ttf");
+  const bold = path.join(serviceRoot, "fonts", "Inter-Bold.ttf");
+  if (!fs.existsSync(regular) || !fs.existsSync(bold)) {
+    throw new Error(
+      "fonts/Inter-Regular.ttf and Inter-Bold.ttf must ship next to sharp. Composite would tofu.",
+    );
+  }
+  const req = createRequire(path.join(serviceRoot, "server.cjs"));
+  const sharp = req("./sharp-fn.cjs");
+  if (typeof sharp !== "function") {
+    throw new Error("sharp() not callable while asserting Inter composite");
+  }
+  const regularB64 = fs.readFileSync(regular).toString("base64");
+  const boldB64 = fs.readFileSync(bold).toString("base64");
+  const face = `
+@font-face { font-family: "LaunchPadInter"; font-weight: 400; src: url("${pathToFileURL(regular).href}") format("truetype"), url("data:font/ttf;base64,${regularB64}") format("truetype"); }
+@font-face { font-family: "LaunchPadInter"; font-weight: 700; src: url("${pathToFileURL(bold).href}") format("truetype"), url("data:font/ttf;base64,${boldB64}") format("truetype"); }
+`;
+  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
+  <defs><style type="text/css">${face}</style></defs>
+  <rect width="400" height="200" fill="#111111"/>
+  <text x="200" y="80" text-anchor="middle" font-family="LaunchPadInter" font-size="42" fill="white" font-weight="400">WAKE UP</text>
+  <text x="200" y="150" text-anchor="middle" font-family="LaunchPadInter" font-size="16" fill="white" font-weight="700">Get yours</text>
+</svg>`);
+  const png = await sharp(svg).png().toBuffer();
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  let ink = 0;
+  for (let i = 0; i < info.width * info.height; i++) {
+    const o = i * 3;
+    if ((data[o] ?? 0) + (data[o + 1] ?? 0) + (data[o + 2] ?? 0) > 480) ink++;
+  }
+  if (ink < 800) {
+    throw new Error(
+      `Inter composite of "WAKE UP" painted ${ink} ink pixels — tofu / missing glyphs`,
+    );
+  }
+  console.log(`vendor-fonts: Inter Regular+Bold composited "WAKE UP" (${ink} ink px)`);
 }

@@ -60,8 +60,10 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /staged lambda/);
   assert.equal(
     vercel.services.api.functions["server.cjs"].includeFiles,
-    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs}",
+    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts/**}",
   );
+  assert.match(bundle, /Inter-Regular\.ttf/);
+  assert.match(bundle, /WAKE UP/);
 });
 
 test("createCampaign awaits Grok copy and does not start stills", () => {
