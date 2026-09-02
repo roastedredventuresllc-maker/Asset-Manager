@@ -20,7 +20,7 @@
       "functions": {
         "server.cjs": {
           "maxDuration": 300,
-          "includeFiles": "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts/**}"
+          "includeFiles": "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts-fn.cjs,fonts/Inter-Regular.ttf,fonts/Inter-Bold.ttf,fonts/OFL-Inter.txt}"
         }
       }
     }

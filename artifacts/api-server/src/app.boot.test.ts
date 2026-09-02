@@ -52,18 +52,22 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /staging/);
   assert.match(bundle, /ENOENT/);
   assert.match(bundle, /sharp-fn\.cjs/);
+  assert.match(bundle, /fonts-fn\.cjs/);
   assert.match(bundle, /__launchpadSharp/);
+  assert.match(bundle, /__launchpadFonts/);
   assert.match(bundle, /typeof fromShim !== "function"/);
   assert.match(bundle, /typeof fromDirect !== "function"/);
   assert.match(bundle, /import\("sharp"\)/);
   assert.match(bundle, /detect-libc/);
   assert.match(bundle, /staged lambda/);
+  assert.match(bundle, /cwd\/fonts/);
   assert.equal(
     vercel.services.api.functions["server.cjs"].includeFiles,
-    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts/**}",
+    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts-fn.cjs,fonts/Inter-Regular.ttf,fonts/Inter-Bold.ttf,fonts/OFL-Inter.txt}",
   );
   assert.match(bundle, /Inter-Regular\.ttf/);
   assert.match(bundle, /WAKE UP/);
+  assert.match(bundle, /assertStagedLayoutResolvesInter/);
 });
 
 test("createCampaign awaits Grok copy and does not start stills", () => {

@@ -22,6 +22,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * not ship that. Copy detect-libc, semver, and @img as siblings of sharp
  * so /var/task/node_modules/detect-libc resolves, and fail the build
  * unless an isolated lambda layout can require them.
+ *
+ * Preview ALbkWDpm: Inter TTFs were in git at fonts/ but includeFiles
+ * `fonts/**` inside the brace did not put Inter-Regular.ttf at
+ * /var/task/fonts (cwd/fonts next to server.cjs). List the TTF files
+ * by name (flat files, not a nested ** tree) and fail the build unless
+ * the same isolated layout can resolve them the way loadCompositeFonts
+ * does — fonts-fn.cjs + cwd/fonts.
  */
 const serviceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -42,7 +49,11 @@ await build({
   banner: {
     js: `var import_meta_url = require("node:url").pathToFileURL(__filename).href;
 var __launchpadSharp = require("./sharp-fn.cjs");
-if (typeof globalThis === "object") globalThis.__launchpadSharp = __launchpadSharp;`,
+var __launchpadFonts = require("./fonts-fn.cjs");
+if (typeof globalThis === "object") {
+  globalThis.__launchpadSharp = __launchpadSharp;
+  globalThis.__launchpadFonts = __launchpadFonts;
+}`,
   },
   define: {
     "import.meta.url": "import_meta_url",
@@ -53,8 +64,8 @@ if (typeof globalThis === "object") globalThis.__launchpadSharp = __launchpadSha
 });
 
 vendorSharp();
+vendorFonts();
 await assertVendoredSharpCallable();
-await assertCompositeInterNotTofu();
 
 function resolvePackageRoot(name, fromRequire = require) {
   try {
@@ -138,6 +149,29 @@ function vendorSharp() {
   console.log("vendor-sharp: copied sharp + detect-libc + @img into service node_modules");
 }
 
+function vendorFonts() {
+  const dest = path.join(serviceRoot, "fonts");
+  const regular = path.join(dest, "Inter-Regular.ttf");
+  const bold = path.join(dest, "Inter-Bold.ttf");
+  const shim = path.join(serviceRoot, "fonts-fn.cjs");
+  if (!fs.existsSync(shim)) {
+    throw new Error("fonts-fn.cjs missing next to server.cjs — lambda cannot resolve Inter");
+  }
+  if (!fs.existsSync(regular) || !fs.existsSync(bold)) {
+    throw new Error(
+      "fonts/Inter-Regular.ttf and Inter-Bold.ttf must sit next to server.cjs. Composite would tofu.",
+    );
+  }
+  const ttfMagic = Buffer.from([0, 1, 0, 0]);
+  if (!fs.readFileSync(regular).subarray(0, 4).equals(ttfMagic)) {
+    throw new Error("fonts/Inter-Regular.ttf is not a TrueType font");
+  }
+  if (!fs.readFileSync(bold).subarray(0, 4).equals(ttfMagic)) {
+    throw new Error("fonts/Inter-Bold.ttf is not a TrueType font");
+  }
+  console.log("vendor-fonts: Inter Regular+Bold + fonts-fn.cjs next to server.cjs");
+}
+
 /**
  * Build-machine require("sharp") can walk up to repo-root node_modules and
  * hide a missing detect-libc. Assert against a temp layout that only has
@@ -148,6 +182,14 @@ async function assertVendoredSharpCallable() {
   try {
     fs.copyFileSync(path.join(serviceRoot, "server.cjs"), path.join(isolated, "server.cjs"));
     fs.copyFileSync(path.join(serviceRoot, "sharp-fn.cjs"), path.join(isolated, "sharp-fn.cjs"));
+    fs.copyFileSync(path.join(serviceRoot, "fonts-fn.cjs"), path.join(isolated, "fonts-fn.cjs"));
+    const fontsSrc = path.join(serviceRoot, "fonts");
+    if (!fs.existsSync(path.join(fontsSrc, "Inter-Regular.ttf"))) {
+      throw new Error(
+        "staged lambda missing fonts/Inter-Regular.ttf — includeFiles would omit it and composite would tofu",
+      );
+    }
+    fs.cpSync(fontsSrc, path.join(isolated, "fonts"), { recursive: true });
     const nm = path.join(isolated, "node_modules");
     fs.mkdirSync(nm, { recursive: true });
     for (const name of ["sharp", "detect-libc", "semver", "@img"]) {
@@ -207,6 +249,8 @@ async function assertVendoredSharpCallable() {
     if (!stats?.channels?.length) {
       throw new Error("vendored sharp().stats() failed — rejectIfFlatGradient would throw");
     }
+
+    await assertStagedLayoutResolvesInter(isolated, req, fromShim);
   } finally {
     fs.rmSync(isolated, { recursive: true, force: true });
   }
@@ -215,6 +259,11 @@ async function assertVendoredSharpCallable() {
   if (!bundled.includes('require("./sharp-fn.cjs")')) {
     throw new Error(
       "server.cjs does not require(\"./sharp-fn.cjs\") — lambda would import the ESM namespace again",
+    );
+  }
+  if (!bundled.includes('require("./fonts-fn.cjs")')) {
+    throw new Error(
+      "server.cjs does not require(\"./fonts-fn.cjs\") — lambda would miss Inter the way ALbkWDpm did",
     );
   }
   if (bundled.includes('import("sharp")') || bundled.includes("import('sharp')")) {
@@ -226,45 +275,90 @@ async function assertVendoredSharpCallable() {
 }
 
 /**
- * Preview E9Aeksku burned Inter/Times as tofu — the lambda had no glyphs.
- * Fail the build if a known string still composites to hollow boxes.
+ * loadCompositeFonts resolves via fonts-fn.cjs (__dirname/fonts) then cwd/fonts.
+ * Fail unless the isolated /var/task layout can do the same — not serviceRoot.
+ * Preview E9Aeksku burned tofu; ALbkWDpm never found the TTF.
  */
-async function assertCompositeInterNotTofu() {
-  const regular = path.join(serviceRoot, "fonts", "Inter-Regular.ttf");
-  const bold = path.join(serviceRoot, "fonts", "Inter-Bold.ttf");
-  if (!fs.existsSync(regular) || !fs.existsSync(bold)) {
-    throw new Error(
-      "fonts/Inter-Regular.ttf and Inter-Bold.ttf must ship next to sharp. Composite would tofu.",
-    );
-  }
-  const req = createRequire(path.join(serviceRoot, "server.cjs"));
-  const sharp = req("./sharp-fn.cjs");
-  if (typeof sharp !== "function") {
-    throw new Error("sharp() not callable while asserting Inter composite");
-  }
-  const regularB64 = fs.readFileSync(regular).toString("base64");
-  const boldB64 = fs.readFileSync(bold).toString("base64");
-  const face = `
+async function assertStagedLayoutResolvesInter(isolated, req, sharp) {
+  const prevCwd = process.cwd();
+  process.chdir(isolated);
+  try {
+    const cwdFont = path.join(process.cwd(), "fonts", "Inter-Regular.ttf");
+    if (!fs.existsSync(cwdFont)) {
+      throw new Error(
+        "cwd/fonts/Inter-Regular.ttf missing in staged lambda — includeFiles would omit it",
+      );
+    }
+    if (!cwdFont.startsWith(isolated)) {
+      throw new Error(`cwd/fonts resolved outside staged lambda (${cwdFont})`);
+    }
+
+    const fonts = req("./fonts-fn.cjs");
+    if (!fonts || typeof fonts.resolve !== "function") {
+      throw new Error("fonts-fn.cjs did not export resolve — loadCompositeFonts would miss Inter");
+    }
+    let regular;
+    try {
+      regular = fonts.resolve("Inter-Regular.ttf");
+    } catch (err) {
+      throw new Error(
+        `fonts-fn.cjs.resolve(Inter-Regular.ttf) failed from staged lambda: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    const bold = fonts.resolve("Inter-Bold.ttf");
+    if (!regular.startsWith(isolated) || !bold.startsWith(isolated)) {
+      throw new Error(
+        `Inter TTF resolved outside staged lambda (${regular}) — build-machine fonts/ would hide the ALbkWDpm miss`,
+      );
+    }
+
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "lp-nofont-"));
+    try {
+      fs.copyFileSync(path.join(isolated, "fonts-fn.cjs"), path.join(empty, "fonts-fn.cjs"));
+      const emptyReq = createRequire(path.join(empty, "fonts-fn.cjs"));
+      let threw = false;
+      try {
+        emptyReq("./fonts-fn.cjs").resolve("Inter-Regular.ttf");
+      } catch {
+        threw = true;
+      }
+      if (!threw) {
+        throw new Error(
+          "fonts-fn.cjs resolved Inter without cwd/fonts — that hoist hid ALbkWDpm",
+        );
+      }
+    } finally {
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+
+    const regularB64 = fs.readFileSync(regular).toString("base64");
+    const boldB64 = fs.readFileSync(bold).toString("base64");
+    const face = `
 @font-face { font-family: "LaunchPadInter"; font-weight: 400; src: url("${pathToFileURL(regular).href}") format("truetype"), url("data:font/ttf;base64,${regularB64}") format("truetype"); }
 @font-face { font-family: "LaunchPadInter"; font-weight: 700; src: url("${pathToFileURL(bold).href}") format("truetype"), url("data:font/ttf;base64,${boldB64}") format("truetype"); }
 `;
-  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
+    const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
   <defs><style type="text/css">${face}</style></defs>
   <rect width="400" height="200" fill="#111111"/>
   <text x="200" y="80" text-anchor="middle" font-family="LaunchPadInter" font-size="42" fill="white" font-weight="400">WAKE UP</text>
   <text x="200" y="150" text-anchor="middle" font-family="LaunchPadInter" font-size="16" fill="white" font-weight="700">Get yours</text>
 </svg>`);
-  const png = await sharp(svg).png().toBuffer();
-  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  let ink = 0;
-  for (let i = 0; i < info.width * info.height; i++) {
-    const o = i * 3;
-    if ((data[o] ?? 0) + (data[o + 1] ?? 0) + (data[o + 2] ?? 0) > 480) ink++;
-  }
-  if (ink < 800) {
-    throw new Error(
-      `Inter composite of "WAKE UP" painted ${ink} ink pixels — tofu / missing glyphs`,
+    const png = await sharp(svg).png().toBuffer();
+    const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    let ink = 0;
+    for (let i = 0; i < info.width * info.height; i++) {
+      const o = i * 3;
+      if ((data[o] ?? 0) + (data[o + 1] ?? 0) + (data[o + 2] ?? 0) > 480) ink++;
+    }
+    if (ink < 800) {
+      throw new Error(
+        `Inter composite of "WAKE UP" painted ${ink} ink pixels — tofu / missing glyphs`,
+      );
+    }
+    console.log(
+      `vendor-fonts: staged lambda resolved Inter-Regular.ttf and composited "WAKE UP" (${ink} ink px)`,
     );
+  } finally {
+    process.chdir(prevCwd);
   }
-  console.log(`vendor-fonts: Inter Regular+Bold composited "WAKE UP" (${ink} ink px)`);
 }

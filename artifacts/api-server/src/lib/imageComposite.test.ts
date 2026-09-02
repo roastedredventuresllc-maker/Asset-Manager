@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -29,6 +30,18 @@ test("vendored Inter Regular + Bold TTFs exist for the lambda", () => {
   assert.match(bold, /Inter-Bold\.ttf$/);
   assert.equal(readFileSync(regular).subarray(0, 4).equals(Buffer.from([0, 1, 0, 0])), true);
   assert.equal(readFileSync(bold).subarray(0, 4).equals(Buffer.from([0, 1, 0, 0])), true);
+});
+
+test("fonts-fn.cjs resolves Inter next to server.cjs — the lambda path", () => {
+  const serviceRoot = join(here, "../..");
+  const req = createRequire(join(serviceRoot, "fonts-fn.cjs"));
+  const fonts = req("./fonts-fn.cjs") as {
+    resolve: (name: string) => string;
+    dir: string;
+  };
+  const regular = fonts.resolve("Inter-Regular.ttf");
+  assert.equal(regular, join(serviceRoot, "fonts", "Inter-Regular.ttf"));
+  assert.equal(fonts.dir, join(serviceRoot, "fonts"));
 });
 
 test("composite SVG names only LaunchPadInter — no Times or system fonts", () => {
