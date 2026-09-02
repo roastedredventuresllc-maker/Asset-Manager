@@ -28,14 +28,13 @@ router.post("/generate", async (req, res) => {
   };
   res.setHeader("Content-Type", "application/json");
   try {
-    // Copy has a <20s Grok wall; on miss writeCampaignCopy fail-closes from
-    // the brief so this is always campaign JSON (id + ads), never a timeout body.
+    // Await Grok copy the way production does (no abort wall). Flush JSON
+    // before Imagine/Craft so stills cannot hold the 201.
     const { campaign, stillsJobIds } = await svc.createCampaign({
       brief: brief ?? "",
       productImageUrl,
       productImageNoBgUrl,
     });
-    // Flush campaign + copy now. Stills start after the body is on the wire.
     res.status(201).json(campaign);
     svc.drainStillsInBackground(campaign.id, stillsJobIds);
   } catch (err) {

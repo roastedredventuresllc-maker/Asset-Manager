@@ -66,6 +66,8 @@ test("createCampaign awaits Grok copy and does not start stills", () => {
   assert.match(createFn, /await writeCampaignCopy/);
   assert.doesNotMatch(createFn, /await processPendingJobs/);
   assert.doesNotMatch(createFn, /runInBackground/);
+  assert.doesNotMatch(src, /failClosedCampaignFromBrief/);
+  assert.doesNotMatch(src, /COPY_DEADLINE_MS/);
   assert.match(createFn, /stillsJobIds/);
   assert.match(src, /drainStillsInBackground/);
   assert.match(src, /renderCampaignStills/);

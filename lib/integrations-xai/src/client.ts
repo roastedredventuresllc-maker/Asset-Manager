@@ -28,9 +28,6 @@ export const xai: OpenAI = new Proxy({} as OpenAI, {
 
 export { isXaiConfigured, resolveXaiAuth, resolveXaiModel, resolveImagineModel } from "./auth";
 
-/** Under the 20s generate HTTP budget. 12s on preview FffLCyMhqR9LaR4V2TymR8rLYJcV missed real copy. */
-export const GROK_CHAT_TIMEOUT_MS = 16_000;
-
 /**
  * Chat completion constrained to a JSON object. The founder brief is the
  * intelligence input — this is a thin transport, not a template composer.
@@ -41,42 +38,21 @@ export async function grokJsonChat(opts: {
   maxTokens?: number;
   temperature?: number;
 }): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GROK_CHAT_TIMEOUT_MS);
-  try {
-    const completion = await getXaiClient().chat.completions.create(
-      {
-        model: resolveXaiModel(),
-        messages: [
-          { role: "system", content: opts.system },
-          { role: "user", content: opts.user },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: opts.maxTokens ?? 2048,
-        temperature: opts.temperature ?? 0.7,
-      },
-      {
-        timeout: GROK_CHAT_TIMEOUT_MS,
-        maxRetries: 0,
-        signal: controller.signal,
-      },
-    );
-    const text = completion.choices[0]?.message?.content ?? "";
-    if (!text.trim()) {
-      throw new Error("Empty JSON response from Grok");
-    }
-    return text;
-  } catch (err) {
-    const aborted = controller.signal.aborted;
-    const name = err && typeof err === "object" && "name" in err ? String(err.name) : "";
-    const msg = err instanceof Error ? err.message : String(err);
-    if (aborted || name.includes("Timeout") || /timeout|abort/i.test(msg)) {
-      throw new Error("Grok copy timed out");
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+  const completion = await getXaiClient().chat.completions.create({
+    model: resolveXaiModel(),
+    messages: [
+      { role: "system", content: opts.system },
+      { role: "user", content: opts.user },
+    ],
+    response_format: { type: "json_object" },
+    max_tokens: opts.maxTokens ?? 4096,
+    temperature: opts.temperature ?? 0.7,
+  });
+  const text = completion.choices[0]?.message?.content ?? "";
+  if (!text.trim()) {
+    throw new Error("Empty JSON response from Grok");
   }
+  return text;
 }
 
 /** Strip markdown fences then parse. Grok is asked for raw JSON; this is defensive. */

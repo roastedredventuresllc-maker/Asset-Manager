@@ -7,7 +7,6 @@ import {
 } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { generateCampaign, reviseCampaign } from "./claude.js";
-import { failClosedCampaignFromBrief } from "./failClosedCampaign.js";
 import { generateId, generateSlug } from "./ids.js";
 import { getAdPlatformForCampaign } from "../ads/index.js";
 import { adsMode } from "../ads/connectors.js";
@@ -22,9 +21,6 @@ import { publicOrigin } from "./assetUrl.js";
 import { JOB_STATUS } from "./jobStatus.js";
 import { runInBackground } from "./background.js";
 import { processPendingJobs } from "./worker.js";
-import { COPY_DEADLINE_MS, withDeadline } from "./copyDeadline.js";
-
-export { COPY_DEADLINE_MS, withDeadline } from "./copyDeadline.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -110,24 +106,10 @@ export async function writeCampaignCopy(
   productImageUrl: string | null,
   productImageNoBgUrl?: string | null,
 ): Promise<string[]> {
-  let campaignData;
   try {
-    campaignData = await withDeadline(
-      generateCampaign(brief, {
-        hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
-      }),
-      COPY_DEADLINE_MS,
-      () => new Error("Grok copy timed out"),
-    );
-  } catch (err) {
-    logger.warn(
-      { err, campaignId },
-      "Grok copy missed the generate window; fail-closed campaign from brief",
-    );
-    campaignData = failClosedCampaignFromBrief(brief);
-  }
-
-  try {
+    const campaignData = await generateCampaign(brief, {
+      hasProductPhoto: Boolean(productImageUrl || productImageNoBgUrl),
+    });
     const landingSlug = generateSlug(campaignData.brandName);
 
     await db
@@ -175,14 +157,12 @@ export async function writeCampaignCopy(
     logger.info({ campaignId }, "Campaign copy ready; stills enqueued");
     return jobIds;
   } catch (err) {
-    logger.error({ err, campaignId }, "Campaign persist error after copy");
+    logger.error({ err, campaignId }, "Campaign generation error");
     await db
       .update(campaignsTable)
       .set({ status: "error" })
       .where(eq(campaignsTable.id, campaignId));
-    if (err instanceof ServiceError) throw err;
-    const message = err instanceof Error ? err.message : "Campaign copy failed";
-    throw new ServiceError(502, "copy_failed", message);
+    return [];
   }
 }
 

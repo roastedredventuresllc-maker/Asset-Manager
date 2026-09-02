@@ -1,5 +1,6 @@
 import { grokJsonChat, parseJsonObject } from "@workspace/integrations-xai";
 import { buildReferencePlaybook } from "./referenceLibrary.js";
+import { getIndexedReferenceNotes } from "./referenceAssets.js";
 import { billboardLine } from "./craft.js";
 
 /** Testable chat seam. Production uses Grok (`grokJsonChat`). */
@@ -189,14 +190,17 @@ export async function generateCampaign(
   opts: GenerateCampaignOptions = {},
 ): Promise<CampaignData> {
   const playbook = buildReferencePlaybook(brief);
+  const indexedNotes = opts.chat
+    ? ""
+    : await getIndexedReferenceNotes(brief).catch(() => "");
   const chat = opts.chat ?? grokJsonChat;
   const photoNote = opts.hasProductPhoto
     ? "\n\nThe founder uploaded a product photo. Write imagePrompts for THIS exact product (same silhouette, color, materials, label). Do not invent a different SKU."
     : "";
   const text = await chat({
-    system: `${GENERATE_SYSTEM}\n\n${playbook}`,
+    system: `${GENERATE_SYSTEM}\n\n${playbook}${indexedNotes}`,
     user: `Product description: ${brief}${photoNote}`,
-    maxTokens: 2048,
+    maxTokens: 4096,
     temperature: 0.75,
   });
 

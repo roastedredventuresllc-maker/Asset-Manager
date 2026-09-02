@@ -2,7 +2,6 @@ export {
   xai,
   getXaiClient,
   grokJsonChat,
-  GROK_CHAT_TIMEOUT_MS,
   parseJsonObject,
   isXaiConfigured,
   resolveXaiAuth,

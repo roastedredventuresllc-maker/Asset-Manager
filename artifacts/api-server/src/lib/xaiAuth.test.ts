@@ -8,7 +8,6 @@ import {
   resolveXaiAuth,
   resolveXaiModel,
   resolveImagineModel,
-  GROK_CHAT_TIMEOUT_MS,
   toImagineAspect,
   IMAGINE_ASPECTS,
   DEFAULT_GATEWAY_BASE_URL,
@@ -109,12 +108,10 @@ test("bare XAI_MODEL is prefixed for Gateway", () => {
   );
 });
 
-test("Grok chat aborts well under 20s and does not retry", () => {
-  assert.ok(GROK_CHAT_TIMEOUT_MS >= 15_000 && GROK_CHAT_TIMEOUT_MS < 20_000);
+test("Grok chat has no generate abort wall (live copy already 201s)", () => {
   const src = readFileSync(join(here, "../../../../lib/integrations-xai/src/client.ts"), "utf8");
-  assert.match(src, /AbortController/);
-  assert.match(src, /maxRetries:\s*0/);
-  assert.match(src, /timeout:\s*GROK_CHAT_TIMEOUT_MS/);
+  assert.doesNotMatch(src, /GROK_CHAT_TIMEOUT_MS/);
+  assert.doesNotMatch(src, /AbortController/);
 });
 
 test("toImagineAspect maps hero 4:5 onto a legal Imagine variant", () => {
