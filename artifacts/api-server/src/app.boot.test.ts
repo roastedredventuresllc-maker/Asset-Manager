@@ -45,7 +45,8 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /vendorSharp/);
   assert.match(bundle, /dereference: true/);
   assert.match(bundle, /assertVendoredSharpCallable/);
-  assert.match(bundle, /sharp\(\) is a function/);
+  assert.match(bundle, /require\(['"]detect-libc['"]\)/);
+  assert.match(bundle, /staged lambda layout/);
   assert.match(bundle, /import\.meta\.url/);
   assert.match(bundle, /import_meta_url/);
   assert.match(bundle, /staging/);
@@ -55,7 +56,12 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /typeof fromShim !== "function"/);
   assert.match(bundle, /typeof fromDirect !== "function"/);
   assert.match(bundle, /import\("sharp"\)/);
-  assert.equal(vercel.services.api.functions["server.cjs"].includeFiles, "{node_modules/sharp/**,sharp-fn.cjs}");
+  assert.match(bundle, /detect-libc/);
+  assert.match(bundle, /staged lambda/);
+  assert.equal(
+    vercel.services.api.functions["server.cjs"].includeFiles,
+    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs}",
+  );
 });
 
 test("createCampaign awaits Grok copy and does not start stills", () => {

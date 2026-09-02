@@ -1,5 +1,6 @@
 import { build } from "esbuild";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,13 @@ import { fileURLToPath } from "node:url";
  * sharp must be copied (dereferenced) into this service: includeFiles
  * `node_modules/sharp/**` does not follow pnpm store symlinks outside
  * artifacts/api-server, so Craft lock / composite never loaded on Vercel.
+ *
+ * Preview Adr5gGS7: sharp.js `require('detect-libc')` died MODULE_NOT_FOUND
+ * because detect-libc lived only under sharp/node_modules (or the build
+ * machine's repo-root hoist). includeFiles `{node_modules/sharp/**}` does
+ * not ship that. Copy detect-libc, semver, and @img as siblings of sharp
+ * so /var/task/node_modules/detect-libc resolves, and fail the build
+ * unless an isolated lambda layout can require them.
  */
 const serviceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -47,6 +55,32 @@ if (typeof globalThis === "object") globalThis.__launchpadSharp = __launchpadSha
 vendorSharp();
 await assertVendoredSharpCallable();
 
+function resolvePackageRoot(name, fromRequire = require) {
+  try {
+    return path.dirname(fromRequire.resolve(`${name}/package.json`));
+  } catch {
+    const fallbacks = [
+      path.resolve(serviceRoot, "../../node_modules", name),
+      path.join(serviceRoot, "node_modules", name),
+    ];
+    const found = fallbacks.find((p) => fs.existsSync(path.join(p, "package.json")));
+    if (found) return found;
+    throw new Error(
+      `vendor-sharp: cannot resolve ${name}. Lambda sharp.js would throw MODULE_NOT_FOUND.`,
+    );
+  }
+}
+
+function copyTree(src, dest) {
+  if (path.resolve(src) === path.resolve(dest)) return;
+  const staging = `${dest}.staging`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(src, staging, { recursive: true, dereference: true });
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.renameSync(staging, dest);
+}
+
 function vendorSharp() {
   const dest = path.join(serviceRoot, "node_modules", "sharp");
   const repoSharp = path.resolve(serviceRoot, "../../node_modules/sharp");
@@ -59,83 +93,123 @@ function vendorSharp() {
     );
   }
 
-  // Copy into a sibling first. rm+cp on dest after a prior vendor made
-  // require("sharp") === dest and stat'd a deleted tree (ENOENT cache race).
-  const staging = `${dest}.staging`;
-  fs.rmSync(staging, { recursive: true, force: true });
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.cpSync(resolved, staging, { recursive: true, dereference: true });
-  fs.rmSync(dest, { recursive: true, force: true });
-  fs.renameSync(staging, dest);
+  copyTree(resolved, dest);
 
-  const nested = path.join(dest, "node_modules");
-  fs.mkdirSync(nested, { recursive: true });
+  const siblingNm = path.join(serviceRoot, "node_modules");
+  const nestedNm = path.join(dest, "node_modules");
+  fs.mkdirSync(nestedNm, { recursive: true });
+
+  // Resolve deps the way sharp.js does. Repo-root hoist can be semver@6
+  // (no functions/coerce) — that is what Adr5gGS7-class misses look like.
+  const sharpRequire = createRequire(path.join(resolved, "package.json"));
+  for (const dep of ["detect-libc", "semver"]) {
+    const src = resolvePackageRoot(dep, sharpRequire);
+    if (dep === "semver" && !fs.existsSync(path.join(src, "functions", "coerce.js"))) {
+      throw new Error(
+        `vendor-sharp: ${src} is not sharp's semver (missing functions/coerce)`,
+      );
+    }
+    copyTree(src, path.join(siblingNm, dep));
+    copyTree(src, path.join(nestedNm, dep));
+  }
 
   const imgCandidates = [
     path.join(path.dirname(resolved), "@img"),
     path.resolve(serviceRoot, "../../node_modules/@img"),
   ];
-  for (const imgSrc of imgCandidates) {
-    if (!fs.existsSync(imgSrc)) continue;
-    fs.cpSync(imgSrc, path.join(nested, "@img"), {
-      recursive: true,
-      dereference: true,
-    });
-    break;
+  const imgSrc = imgCandidates.find((p) => fs.existsSync(p));
+  if (!imgSrc) {
+    throw new Error("vendor-sharp: @img (linux native + libvips) missing");
   }
+  copyTree(imgSrc, path.join(siblingNm, "@img"));
+  copyTree(imgSrc, path.join(nestedNm, "@img"));
 
-  for (const dep of ["detect-libc", "semver"]) {
-    try {
-      const depRoot = path.dirname(require.resolve(`${dep}/package.json`));
-      if (path.resolve(depRoot) === path.join(nested, dep)) continue;
-      fs.cpSync(depRoot, path.join(nested, dep), {
-        recursive: true,
-        dereference: true,
-      });
-    } catch {
-      // optional: sharp's own nested tree may already resolve these
+  const mustExist = [
+    path.join(siblingNm, "detect-libc", "package.json"),
+    path.join(siblingNm, "@img", "sharp-linux-x64", "package.json"),
+    path.join(dest, "package.json"),
+  ];
+  for (const marker of mustExist) {
+    if (!fs.existsSync(marker)) {
+      throw new Error(`vendor-sharp: staged lambda missing ${marker}`);
     }
   }
-
-  const nativeMarker = path.join(nested, "@img", "sharp-linux-x64", "package.json");
-  if (!fs.existsSync(nativeMarker)) {
-    console.warn("vendor-sharp: @img/sharp-linux-x64 missing after copy");
-  } else {
-    console.log("vendor-sharp: copied sharp + linux-x64 into service node_modules");
-  }
+  console.log("vendor-sharp: copied sharp + detect-libc + @img into service node_modules");
 }
 
 /**
- * File existence is not enough — production died with
- * `TypeError: sharp is not a function` inside rejectIfFlatGradient.
- * Fail the Vercel build if the vendored module is not callable.
+ * Build-machine require("sharp") can walk up to repo-root node_modules and
+ * hide a missing detect-libc. Assert against a temp layout that only has
+ * the files includeFiles will ship to /var/task.
  */
 async function assertVendoredSharpCallable() {
-  const req = createRequire(path.join(serviceRoot, "server.cjs"));
-  const fromShim = req("./sharp-fn.cjs");
-  if (typeof fromShim !== "function") {
-    throw new Error(
-      `sharp-fn.cjs did not export a function (got ${typeof fromShim}). Craft lock would reject Imagine plates.`,
-    );
+  const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "lp-lambda-"));
+  try {
+    fs.copyFileSync(path.join(serviceRoot, "server.cjs"), path.join(isolated, "server.cjs"));
+    fs.copyFileSync(path.join(serviceRoot, "sharp-fn.cjs"), path.join(isolated, "sharp-fn.cjs"));
+    const nm = path.join(isolated, "node_modules");
+    fs.mkdirSync(nm, { recursive: true });
+    for (const name of ["sharp", "detect-libc", "semver", "@img"]) {
+      const src = path.join(serviceRoot, "node_modules", name);
+      if (!fs.existsSync(src)) {
+        throw new Error(
+          `staged lambda missing node_modules/${name} — includeFiles would omit it and sharp.js would MODULE_NOT_FOUND`,
+        );
+      }
+      fs.cpSync(src, path.join(nm, name), { recursive: true, dereference: true });
+    }
+
+    const req = createRequire(path.join(isolated, "server.cjs"));
+    let libc;
+    try {
+      libc = req("detect-libc");
+    } catch (err) {
+      throw new Error(
+        `require("detect-libc") failed from staged lambda layout: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    if (typeof libc.familySync !== "function") {
+      throw new Error("require('detect-libc') from staged lambda is not the CJS API");
+    }
+    const libcPath = req.resolve("detect-libc");
+    if (!libcPath.startsWith(isolated)) {
+      throw new Error(
+        `detect-libc resolved outside staged lambda (${libcPath}) — build-machine hoist would hide the Adr5gGS7 miss`,
+      );
+    }
+    const coercePath = req.resolve("semver/functions/coerce");
+    if (!coercePath.startsWith(isolated)) {
+      throw new Error(`semver/functions/coerce resolved outside staged lambda (${coercePath})`);
+    }
+
+    const fromShim = req("./sharp-fn.cjs");
+    if (typeof fromShim !== "function") {
+      throw new Error(
+        `sharp-fn.cjs did not export a function (got ${typeof fromShim}). Craft lock would reject Imagine plates.`,
+      );
+    }
+    const fromDirect = req("sharp");
+    if (typeof fromDirect !== "function") {
+      throw new Error(
+        `require("sharp") is not a function (got ${typeof fromDirect}). Do not use the ESM namespace in the lambda.`,
+      );
+    }
+    const buf = await fromShim({
+      create: { width: 8, height: 8, channels: 3, background: "#336699" },
+    })
+      .png()
+      .toBuffer();
+    if (!buf || buf[0] !== 0x89) {
+      throw new Error("vendored sharp() did not produce a PNG");
+    }
+    const stats = await fromShim(buf).stats();
+    if (!stats?.channels?.length) {
+      throw new Error("vendored sharp().stats() failed — rejectIfFlatGradient would throw");
+    }
+  } finally {
+    fs.rmSync(isolated, { recursive: true, force: true });
   }
-  const fromDirect = req("sharp");
-  if (typeof fromDirect !== "function") {
-    throw new Error(
-      `require("sharp") is not a function (got ${typeof fromDirect}). Do not use the ESM namespace in the lambda.`,
-    );
-  }
-  const buf = await fromShim({
-    create: { width: 8, height: 8, channels: 3, background: "#336699" },
-  })
-    .png()
-    .toBuffer();
-  if (!buf || buf[0] !== 0x89) {
-    throw new Error("vendored sharp() did not produce a PNG");
-  }
-  const stats = await fromShim(buf).stats();
-  if (!stats?.channels?.length) {
-    throw new Error("vendored sharp().stats() failed — rejectIfFlatGradient would throw");
-  }
+
   const bundled = fs.readFileSync(path.join(serviceRoot, "server.cjs"), "utf8");
   if (!bundled.includes('require("./sharp-fn.cjs")')) {
     throw new Error(
@@ -145,5 +219,7 @@ async function assertVendoredSharpCallable() {
   if (bundled.includes('import("sharp")') || bundled.includes("import('sharp')")) {
     throw new Error("server.cjs still dynamic-imports sharp — Craft would get an object");
   }
-  console.log("vendor-sharp: sharp() is a function (CJS shim + require) and produced a PNG");
+  console.log(
+    "vendor-sharp: require('detect-libc') + sharp() work from staged lambda layout (not repo-root hoist)",
+  );
 }
