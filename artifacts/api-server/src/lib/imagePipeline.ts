@@ -73,8 +73,9 @@ function safeHost(url: string): string {
   }
 }
 
-function imagineAspect(slot: AdSlot): "4:5" | "9:16" {
-  return slot.aspectRatio === "9:16" ? "9:16" : "4:5";
+/** Imagine rejects 4:5. Hero / tight crop use 3:4; context stays 9:16. */
+export function imagineAspect(slot: AdSlot): "3:4" | "9:16" {
+  return slot.aspectRatio === "9:16" ? "9:16" : "3:4";
 }
 
 async function defaultImagine(

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { generateImageBuffer } from "./imagePipeline.js";
+import { generateImageBuffer, imagineAspect } from "./imagePipeline.js";
 import {
   ImageGenerationFailed,
   CraftReject,
@@ -12,7 +12,9 @@ import {
   rejectIfBakedType,
   rejectIfCheapGrade,
   assertCraftPlate,
+  slotForIndex,
 } from "./craft.js";
+import { toImagineAspect, IMAGINE_ASPECTS } from "@workspace/integrations-xai";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -89,6 +91,33 @@ test("fail-closed: SVG bytes from a model are rejected", async () => {
       }),
     (err: unknown) => err instanceof CraftReject || err instanceof ImageGenerationFailed,
   );
+});
+
+test("Imagine never receives 4:5 — hero/tight map to 3:4", () => {
+  assert.equal(slotForIndex(0).aspectRatio, "4:5");
+  assert.equal(slotForIndex(2).aspectRatio, "4:5");
+  assert.equal(imagineAspect(slotForIndex(0)), "3:4");
+  assert.equal(imagineAspect(slotForIndex(1)), "9:16");
+  assert.equal(imagineAspect(slotForIndex(2)), "3:4");
+  assert.equal(toImagineAspect("4:5"), "3:4");
+  assert.equal(toImagineAspect("3:4"), "3:4");
+  assert.equal(toImagineAspect("9:16"), "9:16");
+  assert.equal(toImagineAspect("2:3"), "2:3");
+  assert.ok(!(IMAGINE_ASPECTS as readonly string[]).includes("4:5"));
+  const pipeline = readFileSync(join(here, "imagePipeline.ts"), "utf8");
+  const imagineFn = pipeline.slice(
+    pipeline.indexOf("async function defaultImagine"),
+    pipeline.indexOf("async function defaultGptImage2"),
+  );
+  assert.match(imagineFn, /imagineAspect\(slot\)/);
+  assert.doesNotMatch(imagineFn, /["']4:5["']/);
+  const xaiImage = readFileSync(
+    join(here, "../../../../lib/integrations-xai/src/image.ts"),
+    "utf8",
+  );
+  assert.match(xaiImage, /toImagineAspect/);
+  assert.match(xaiImage, /aspect_ratio: aspect/);
+  assert.doesNotMatch(xaiImage, /aspect_ratio:\s*["']4:5["']/);
 });
 
 test("photoreal stub composites 4:5 without shipping a gradient", async () => {

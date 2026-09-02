@@ -27,22 +27,49 @@ async function bufferFromImageResponse(
   throw new Error("No image data in Grok Imagine response");
 }
 
+/** Grok Imagine legal aspects. `4:5` 422s (`unknown variant 4:5`). */
+export const IMAGINE_ASPECTS = [
+  "1:1",
+  "3:4",
+  "4:3",
+  "9:16",
+  "16:9",
+  "2:3",
+  "3:2",
+] as const;
+export type ImagineAspect = (typeof IMAGINE_ASPECTS)[number];
+
 /**
- * One text-to-image Imagine call. aspectRatio is 4:5 or 9:16.
+ * Map campaign slot ratios onto Imagine. Hero / tight 4:5 → 3:4
+ * (closest legal portrait). Never send 4:5.
+ */
+export function toImagineAspect(ratio: string): ImagineAspect {
+  if (ratio === "9:16") return "9:16";
+  if (ratio === "16:9") return "16:9";
+  if (ratio === "1:1") return "1:1";
+  if (ratio === "4:3") return "4:3";
+  if (ratio === "2:3") return "2:3";
+  if (ratio === "3:2") return "3:2";
+  if (ratio === "3:4" || ratio === "4:5") return "3:4";
+  return "3:4";
+}
+
+/**
+ * One text-to-image Imagine call.
  * Gateway does not take OpenAI `size` for this model — pass aspect_ratio.
  */
 export async function generateImagineImage(
   prompt: string,
-  aspectRatio: "4:5" | "9:16",
+  aspectRatio: string,
 ): Promise<Buffer> {
+  const aspect = toImagineAspect(aspectRatio);
   const client = getXaiClient();
   const response = await client.images.generate({
     model: resolveImagineModel(),
     prompt,
     n: 1,
     response_format: "b64_json",
-    // Gateway / xAI Imagine: aspect_ratio, not size.
-    ...({ aspect_ratio: aspectRatio } as Record<string, unknown>),
+    ...({ aspect_ratio: aspect } as Record<string, unknown>),
   });
   return bufferFromImageResponse(response.data);
 }
@@ -54,8 +81,9 @@ export async function generateImagineImage(
 export async function editImagineImage(
   prompt: string,
   productPng: Buffer,
-  aspectRatio: "4:5" | "9:16",
+  aspectRatio: string,
 ): Promise<Buffer> {
+  const aspect = toImagineAspect(aspectRatio);
   const client = getXaiClient();
   const image = await toFile(productPng, "product.png", { type: "image/png" });
   const response = await client.images.edit({
@@ -63,7 +91,7 @@ export async function editImagineImage(
     image,
     prompt,
     response_format: "b64_json",
-    ...({ aspect_ratio: aspectRatio } as Record<string, unknown>),
+    ...({ aspect_ratio: aspect } as Record<string, unknown>),
   });
   return bufferFromImageResponse(response.data);
 }

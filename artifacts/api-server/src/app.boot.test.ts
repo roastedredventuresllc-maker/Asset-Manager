@@ -44,16 +44,44 @@ test("Vercel api service bundles Express into server.cjs", () => {
   assert.match(bundle, /@vercel\/functions/);
   assert.match(bundle, /vendorSharp/);
   assert.match(bundle, /dereference: true/);
+  assert.match(bundle, /assertVendoredSharpCallable/);
+  assert.match(bundle, /require\(['"]detect-libc['"]\)/);
+  assert.match(bundle, /staged lambda layout/);
+  assert.match(bundle, /import\.meta\.url/);
+  assert.match(bundle, /import_meta_url/);
+  assert.match(bundle, /staging/);
+  assert.match(bundle, /ENOENT/);
+  assert.match(bundle, /sharp-fn\.cjs/);
+  assert.match(bundle, /fonts-fn\.cjs/);
+  assert.match(bundle, /__launchpadSharp/);
+  assert.match(bundle, /__launchpadFonts/);
+  assert.match(bundle, /typeof fromShim !== "function"/);
+  assert.match(bundle, /typeof fromDirect !== "function"/);
+  assert.match(bundle, /import\("sharp"\)/);
+  assert.match(bundle, /detect-libc/);
+  assert.match(bundle, /staged lambda/);
+  assert.match(bundle, /cwd\/fonts/);
+  assert.equal(
+    vercel.services.api.functions["server.cjs"].includeFiles,
+    "{node_modules/sharp/**,node_modules/detect-libc/**,node_modules/@img/**,node_modules/semver/**,sharp-fn.cjs,fonts-fn.cjs,fonts/Inter-Regular.ttf,fonts/Inter-Bold.ttf,fonts/OFL-Inter.txt}",
+  );
+  assert.match(bundle, /Inter-Regular\.ttf/);
+  assert.match(bundle, /WAKE UP/);
+  assert.match(bundle, /assertStagedLayoutResolvesInter/);
 });
 
-test("createCampaign awaits Grok copy, not the stills drain", () => {
+test("createCampaign awaits Grok copy and does not start stills", () => {
   const src = readFileSync(join(here, "lib/campaignService.ts"), "utf8");
   const createStart = src.indexOf("export async function createCampaign");
-  const createEnd = src.indexOf("export async function renderCampaignStills");
+  const createEnd = src.indexOf("export function drainStillsInBackground");
   const createFn = src.slice(createStart, createEnd);
   assert.match(createFn, /await writeCampaignCopy/);
   assert.doesNotMatch(createFn, /await processPendingJobs/);
-  assert.match(createFn, /runInBackground/);
+  assert.doesNotMatch(createFn, /runInBackground/);
+  assert.doesNotMatch(src, /failClosedCampaignFromBrief/);
+  assert.doesNotMatch(src, /COPY_DEADLINE_MS/);
+  assert.match(createFn, /stillsJobIds/);
+  assert.match(src, /drainStillsInBackground/);
   assert.match(src, /renderCampaignStills/);
   assert.match(src, /campaignId: id/);
   const renderStart = src.indexOf("export async function renderCampaignStills");
@@ -97,6 +125,22 @@ test("mock publish skips Stripe and allows unclaimed house in production", () =>
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(service), false);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(publish), false);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(routes), false);
+});
+
+test("POST /generate flushes JSON before any stills drain", () => {
+  const routes = readFileSync(join(here, "routes/campaigns.ts"), "utf8");
+  const genStart = routes.indexOf('router.post("/generate"');
+  const genEnd = routes.indexOf("router.get(\"/\"");
+  const gen = routes.slice(genStart, genEnd);
+  assert.match(gen, /Content-Type/);
+  assert.match(gen, /application\/json/);
+  assert.match(gen, /res\.status\(201\)\.json\(campaign\)/);
+  assert.doesNotMatch(gen, /copy_timeout/);
+  const jsonAt = gen.indexOf("res.status(201).json(campaign)");
+  const drainAt = gen.indexOf("drainStillsInBackground");
+  assert.ok(jsonAt >= 0 && drainAt > jsonAt, "stills drain must run after res.json");
+  assert.doesNotMatch(gen, /await processPendingJobs/);
+  assert.doesNotMatch(gen, /await svc\.drainStillsInBackground/);
 });
 
 test("GET /api/healthz returns {status:ok} without touching the DB", async () => {

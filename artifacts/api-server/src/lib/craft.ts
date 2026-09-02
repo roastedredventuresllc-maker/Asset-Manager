@@ -1,4 +1,5 @@
 import type { CampaignAd } from "../ads/types.js";
+import { loadSharp } from "./loadSharp.js";
 
 /** Primary stills model — Grok Imagine via AI Gateway (current GA id). */
 export const GROK_IMAGINE_MODEL = "xai/grok-imagine-image";
@@ -164,7 +165,7 @@ export function rejectIfNotAPhotograph(buffer: Buffer): void {
 }
 
 export async function rejectIfFlatGradient(buffer: Buffer): Promise<void> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   const stats = await sharp(buffer).stats();
   const stdevs = stats.channels.map((c) => c.stdev);
   const meanStd = stdevs.reduce((a, b) => a + b, 0) / Math.max(stdevs.length, 1);
@@ -181,7 +182,7 @@ type GlyphBox = { minx: number; miny: number; maxx: number; maxy: number; area: 
  * Do not crop it. Do not composite type over it.
  */
 export async function rejectIfBakedType(buffer: Buffer): Promise<void> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   const { data, info } = await sharp(buffer)
     .resize({ width: 280, height: 360, fit: "inside" })
     .greyscale()
@@ -274,7 +275,7 @@ function hueDeg(r: number, g: number, b: number): number {
  * One window light, real material.
  */
 export async function rejectIfCheapGrade(buffer: Buffer): Promise<void> {
-  const { default: sharp } = await import("sharp");
+  const sharp = await loadSharp();
   const { data, info } = await sharp(buffer)
     .resize({ width: 240, height: 300, fit: "inside" })
     .removeAlpha()

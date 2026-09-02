@@ -20,5 +20,7 @@ export {
   generateImagineImage,
   editImagineImage,
   isImagineConfigured,
+  toImagineAspect,
+  IMAGINE_ASPECTS,
 } from "./image";
 

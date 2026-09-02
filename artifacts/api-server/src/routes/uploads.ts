@@ -37,7 +37,8 @@ router.post("/product-image", async (req, res) => {
     // sharp-re-encodes to PNG before edit calls so declared MIME matches bytes.
     let finalBuffer: Buffer = buffer;
     try {
-      const { default: sharp } = await import("sharp");
+      const { loadSharp } = await import("../lib/loadSharp.js");
+      const sharp = await loadSharp();
       finalBuffer = await sharp(buffer)
         .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
         .jpeg({ quality: 85 })

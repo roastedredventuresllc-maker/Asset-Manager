@@ -26,15 +26,20 @@ router.post("/generate", async (req, res) => {
     productImageUrl?: string | null;
     productImageNoBgUrl?: string | null;
   };
+  res.setHeader("Content-Type", "application/json");
   try {
-    const campaign = await svc.createCampaign({
+    // Await Grok copy the way production does (no abort wall). Flush JSON
+    // before Imagine/Craft so stills cannot hold the 201.
+    const { campaign, stillsJobIds } = await svc.createCampaign({
       brief: brief ?? "",
       productImageUrl,
       productImageNoBgUrl,
     });
-    return res.status(201).json(campaign);
+    res.status(201).json(campaign);
+    svc.drainStillsInBackground(campaign.id, stillsJobIds);
   } catch (err) {
-    return handleError(err, res);
+    if (!res.headersSent) return handleError(err, res);
+    logger.error({ err }, "Campaign generate error after response");
   }
 });
 
