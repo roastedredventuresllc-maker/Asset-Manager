@@ -358,8 +358,8 @@ export async function rejectIfCheapGrade(buffer: Buffer): Promise<void> {
 
 /**
  * Paid-social safe zone on the MUTE plate (before Inter is composited).
- * Type band stays empty. Product sits in the well, not a lettermark,
- * not in the 12% gutters that 9:16 cover-crop eats.
+ * Subject ≠ pale linen / oatmeal. A flat beige sticker is an empty well.
+ * Product sits in the well, not a lettermark, not in the 12% gutters.
  */
 export const SAFE_ZONE = {
   typeBand: 0.32,
@@ -369,10 +369,30 @@ export const SAFE_ZONE = {
   maxTypeBandBusy: 0.12,
   minWellOccupancy: 0.08,
   lettermarkOccupancy: 0.025,
+  fieldDelta: 36,
+  flatInteriorStdev: 5.5,
+  flatInteriorGrad: 6,
 } as const;
 
 function lumaOf(r: number, g: number, b: number): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function colorDist(
+  r: number,
+  g: number,
+  b: number,
+  fr: number,
+  fg: number,
+  fb: number,
+): number {
+  return Math.hypot(r - fr, g - fg, b - fb);
+}
+
+function channelMedian(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
 }
 
 export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
@@ -385,19 +405,51 @@ export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
   const w = info.width;
   const h = info.height;
   const ch = info.channels;
-  const isProduct = (x: number, y: number): boolean => {
+  const at = (x: number, y: number) => {
     const i = (y * w + x) * ch;
-    return lumaOf(data[i]!, data[i + 1]!, data[i + 2]!) > 55;
+    return [data[i]!, data[i + 1]!, data[i + 2]!] as const;
+  };
+  const luma = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [r, g, b] = at(x, y);
+      luma[y * w + x] = lumaOf(r, g, b);
+    }
+  }
+  const gradAt = (x: number, y: number): number => {
+    if (x <= 0 || y <= 0 || x >= w - 1 || y >= h - 1) return 0;
+    const gx = luma[y * w + x + 1]! - luma[y * w + x - 1]!;
+    const gy = luma[(y + 1) * w + x]! - luma[(y - 1) * w + x]!;
+    return Math.hypot(gx, gy);
   };
 
   const bandH = Math.round(h * SAFE_ZONE.typeBand);
   const bandPad = Math.max(1, Math.round(w * 0.04));
+  const fieldR: number[] = [];
+  const fieldG: number[] = [];
+  const fieldB: number[] = [];
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      const [r, g, b] = at(x, y);
+      fieldR.push(r);
+      fieldG.push(g);
+      fieldB.push(b);
+    }
+  }
+  const fr = channelMedian(fieldR);
+  const fg = channelMedian(fieldG);
+  const fb = channelMedian(fieldB);
+  const isSubject = (x: number, y: number): boolean => {
+    const [r, g, b] = at(x, y);
+    return colorDist(r, g, b, fr, fg, fb) > SAFE_ZONE.fieldDelta;
+  };
+
   let bandBusy = 0;
   let bandN = 0;
   for (let y = 0; y < bandH; y++) {
     for (let x = bandPad; x < w - bandPad; x++) {
       bandN++;
-      if (isProduct(x, y)) bandBusy++;
+      if (isSubject(x, y)) bandBusy++;
     }
   }
   if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
@@ -410,13 +462,32 @@ export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
   const y1 = Math.round(h * SAFE_ZONE.wellY1);
   let wellProduct = 0;
   let wellN = 0;
+  let intN = 0;
+  let intSum = 0;
+  let intSum2 = 0;
+  let intGrad = 0;
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       wellN++;
-      if (isProduct(x, y)) wellProduct++;
+      if (!isSubject(x, y)) continue;
+      wellProduct++;
+      const interior =
+        isSubject(x - 1, y) &&
+        isSubject(x + 1, y) &&
+        isSubject(x, y - 1) &&
+        isSubject(x, y + 1);
+      if (!interior) continue;
+      const L = luma[y * w + x]!;
+      intN++;
+      intSum += L;
+      intSum2 += L * L;
+      intGrad += gradAt(x, y);
     }
   }
   const wellOcc = wellProduct / Math.max(wellN, 1);
+  const intMean = intSum / Math.max(intN, 1);
+  const intStdev = Math.sqrt(Math.max(0, intSum2 / Math.max(intN, 1) - intMean * intMean));
+  const intMeanGrad = intGrad / Math.max(intN, 1);
 
   let gutterProduct = 0;
   let gutterN = 0;
@@ -425,7 +496,7 @@ export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
   const yBottom = Math.round(h * 0.9);
   for (let y = y0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const hit = isProduct(x, y);
+      const hit = isSubject(x, y);
       if (y >= yBottom) {
         bottomN++;
         if (hit) bottomProduct++;
@@ -439,7 +510,16 @@ export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
   const gutterRatio = gutterProduct / Math.max(gutterN, 1);
   const bottomRatio = bottomProduct / Math.max(bottomN, 1);
 
-  if (wellOcc >= SAFE_ZONE.minWellOccupancy) return;
+  if (wellOcc >= SAFE_ZONE.minWellOccupancy) {
+    if (
+      intN > 20 &&
+      intStdev < SAFE_ZONE.flatInteriorStdev &&
+      intMeanGrad < SAFE_ZONE.flatInteriorGrad
+    ) {
+      throw new CraftReject("empty_frame");
+    }
+    return;
+  }
 
   if (gutterRatio > 0.04 || bottomRatio > 0.08) {
     throw new CraftReject("product_off_safe_zone");

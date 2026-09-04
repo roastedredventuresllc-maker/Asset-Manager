@@ -6,11 +6,16 @@ export type MutePlateKind =
   | "lettermark"
   | "type_band"
   | "off_safe"
-  | "wet_sheen";
+  | "wet_sheen"
+  | "flat_well"
+  | "pale_linen";
+
+type Ground = "dark" | "linen";
 
 /**
- * Constructed mute plates for Craft locks and DEV family fixtures.
- * Not Imagine. Not Gemini. Inter is composited later.
+ * Constructed mute plates for Craft locks.
+ * Legal plates carry a bottle silhouette with interior material — never a
+ * flat beige rectangle. Not Imagine. Not Gemini. Inter is composited later.
  */
 export async function renderMutePlate(opts: {
   width?: number;
@@ -24,87 +29,162 @@ export async function renderMutePlate(opts: {
   const kind = opts.kind ?? "legal";
   const raw = Buffer.alloc(width * height * 3);
 
-  const paintBg = (x: number, y: number, i: number) => {
-    const v = (x ^ y ^ (seed * 13)) % 24;
-    raw[i] = 16 + v;
-    raw[i + 1] = 14 + (v >> 1);
-    raw[i + 2] = 12;
+  const ground: Ground = kind === "pale_linen" ? "linen" : "dark";
+
+  const paintGround = (x: number, y: number, i: number) => {
+    if (ground === "linen") {
+      const n = ((x * 3 + y * 5 + seed) % 11) - 5;
+      raw[i] = 214 + n;
+      raw[i + 1] = 202 + n;
+      raw[i + 2] = 184 + (n >> 1);
+      return;
+    }
+    const n = (x * 3 + y + seed) % 7;
+    raw[i] = 22 + n;
+    raw[i + 1] = 20 + (n >> 1);
+    raw[i + 2] = 18;
   };
 
-  const paintProduct = (i: number, x: number, y: number) => {
-    const t = (x * 7 + y * 5 + seed * 11) % 14;
-    raw[i] = 158 + t;
-    raw[i + 1] = 142 + (t % 8);
-    raw[i + 2] = 124 + (t % 6);
-  };
-
-  const inRect = (
+  const paintBottle = (
     x: number,
     y: number,
-    x0: number,
-    x1: number,
-    y0: number,
-    y1: number,
-  ) => x >= x0 && x < x1 && y >= y0 && y < y1;
+    i: number,
+    cx: number,
+    bodyTop: number,
+    bodyBot: number,
+    bodyRx: number,
+  ) => {
+    const ny = (y - bodyTop) / Math.max(bodyBot - bodyTop, 1);
+    const nx = (x - cx) / Math.max(bodyRx, 1);
+    const form = ny * 24;
+    const lobe = Math.sin(ny * Math.PI * 3 + seed) * 18;
+    const highlight = nx < -0.15 && nx > -0.55 ? 16 : 0;
+    const t = (Math.floor(y / 6) * 9 + Math.floor(x / 5) + seed * 11) % 12;
+    raw[i] = Math.max(38, Math.min(145, 78 + t + lobe + highlight - form));
+    raw[i + 1] = Math.max(34, Math.min(130, 66 + (t % 8) + lobe * 0.4 - form * 0.7));
+    raw[i + 2] = Math.max(30, Math.min(115, 54 + (t % 6) - form * 0.5));
+  };
 
-  let product:
+  const inBottle = (
+    x: number,
+    y: number,
+    cx: number,
+    bodyTop: number,
+    bodyBot: number,
+    bodyRx: number,
+  ): boolean => {
+    const midY = (bodyTop + bodyBot) / 2;
+    const bodyRy = (bodyBot - bodyTop) / 2;
+    const nx = (x - cx) / Math.max(bodyRx, 1);
+    const ny = (y - midY) / Math.max(bodyRy, 1);
+    if (nx * nx + ny * ny <= 1) return true;
+    const neckTop = bodyTop - height * 0.07;
+    const neckW = width * 0.05;
+    if (y >= neckTop && y < bodyTop && Math.abs(x - cx) < neckW) return true;
+    const capTop = neckTop - height * 0.025;
+    if (y >= capTop && y < neckTop && Math.abs(x - cx) < neckW * 1.2) return true;
+    return false;
+  };
+
+  const inCircle = (x: number, y: number, cx: number, cy: number, r: number) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    return dx * dx + dy * dy <= r * r;
+  };
+
+  let bottle:
+    | { cx: number; bodyTop: number; bodyBot: number; bodyRx: number }
+    | undefined;
+  let mark: { cx: number; cy: number; r: number } | undefined;
+  let flatRect:
     | { x0: number; x1: number; y0: number; y1: number }
     | undefined;
   let wet = false;
 
-  if (kind === "legal") {
-    product = {
-      x0: Math.round(width * (0.3 + seed * 0.01)),
-      x1: Math.round(width * (0.7 - seed * 0.01)),
-      y0: Math.round(height * (0.5 + seed * 0.02)),
-      y1: Math.round(height * 0.86),
+  if (kind === "legal" || kind === "pale_linen") {
+    bottle = {
+      cx: width * (0.5 + seed * 0.01),
+      bodyTop: height * (0.52 + seed * 0.01),
+      bodyBot: height * 0.84,
+      bodyRx: width * 0.17,
     };
   } else if (kind === "lettermark") {
-    product = {
-      x0: Math.round(width * 0.445),
-      x1: Math.round(width * 0.555),
-      y0: Math.round(height * 0.6),
-      y1: Math.round(height * 0.71),
+    mark = {
+      cx: width * 0.5,
+      cy: height * 0.66,
+      r: width * 0.07,
     };
   } else if (kind === "type_band") {
-    product = {
-      x0: Math.round(width * 0.3),
-      x1: Math.round(width * 0.7),
-      y0: Math.round(height * 0.04),
-      y1: Math.round(height * 0.28),
+    bottle = {
+      cx: width * 0.5,
+      bodyTop: height * 0.06,
+      bodyBot: height * 0.28,
+      bodyRx: width * 0.16,
     };
   } else if (kind === "off_safe") {
-    product = {
-      x0: 0,
-      x1: Math.round(width * 0.1),
-      y0: Math.round(height * 0.45),
-      y1: Math.round(height * 0.85),
+    bottle = {
+      cx: width * 0.06,
+      bodyTop: height * 0.5,
+      bodyBot: height * 0.84,
+      bodyRx: width * 0.08,
     };
   } else if (kind === "wet_sheen") {
     wet = true;
-    product = {
-      x0: Math.round(width * 0.22),
-      x1: Math.round(width * 0.78),
-      y0: Math.round(height * 0.42),
-      y1: Math.round(height * 0.88),
+    bottle = {
+      cx: width * 0.5,
+      bodyTop: height * 0.46,
+      bodyBot: height * 0.86,
+      bodyRx: width * 0.28,
+    };
+  } else if (kind === "flat_well") {
+    flatRect = {
+      x0: Math.round(width * 0.28),
+      x1: Math.round(width * 0.72),
+      y0: Math.round(height * 0.48),
+      y1: Math.round(height * 0.86),
     };
   }
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 3;
-      paintBg(x, y, i);
+      paintGround(x, y, i);
       if (
-        product &&
-        inRect(x, y, product.x0, product.x1, product.y0, product.y1)
+        bottle &&
+        inBottle(x, y, bottle.cx, bottle.bodyTop, bottle.bodyBot, bottle.bodyRx)
       ) {
         if (wet) {
           raw[i] = 255;
           raw[i + 1] = 255;
           raw[i + 2] = 255;
         } else {
-          paintProduct(i, x, y);
+          paintBottle(
+            x,
+            y,
+            i,
+            bottle.cx,
+            bottle.bodyTop,
+            bottle.bodyBot,
+            bottle.bodyRx,
+          );
         }
+      } else if (mark && inCircle(x, y, mark.cx, mark.cy, mark.r)) {
+        const ring = !inCircle(x, y, mark.cx, mark.cy, mark.r * 0.45);
+        if (ring) {
+          raw[i] = 170;
+          raw[i + 1] = 160;
+          raw[i + 2] = 148;
+        }
+      } else if (
+        flatRect &&
+        x >= flatRect.x0 &&
+        x < flatRect.x1 &&
+        y >= flatRect.y0 &&
+        y < flatRect.y1
+      ) {
+        raw[i] = 196;
+        raw[i + 1] = 178;
+        raw[i + 2] = 150;
       }
     }
   }

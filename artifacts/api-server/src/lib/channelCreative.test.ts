@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
@@ -90,12 +90,10 @@ test("all three generated plates are uploadable Meta/TikTok/Google PNGs", async 
   }
 });
 
-test("DEV family preview plates are the same uploadable PNGs, not table mockups", async () => {
-  const names = ["hero", "context", "close"] as const;
-  for (const idx of [0, 1, 2] as const) {
-    const file = join(here, "../../../launchpad/public/family-preview", `${names[idx]}.png`);
-    const buffer = readFileSync(file);
-    await assertChannelReadyPng(buffer, slotForIndex(idx), names[idx]);
+test("committed family-preview plates are not shipped — empty beige fixtures are a Craft kill", () => {
+  const dir = join(here, "../../../launchpad/public/family-preview");
+  for (const name of ["hero", "context", "close"] as const) {
+    assert.equal(existsSync(join(dir, `${name}.png`)), false);
   }
 });
 

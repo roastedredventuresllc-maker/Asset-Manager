@@ -205,6 +205,8 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
   const lettermark = await renderMutePlate({ kind: "lettermark" });
   const offSafe = await renderMutePlate({ kind: "off_safe" });
   const wet = await renderMutePlate({ kind: "wet_sheen" });
+  const flatWell = await renderMutePlate({ kind: "flat_well" });
+  const paleLinen = await renderMutePlate({ kind: "pale_linen" });
   await assert.rejects(
     () => rejectIfUnsafeSafeZone(typeBand),
     (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
@@ -226,7 +228,33 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
     (err: unknown) => err instanceof CraftReject && /wet_plastic_sheen/.test((err as Error).message),
   );
   await assert.rejects(
+    () => rejectIfUnsafeSafeZone(flatWell),
+    (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
+  await assert.rejects(
     () => assertCraftPlate(empty),
     (err: unknown) => err instanceof CraftReject,
+  );
+  await assert.rejects(
+    () => assertCraftPlate(flatWell),
+    (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
+  await assertCraftPlate(paleLinen);
+});
+
+test("lastError names the Craft reject, not only a generic both-missed string", async () => {
+  const flat = await renderMutePlate({ kind: "flat_well" });
+  await assert.rejects(
+    () =>
+      generateImageBuffer(job, {
+        generateWithImagine: async () => flat,
+        generateWithGptImage2: async () => flat,
+      }),
+    (err: unknown) =>
+      err instanceof ImageGenerationFailed &&
+      /empty_frame/.test((err as Error).message) &&
+      /Imagine:/.test((err as Error).message) &&
+      /gpt-image-2:/.test((err as Error).message) &&
+      !/both missed or were Craft-rejected/.test((err as Error).message),
   );
 });

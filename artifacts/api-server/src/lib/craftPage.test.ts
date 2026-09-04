@@ -11,10 +11,6 @@ const board = readFileSync(
   "utf8",
 );
 const app = readFileSync(resolve(here, "../../../launchpad/src/App.tsx"), "utf8");
-const familyPreview = readFileSync(
-  resolve(here, "../../../launchpad/src/pages/family-preview.tsx"),
-  "utf8",
-);
 
 test("briefing is an art director table, not a variant gallery", () => {
   assert.doesNotMatch(home, /Variant\s*[ABC]/i);
@@ -122,13 +118,9 @@ test("three ready prints are one family, not an identical card gallery", () => {
   assert.doesNotMatch(briefing, /InSituAd/);
   assert.doesNotMatch(briefing, /<iframe/);
 
-  assert.match(app, /import\.meta\.env\.DEV \? <Route path="\/__family"/);
-  assert.match(familyPreview, /CampaignFamily/);
-  assert.doesNotMatch(familyPreview, /Variant\s*[ABC]/i);
-  assert.match(familyPreview, /family-preview\/hero\.png/);
-  assert.match(familyPreview, /family-preview\/context\.png/);
-  assert.match(familyPreview, /family-preview\/close\.png/);
-  assert.doesNotMatch(familyPreview, /unsplash/);
+  assert.doesNotMatch(app, /__family/);
+  assert.doesNotMatch(app, /FamilyPreview/);
+  assert.doesNotMatch(app, /family-preview/);
 });
 
 test("failed photography is not shipped as a gradient ad", () => {

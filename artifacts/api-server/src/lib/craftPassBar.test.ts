@@ -202,5 +202,11 @@ test("kill list never ships: baked type, wrong crop, wet sheen, empty or letterm
     () => rejectIfUnsafeSafeZone(lettermark),
     (err: unknown) => err instanceof CraftReject && /lettermark/.test((err as Error).message),
   );
+  const flatWell = await renderMutePlate({ kind: "flat_well" });
   await assertCraftPlate(await renderLegalMutePlate({ width: 160, height: 200 }));
+  await assertCraftPlate(await renderMutePlate({ kind: "pale_linen", width: 160, height: 200 }));
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(flatWell),
+    (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
 });

@@ -133,17 +133,28 @@ export const defaultImageGenerators: ImageGenerators = {
   generateWithGptImage2: defaultGptImage2,
 };
 
+type PlateAttempt = {
+  raw: Buffer | null;
+  reject?: string;
+};
+
 async function acceptOrNull(
   raw: Buffer | null,
   label: string,
-): Promise<Buffer | null> {
-  if (!raw) return null;
+): Promise<PlateAttempt> {
+  if (!raw) return { raw: null };
   try {
     await assertCraftPlate(raw);
-    return raw;
+    return { raw };
   } catch (err) {
-    logger.warn({ err, label }, "Craft lock rejected plate");
-    return null;
+    const reject =
+      err instanceof CraftReject
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    logger.warn({ err, label, reject }, "Craft lock rejected plate");
+    return { raw: null, reject };
   }
 }
 
@@ -169,23 +180,26 @@ export async function generateImageBuffer(
     hasProductPhoto,
   });
 
-  let raw = await acceptOrNull(
+  const imagine = await acceptOrNull(
     await generators.generateWithImagine(prompt, slot, founderPng),
     GROK_IMAGINE_MODEL,
   );
+  let raw = imagine.raw;
   let model = raw
     ? hasProductPhoto
       ? `${GROK_IMAGINE_MODEL}-edit`
       : GROK_IMAGINE_MODEL
     : "";
 
+  let gpt: PlateAttempt = { raw: null };
   if (!raw) {
     // NEW plate. Founder product photo is allowed as reference.
     // The rejected Imagine buffer is not passed — not a rescue/inpaint.
-    raw = await acceptOrNull(
+    gpt = await acceptOrNull(
       await generators.generateWithGptImage2(prompt, slot, founderPng),
       GPT_IMAGE_FALLBACK_MODEL,
     );
+    raw = gpt.raw;
     if (raw) {
       model = hasProductPhoto
         ? `${GPT_IMAGE_FALLBACK_MODEL}-edit`
@@ -194,8 +208,10 @@ export async function generateImageBuffer(
   }
 
   if (!raw) {
+    const imagineWhy = imagine.reject ?? "missed";
+    const gptWhy = gpt.reject ?? "missed";
     throw new ImageGenerationFailed(
-      "Generation failed. Grok Imagine and gpt-image-2 both missed or were Craft-rejected. A branded gradient is not an ad.",
+      `Generation failed. Imagine: ${imagineWhy}. gpt-image-2: ${gptWhy}. A branded gradient is not an ad.`,
     );
   }
 
