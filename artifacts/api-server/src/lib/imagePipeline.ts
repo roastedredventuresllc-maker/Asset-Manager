@@ -195,14 +195,23 @@ export async function generateImageBuffer(
     skuLock: job.skuLock,
   });
 
-  const imagine = await acceptOrNull(
+  let imagineUsedRef = false;
+  let imagine = await acceptOrNull(
     await generators.generateWithImagine(prompt, slot, founderPng),
     GROK_IMAGINE_MODEL,
     slot,
   );
+  if (imagine.raw && founderPng) imagineUsedRef = true;
+  if (!imagine.raw && founderPng) {
+    imagine = await acceptOrNull(
+      await generators.generateWithImagine(prompt, slot, undefined),
+      GROK_IMAGINE_MODEL,
+      slot,
+    );
+  }
   let raw = imagine.raw;
   let model = raw
-    ? hasProductPhoto
+    ? imagineUsedRef
       ? `${GROK_IMAGINE_MODEL}-edit`
       : GROK_IMAGINE_MODEL
     : "";
@@ -216,6 +225,13 @@ export async function generateImageBuffer(
       GPT_IMAGE_FALLBACK_MODEL,
       slot,
     );
+    if (!gpt.raw && founderPng) {
+      gpt = await acceptOrNull(
+        await generators.generateWithGptImage2(prompt, slot, undefined),
+        GPT_IMAGE_FALLBACK_MODEL,
+        slot,
+      );
+    }
     raw = gpt.raw;
     if (raw) {
       model = hasProductPhoto
