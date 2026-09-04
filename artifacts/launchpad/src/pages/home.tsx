@@ -19,7 +19,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { CampaignBoard, beatForIndex } from "@/components/campaign-board";
 
 const POST_CHECKOUT_KEY = "launchpad_post_checkout";
-const GENERATE_TIMEOUT_MS = 55_000;
+/** Hang safety only. Production copy-first generate returns 201 in ~100–160s; 55s was a false fail. */
+const GENERATE_TIMEOUT_MS = 270_000;
 
 /** Sequential desks an agency runs before it presents. Hold the last step until copy is ready. */
 const AGENCY_STEPS = [
@@ -198,6 +199,8 @@ function InputState({ setCampaignId }: { setCampaignId: (id: string) => void }) 
     let productImageUrl: string | null = null;
     let productImageNoBgUrl: string | null = null;
 
+    // Wait on mutateAsync. This timer is not a generate SLA — it only
+    // unsticks WorkingState if the request never settles (4.5 min hang).
     const timeout = window.setTimeout(() => {
       if (genRef.current !== gen) return;
       setError("It took too long. Nothing presented. Try again.");

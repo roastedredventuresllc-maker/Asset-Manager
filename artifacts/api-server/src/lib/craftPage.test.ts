@@ -33,6 +33,13 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.match(home, /The page/);
   assert.doesNotMatch(home, /Writing…|Writing the campaign/);
   assert.match(home, /GENERATE_TIMEOUT_MS/);
+  const timeoutLiteral = home.match(/GENERATE_TIMEOUT_MS\s*=\s*([\d_]+)/);
+  assert.ok(timeoutLiteral, "GENERATE_TIMEOUT_MS must be a numeric literal");
+  const timeoutMs = Number(timeoutLiteral[1].replaceAll("_", ""));
+  assert.ok(
+    timeoutMs >= 240_000,
+    `client generate timeout ${timeoutMs}ms must not fire before a normal 100–160s copy-first 201`,
+  );
 });
 
 test("failed photography is not shipped as a gradient ad", () => {
