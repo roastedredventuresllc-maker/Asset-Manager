@@ -153,7 +153,7 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(pipeline, /fillBleedContextPlate/);
   assert.match(pipeline, /0\.mute\.png/);
   assert.match(pipeline, /assertCraftPlate\(plate, slot\)/);
-  assert.match(craft, /wellSkuInTypeBand/);
+  assert.match(craft, /wellSkuStats/);
   assert.match(craft, /slot\?\.role === "context"/);
   const skuLocks = service.match(/skuLock:/g);
   assert.ok(skuLocks && skuLocks.length >= 3, "generate, render-stills, and revise must pass skuLock");

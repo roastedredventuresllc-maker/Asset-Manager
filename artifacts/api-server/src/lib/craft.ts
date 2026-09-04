@@ -432,7 +432,7 @@ function channelMedian(values: number[]): number {
  * Fraction of the type band occupied by the central well SKU (flood-fill).
  * A cabinet or window that never touches the product is not a lifted SKU.
  */
-function wellSkuInTypeBand(
+function wellSkuStats(
   w: number,
   h: number,
   bandH: number,
@@ -440,7 +440,7 @@ function wellSkuInTypeBand(
   wellY0: number,
   wellY1: number,
   isSubject: (x: number, y: number) => boolean,
-): number {
+): { lifted: number; skuTop: number } {
   const cx0 = Math.round(w * 0.28);
   const cx1 = Math.round(w * 0.72);
   const seen = new Uint8Array(w * h);
@@ -481,7 +481,14 @@ function wellSkuInTypeBand(
       if (seen[y * w + x]) lifted++;
     }
   }
-  return lifted / Math.max(bandN, 1);
+  let skuTop = h;
+  for (let i = 0; i < qy.length; i++) {
+    if (qy[i]! < skuTop) skuTop = qy[i]!;
+  }
+  return {
+    lifted: lifted / Math.max(bandN, 1),
+    skuTop: qx.length ? skuTop / h : 1,
+  };
 }
 
 export async function rejectIfUnsafeSafeZone(
@@ -549,7 +556,7 @@ export async function rejectIfUnsafeSafeZone(
   const y0 = Math.round(h * SAFE_ZONE.wellY0);
   const y1 = Math.round(h * SAFE_ZONE.wellY1);
   if (slot?.role === "context") {
-    const lifted = wellSkuInTypeBand(w, h, bandH, bandPad, y0, y1, isSubject);
+    const lifted = wellSkuStats(w, h, bandH, bandPad, y0, y1, isSubject).lifted;
     if (lifted > SAFE_ZONE.maxTypeBandBusy) {
       throw new CraftReject("product_in_type_band");
     }
@@ -750,6 +757,7 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
 async function contextPlateStats(buffer: Buffer): Promise<{
   typeBandBusy: number;
   liftedSku: number;
+  skuTop: number;
   wellOcc: number;
 }> {
   const sharp = await loadSharp();
@@ -805,9 +813,11 @@ async function contextPlateStats(buffer: Buffer): Promise<{
       if (isSubject(x, y)) wellProduct++;
     }
   }
+  const sku = wellSkuStats(w, h, bandH, bandPad, y0, y1, isSubject);
   return {
     typeBandBusy: bandBusy / Math.max(bandN, 1),
-    liftedSku: wellSkuInTypeBand(w, h, bandH, bandPad, y0, y1, isSubject),
+    liftedSku: sku.lifted,
+    skuTop: sku.skuTop,
     wellOcc: wellProduct / Math.max(wellN, 1),
   };
 }
@@ -825,7 +835,8 @@ async function settleContextTypeBand(
   const start = await contextPlateStats(buffer);
   if (start.liftedSku <= SAFE_ZONE.maxTypeBandBusy) return buffer;
   const sharp = await loadSharp();
-  for (const scale of [1.18, 1.36, 1.58, 1.82]) {
+  const aimed = Math.min(2.15, Math.max(1.08, 0.34 / Math.max(start.skuTop, 0.08)));
+  for (const scale of [aimed, aimed * 1.12, 1.18, 1.36, 1.58, 1.82]) {
     const scaledW = Math.round(width * scale);
     const scaledH = Math.round(height * scale);
     const candidate = await sharp(buffer)

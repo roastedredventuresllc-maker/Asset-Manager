@@ -183,7 +183,7 @@ test("fillBleedContextPlate crops a cream side panel to a 9:16 photograph", asyn
   await rejectIfSplitPanel(filled);
 });
 
-test("a lifted SKU is product_in_type_band on In-use; compositor still emits 9:16", async () => {
+test("fillBleedContextPlate settles a lifted SKU below the In-use type band", async () => {
   const lifted = await renderMutePlate({ kind: "lifted", width: 160, height: 280 });
   await assert.rejects(
     () => rejectIfUnsafeSafeZone(lifted),
@@ -198,6 +198,7 @@ test("a lifted SKU is product_in_type_band on In-use; compositor still emits 9:1
   const meta = await sharp(settled).metadata();
   assert.equal(meta.width, 1080);
   assert.equal(meta.height, 1920);
+  await rejectIfUnsafeSafeZone(settled, slotForIndex(1));
 });
 
 test("full-bleed kitchen window is not a product_in_type_band on In-use", async () => {
