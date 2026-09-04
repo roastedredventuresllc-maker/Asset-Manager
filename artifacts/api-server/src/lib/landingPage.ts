@@ -1,6 +1,8 @@
 /**
  * Server-rendered /p/:slug. A product page only when a photograph exists
  * (generated still or founder upload). No lettermark kit. No fake stars.
+ * Canvas matches the Craft bar dark room (#161310), not Replit cream #F9F7F4.
+ * Hero stills fill the card (cover) — no halo / contain inset that reads as blur.
  */
 
 export type LandingCampaign = {
@@ -119,7 +121,7 @@ export function buildLandingHtml(opts: {
       </section>`
     : "";
 
-  const heroVisual = `<div class="hero-visual reveal"><div class="halo"></div><img src="${escHtml(productImg)}" alt="${escAttr(brandName)}"/></div>`;
+  const heroVisual = `<div class="hero-visual reveal"><img src="${escHtml(productImg)}" alt="${escAttr(brandName)}"/></div>`;
 
   const demoBand = `<section class="demo reveal">
         <div class="demo-frame"><img src="${escHtml(productImg)}" alt="${escAttr(brandName)}"/></div>
@@ -168,7 +170,7 @@ export function buildLandingHtml(opts: {
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    :root{--ink:#111111;--canvas:#F9F7F4;--card:#ffffff;--accent:${accent};--line:rgba(17,17,17,0.08)}
+    :root{--ink:#ede6dc;--canvas:#161310;--card:#1c1915;--accent:${accent};--line:rgba(237,230,220,0.12)}
     html{scroll-behavior:smooth}
     body{background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
     .serif{font-family:'Instrument Serif',serif;font-weight:400}
@@ -177,7 +179,7 @@ export function buildLandingHtml(opts: {
     a{color:inherit}
     .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
     nav{position:fixed;top:0;left:0;right:0;z-index:50;transition:background .3s ease,border-color .3s ease,backdrop-filter .3s ease;border-bottom:1px solid transparent}
-    nav.scrolled{background:rgba(249,247,244,0.82);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line)}
+    nav.scrolled{background:rgba(22,19,16,0.82);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line)}
     .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
     .brand{font-size:15px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
     .btn{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:var(--canvas);padding:13px 26px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;letter-spacing:.3px;transition:transform .2s ease,opacity .2s ease;white-space:nowrap}
@@ -193,17 +195,16 @@ export function buildLandingHtml(opts: {
     .hero-actions{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
     .proof{display:flex;align-items:center;gap:12px;margin-top:34px;font-size:14px;opacity:.62}
     .proof-text{max-width:34ch}
-    .hero-visual{position:relative;aspect-ratio:1/1;border-radius:24px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 30px 60px -28px rgba(17,17,17,.28)}
-    .hero-visual img{width:78%;height:78%;object-fit:contain;position:relative;z-index:1}
-    .hero-visual .halo{position:absolute;inset:0;background:radial-gradient(60% 60% at 50% 42%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 70%)}
+    .hero-visual{position:relative;aspect-ratio:4/5;border-radius:2px;background:var(--card);border:1px solid var(--line);overflow:hidden}
+    .hero-visual img{display:block;width:100%;height:100%;object-fit:cover}
     .features{padding:60px 0 40px}
     .feature-list{margin-top:40px;border-top:1px solid var(--line)}
     .feature-row{display:grid;grid-template-columns:64px 1fr;gap:24px;align-items:baseline;padding:32px 0;border-bottom:1px solid var(--line)}
     .feature-num{font-size:13px;font-weight:600;letter-spacing:1px;opacity:.32;font-variant-numeric:tabular-nums}
     .feature-text{font-family:'Instrument Serif',serif;font-size:clamp(24px,3.2vw,34px);line-height:1.28}
     .demo{margin:70px 0;display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center;background:color-mix(in srgb,var(--accent) 7%,var(--canvas));border:1px solid var(--line);border-radius:28px;padding:48px}
-    .demo-frame{border-radius:18px;overflow:hidden;background:var(--card);border:1px solid var(--line);aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;box-shadow:0 24px 48px -30px rgba(17,17,17,.35)}
-    .demo-frame img{width:84%;height:84%;object-fit:contain}
+    .demo-frame{border-radius:2px;overflow:hidden;background:var(--card);border:1px solid var(--line);aspect-ratio:4/5}
+    .demo-frame img{display:block;width:100%;height:100%;object-fit:cover}
     .demo-line{font-family:'Instrument Serif',serif;font-size:clamp(26px,3.4vw,40px);line-height:1.2;margin-top:18px}
     .faq{padding:50px 0 20px}
     .faq-list{margin-top:36px;border-top:1px solid var(--line)}
@@ -219,7 +220,7 @@ export function buildLandingHtml(opts: {
     footer{padding:48px 0 64px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
     footer .brand{opacity:.85}
     footer .fine{font-size:12px;opacity:.4}
-    .mcta{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:rgba(249,247,244,.9);backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(120%);transition:transform .35s ease;display:none}
+    .mcta{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:rgba(22,19,16,.9);backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(120%);transition:transform .35s ease;display:none}
     .mcta.show{transform:translateY(0)}
     .mcta .btn{width:100%;justify-content:center}
     .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}

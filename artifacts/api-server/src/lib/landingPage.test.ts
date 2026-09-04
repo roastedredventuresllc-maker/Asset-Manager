@@ -47,6 +47,13 @@ test("landing with a still is a product page with the photograph, no fake stars"
   assert.doesNotMatch(html, /★★★★★/);
   assert.doesNotMatch(html, /hv-mark/);
   assert.match(html, /Get the bottle/);
+  assert.doesNotMatch(html, /F9F7F4/);
+  assert.doesNotMatch(html, /249,\s*247,\s*244/);
+  assert.doesNotMatch(html, /class="halo"|hero-visual \.halo/);
+  assert.match(html, /--canvas:#161310/);
+  assert.match(html, /object-fit:cover/);
+  assert.doesNotMatch(html, /object-fit:contain/);
+  assert.doesNotMatch(html, /width:78%/);
 });
 
 test("pickLandingPhoto prefers a done still over the founder upload", () => {
