@@ -8,6 +8,7 @@ import Campaigns from "@/pages/campaigns";
 import Docs from "@/pages/docs";
 import LandingPlaceholder from "@/pages/landing-placeholder";
 import Admin from "@/pages/admin";
+import FamilyPreview from "@/pages/family-preview";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/docs" component={Docs} />
       <Route path="/p/:slug" component={LandingPlaceholder} />
       <Route path="/admin" component={Admin} />
+      {import.meta.env.DEV ? <Route path="/__family" component={FamilyPreview} /> : null}
       <Route component={NotFound} />
     </Switch>
   );
