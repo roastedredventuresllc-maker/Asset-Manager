@@ -57,7 +57,7 @@ export const AD_SLOTS: readonly AdSlot[] = [
     format: "1080x1350",
     label: "Ad 3 — tight crop (Meta / Instagram / Google Display, 4:5)",
     direction:
-      "Tight crop of the SAME SKU as the hero still — same silhouette, same parts, same material. Move closer so spout, rim, and any handle stay in the crop (a handle bite is required if the hero has a handle). Same light family and color temperature as Ad 1. Product 40–60% of frame. Empty negative space in the TOP 32% for type. Never invent a handle-less pitcher or a different vessel. Not a different board — a closer beat of the same object.",
+      "Tight crop of the SAME SKU as the hero still — same silhouette, same parts, same mute clay color. NOT a second hero pack-shot. Crop through the body so the base and table expanse leave the frame; spout, rim, and the handle bite fill the lower 68% (a handle bite is required if the hero has a handle). The whole vessel stays below the top 32% type band — do not lift it into the type. Same light family and color temperature as Ad 1. Never invent a handle-less pitcher, a darker terracotta cousin, or a different vessel.",
   },
 ];
 
@@ -98,7 +98,7 @@ HARD NOS — if you would violate any of these, refuse the image rather than gue
 - Product occupies 40–60% of the frame — not a tiny floating trinket, not a lettermark, not an empty well, not a full-bleed crop that leaves no room for type.
 - Leave designed empty negative space in the TOP of the frame (about the top third) with no product, no busy texture, no faces. That band is for type we add ourselves. Never place the product in that top band.
 - Paid-social safe zone: keep the product inside the frame, out of the top type band and out of the outer 12% gutters. A plate that would crop the product off the 4:5 or 9:16 safe zone is refuse.
-- THREE STILLS, ONE SKU. Do not drop a handle, add a handle, change the spout, or invent a different vessel. Tight crop is a closer photograph of the hero object — spout, rim, and handle bite if the hero has a handle. A handle-less pitcher when the hero has a handle is refuse.
+- THREE STILLS, ONE SKU. Do not drop a handle, add a handle, change the spout, shift the clay color, or invent a different vessel. Tight crop is a closer photograph of the hero object — crop through the body; spout, rim, and handle bite if the hero has a handle. A handle-less pitcher when the hero has a handle is refuse. A second full-body hero pack-shot in the tight-crop slot is refuse.
 `.trim();
 
 const PHOTO_STYLE =
@@ -121,11 +121,11 @@ export function buildCraftPrompt(opts: {
       ? "HERO: single product, centered-low, grounded, iconic. This still defines the SKU for the other two."
       : slot.role === "context"
         ? "CONTEXT: the SAME SKU in a real place, in-use or in-habitat. Same silhouette as the hero. Same campaign, not a new board."
-        : "TIGHT CROP: the SAME SKU as the hero, closer, tactile. Spout, rim, and any handle stay in frame. Never a handle-less pitcher. Same campaign light. Not a new vessel.";
+        : "TIGHT CROP: the SAME SKU as the hero, closer, tactile. Crop through the body — lose the base. Spout, rim, and any handle stay in the lower frame. Same clay color as the hero. Never a handle-less pitcher. Never a second hero pack-shot. Same campaign light.";
 
   const skuClause = skuLock
-    ? `SKU LOCK from the hero still — photograph THIS object, not a cousin: ${skuLock}`
-    : `SKU LOCK: one silhouette across hero, in-use, and close.`;
+    ? `SKU LOCK from the hero still — photograph THIS object, not a cousin, same clay color: ${skuLock}`
+    : `SKU LOCK: one silhouette and one clay color across hero, in-use, and close.`;
 
   return [
     `Campaign for ${brandName}. Three ads, ONE campaign — same light family, same color temperature, same product, same SKU.`,

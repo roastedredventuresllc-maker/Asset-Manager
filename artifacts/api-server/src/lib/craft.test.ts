@@ -84,7 +84,9 @@ test("tight crop direction forces the same handled SKU, never a handle-less pitc
   assert.match(close.direction, /SAME SKU/i);
   assert.match(close.direction, /handle bite/i);
   assert.match(close.direction, /Never invent a handle-less pitcher/i);
-  assert.match(close.direction, /spout, rim, and any handle/i);
+  assert.match(close.direction, /NOT a second hero pack-shot/i);
+  assert.match(close.direction, /Crop through the body/i);
+  assert.match(close.direction, /same mute clay color/i);
 });
 
 test("buildCraftPrompt injects hero SKU lock into the close still", () => {
@@ -104,8 +106,11 @@ test("buildCraftPrompt injects hero SKU lock into the close still", () => {
   assert.match(prompt, /D-shaped handle/);
   assert.match(prompt, /SAME SKU as the hero/i);
   assert.match(prompt, /Never a handle-less pitcher/i);
+  assert.match(prompt, /Never a second hero pack-shot/i);
+  assert.match(prompt, /same clay color as the hero/i);
   assert.match(prompt, /THREE STILLS, ONE SKU/);
   assert.match(prompt, /handle-less pitcher when the hero has a handle is refuse/i);
+  assert.match(prompt, /second full-body hero pack-shot in the tight-crop slot is refuse/i);
 });
 
 test("SVG markup is kill-on-sight", () => {

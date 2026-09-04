@@ -267,6 +267,8 @@ test("close still prompt carries the hero SKU lock", async () => {
   assert.match(seen, /D-shaped handle/);
   assert.match(seen, /Never a handle-less pitcher/i);
   assert.match(seen, /SAME SKU as the hero/i);
+  assert.match(seen, /Never a second hero pack-shot/i);
+  assert.match(seen, /same clay color/i);
 });
 
 test("lastError names the Craft reject, not only a generic both-missed string", async () => {
