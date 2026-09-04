@@ -29,6 +29,8 @@ export interface GenerateImageJob {
   brandName: string;
   productImageUrl?: string | null;
   productImageNoBgUrl?: string | null;
+  /** Hero imagePrompt — Close must photograph this SKU, not invent a cousin. */
+  skuLock?: string | null;
 }
 
 export interface ImageGenerators {
@@ -178,6 +180,7 @@ export async function generateImageBuffer(
     slot,
     brandName: job.brandName,
     hasProductPhoto,
+    skuLock: job.skuLock,
   });
 
   const imagine = await acceptOrNull(

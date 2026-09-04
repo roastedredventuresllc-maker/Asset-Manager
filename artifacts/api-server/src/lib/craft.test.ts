@@ -5,6 +5,7 @@ import {
   billboardLine,
   buildCraftPrompt,
   rejectIfNotAPhotograph,
+  skuLockFromAds,
   slotForIndex,
   CraftReject,
   GROK_IMAGINE_MODEL,
@@ -63,6 +64,48 @@ test("craft prompt encodes mute model, their product, and campaign coherence", (
   assert.match(prompt, /window/i);
   assert.match(prompt, /lettermark/i);
   assert.match(prompt, /safe zone/i);
+});
+
+test("skuLockFromAds is the hero imagePrompt — Close inherits that SKU", () => {
+  assert.equal(
+    skuLockFromAds([
+      { imagePrompt: "  handled matte carafe, D-handle, integrated spout  " },
+      { imagePrompt: "in-use on wood" },
+      { imagePrompt: "handle-less pitcher" },
+    ]),
+    "handled matte carafe, D-handle, integrated spout",
+  );
+  assert.equal(skuLockFromAds([]), "");
+  assert.equal(skuLockFromAds([null, { imagePrompt: "cousin" }]), "");
+});
+
+test("tight crop direction forces the same handled SKU, never a handle-less pitcher", () => {
+  const close = slotForIndex(2);
+  assert.match(close.direction, /SAME SKU/i);
+  assert.match(close.direction, /handle bite/i);
+  assert.match(close.direction, /Never invent a handle-less pitcher/i);
+  assert.match(close.direction, /spout, rim, and any handle/i);
+});
+
+test("buildCraftPrompt injects hero SKU lock into the close still", () => {
+  const heroSku =
+    "Hero pack-shot of a handled matte ceramic carafe, D-shaped handle on the right, integrated pouring spout on the left, mute oatmeal clay";
+  const prompt = buildCraftPrompt({
+    ad: {
+      ...ad,
+      imagePrompt: "tight crop of the carafe rim",
+    },
+    slot: slotForIndex(2),
+    brandName: "STILLPOUR",
+    hasProductPhoto: false,
+    skuLock: heroSku,
+  });
+  assert.match(prompt, /SKU LOCK from the hero still/i);
+  assert.match(prompt, /D-shaped handle/);
+  assert.match(prompt, /SAME SKU as the hero/i);
+  assert.match(prompt, /Never a handle-less pitcher/i);
+  assert.match(prompt, /THREE STILLS, ONE SKU/);
+  assert.match(prompt, /handle-less pitcher when the hero has a handle is refuse/i);
 });
 
 test("SVG markup is kill-on-sight", () => {

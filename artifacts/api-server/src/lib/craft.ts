@@ -57,9 +57,16 @@ export const AD_SLOTS: readonly AdSlot[] = [
     format: "1080x1350",
     label: "Ad 3 — tight crop (Meta / Instagram / Google Display, 4:5)",
     direction:
-      "Tight crop of the SAME product, closer, more tactile. Same light family and color temperature as Ad 1. Product 40–60% of frame. Empty negative space in the TOP 32% for type. Not a different board — a closer beat of the same campaign.",
+      "Tight crop of the SAME SKU as the hero still — same silhouette, same parts, same material. Move closer so spout, rim, and any handle stay in the crop (a handle bite is required if the hero has a handle). Same light family and color temperature as Ad 1. Product 40–60% of frame. Empty negative space in the TOP 32% for type. Never invent a handle-less pitcher or a different vessel. Not a different board — a closer beat of the same object.",
   },
 ];
+
+/** Hero imagePrompt is the campaign SKU. Close inherits this anatomy. */
+export function skuLockFromAds(
+  ads: Array<{ imagePrompt?: string } | null | undefined>,
+): string {
+  return ads[0]?.imagePrompt?.trim() ?? "";
+}
 
 export function slotForIndex(idx: number): AdSlot {
   const slot = AD_SLOTS.find((s) => s.idx === idx) ?? AD_SLOTS[0];
@@ -91,6 +98,7 @@ HARD NOS — if you would violate any of these, refuse the image rather than gue
 - Product occupies 40–60% of the frame — not a tiny floating trinket, not a lettermark, not an empty well, not a full-bleed crop that leaves no room for type.
 - Leave designed empty negative space in the TOP of the frame (about the top third) with no product, no busy texture, no faces. That band is for type we add ourselves. Never place the product in that top band.
 - Paid-social safe zone: keep the product inside the frame, out of the top type band and out of the outer 12% gutters. A plate that would crop the product off the 4:5 or 9:16 safe zone is refuse.
+- THREE STILLS, ONE SKU. Do not drop a handle, add a handle, change the spout, or invent a different vessel. Tight crop is a closer photograph of the hero object — spout, rim, and handle bite if the hero has a handle. A handle-less pitcher when the hero has a handle is refuse.
 `.trim();
 
 const PHOTO_STYLE =
@@ -101,25 +109,31 @@ export function buildCraftPrompt(opts: {
   slot: AdSlot;
   brandName: string;
   hasProductPhoto: boolean;
+  skuLock?: string | null;
 }): string {
-  const { ad, slot, brandName, hasProductPhoto } = opts;
+  const { ad, slot, brandName, hasProductPhoto, skuLock } = opts;
   const productClause = hasProductPhoto
     ? `The attached image IS the product. Place THIS exact product in the scene. Do not substitute, restyle, or invent a different one.`
-    : `Photograph a photoreal product that matches the brief. Do not invent extra parts.`;
+    : `Photograph a photoreal product that matches the brief. Do not invent extra parts. Do not invent a different SKU.`;
 
   const shot =
     slot.role === "hero"
-      ? "HERO: single product, centered-low, grounded, iconic."
+      ? "HERO: single product, centered-low, grounded, iconic. This still defines the SKU for the other two."
       : slot.role === "context"
-        ? "CONTEXT: same product in a real place, in-use or in-habitat. Same campaign, not a new board."
-        : "TIGHT CROP: same product, closer, tactile, same campaign light. Not a new board.";
+        ? "CONTEXT: the SAME SKU in a real place, in-use or in-habitat. Same silhouette as the hero. Same campaign, not a new board."
+        : "TIGHT CROP: the SAME SKU as the hero, closer, tactile. Spout, rim, and any handle stay in frame. Never a handle-less pitcher. Same campaign light. Not a new vessel.";
+
+  const skuClause = skuLock
+    ? `SKU LOCK from the hero still — photograph THIS object, not a cousin: ${skuLock}`
+    : `SKU LOCK: one silhouette across hero, in-use, and close.`;
 
   return [
-    `Campaign for ${brandName}. Three ads, ONE campaign — same light family, same color temperature, same product.`,
+    `Campaign for ${brandName}. Three ads, ONE campaign — same light family, same color temperature, same product, same SKU.`,
     shot,
     slot.direction,
     productClause,
-    `Photographer's brief: ${ad.imagePrompt}`,
+    skuClause,
+    `Photographer's brief for this beat: ${ad.imagePrompt}`,
     CRAFT_HARD_NOS,
     PHOTO_STYLE,
   ].join(" ");

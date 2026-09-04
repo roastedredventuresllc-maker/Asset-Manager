@@ -21,6 +21,7 @@ import { publicOrigin } from "./assetUrl.js";
 import { JOB_STATUS } from "./jobStatus.js";
 import { runInBackground } from "./background.js";
 import { processPendingJobs } from "./worker.js";
+import { skuLockFromAds } from "./craft.js";
 
 /**
  * Shared campaign business logic used by both the REST routes
@@ -149,6 +150,7 @@ export async function writeCampaignCopy(
           brandName: campaignData.brandName,
           productImageUrl,
           productImageNoBgUrl: productImageNoBgUrl ?? null,
+          skuLock: skuLockFromAds(campaignData.ads),
         },
         status: JOB_STATUS.pending,
       });
@@ -304,6 +306,9 @@ export async function renderCampaignStills(id: string) {
           brandName: cj.brandName ?? "",
           productImageUrl: campaign.productImageUrl,
           productImageNoBgUrl: null,
+          skuLock: skuLockFromAds(
+            (cj.ads ?? []) as Array<{ imagePrompt?: string }>,
+          ),
         },
         status: JOB_STATUS.pending,
       });
@@ -520,6 +525,7 @@ export async function reviseCampaignById(id: string, request: string) {
           brandName: updated.brandName,
           productImageUrl: campaign.productImageUrl,
           productImageNoBgUrl,
+          skuLock: skuLockFromAds(updated.ads),
         },
         status: JOB_STATUS.pending,
       });

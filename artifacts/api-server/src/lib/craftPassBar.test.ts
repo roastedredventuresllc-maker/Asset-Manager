@@ -141,6 +141,17 @@ test("creatives are paid-social run-ready plates, not table-only prints", async 
   }
 });
 
+test("three stills are one SKU: close inherits the hero imagePrompt", () => {
+  assert.match(craft, /export function skuLockFromAds/);
+  assert.match(craft, /Never invent a handle-less pitcher/);
+  assert.match(craft, /handle bite is required if the hero has a handle/);
+  assert.match(craft, /THREE STILLS, ONE SKU/);
+  assert.match(pipeline, /skuLock: job\.skuLock/);
+  const skuLocks = service.match(/skuLock:/g);
+  assert.ok(skuLocks && skuLocks.length >= 3, "generate, render-stills, and revise must pass skuLock");
+  assert.match(service, /skuLockFromAds/);
+});
+
 test("out of scope stays locked: ADS_MODE mock, no iframe, no mute-plate /p/ hero work", () => {
   assert.equal(vercel.env?.ADS_MODE, "mock");
   assert.doesNotMatch(home, /<iframe/);

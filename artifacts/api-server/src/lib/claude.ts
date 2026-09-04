@@ -103,7 +103,8 @@ Rules:
 - metaPct + tiktokPct + googlePct must equal 100. v1 channels are Meta, TikTok, and Google. Do not allocate to LinkedIn.
 - starter = $25/day (early stage, tight budget), growth = $75/day (scaling), scale = $200/day (established traction)
 - The founder's product description is the only creative input. Write an intelligent campaign FROM that prompt. Do not fill templates, placeholders, or lorem. Do not label ads Variant A/B/C.
-- Use distinct creative angles across the 3 ads — but they are ONE campaign: same product, same light family, same color temperature. Three beats: hero, context, tight crop. Not three random boards. Copy must be runnable as paid social (2–6 word hooks).
+- Use distinct creative angles across the 3 ads — but they are ONE campaign: same product, same light family, same color temperature, ONE SKU. Three beats: hero, context, tight crop. Not three random boards. Copy must be runnable as paid social (2–6 word hooks).
+- Ad index 2 (tight crop) imagePrompt MUST keep the exact product anatomy from ad 0 — same silhouette, same handle/spout/lid if the hero has them. Write a closer crop (spout, rim, handle bite). Do not drop a handle. Do not invent a handle-less pitcher or a different vessel.
 - imagePrompt should be a professional photographer/art director brief — describe the actual scene in detail
 - imagePrompt must describe pure photography only (no text, words, letters, logos, or watermarks — on-brand typography is composited later in designed top negative space)
 - imagePrompt must leave designed empty negative space in the TOP ~32% of the frame; product occupies 40–60% of the remaining frame, grounded with a contact shadow
@@ -124,7 +125,7 @@ Apply ONLY the requested change. Return the complete updated campaign JSON (same
 Also append a boolean field "visualChanged": true/false indicating if any imagePrompt changed (so images need to be regenerated).
 
 Craft law still applies after a revision:
-- Three ads remain ONE campaign: same product, same light family, same color temperature. Beats: hero, context, tight crop — not three random boards.
+- Three ads remain ONE campaign: same product, same SKU, same light family, same color temperature. Beats: hero, context, tight crop — not three random boards. Tight crop keeps the hero silhouette (handle stays if the hero has a handle).
 - Hooks stay 2–6 words. imagePrompt is photography only (no text, letters, logos). Typography is composited later.
 - Ad index 0 is 4:5 hero, 1 is 9:16 context, 2 is 4:5 tight crop. Product 40–60% of frame with empty top negative space.`;
 

@@ -242,6 +242,33 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
   await assertCraftPlate(paleLinen);
 });
 
+test("close still prompt carries the hero SKU lock", async () => {
+  const photo = await legalPlate();
+  let seen = "";
+  const heroSku =
+    "handled matte ceramic carafe with a D-shaped handle and integrated pouring spout";
+  await generateImageBuffer(
+    {
+      ...job,
+      idx: 2,
+      adAssetId: "ast_sku_close",
+      skuLock: heroSku,
+      ad: { ...job.ad, imagePrompt: "tighter crop of the carafe rim" },
+    },
+    {
+      generateWithImagine: async (prompt) => {
+        seen = prompt;
+        return photo;
+      },
+      generateWithGptImage2: async () => null,
+    },
+  );
+  assert.match(seen, /SKU LOCK from the hero still/i);
+  assert.match(seen, /D-shaped handle/);
+  assert.match(seen, /Never a handle-less pitcher/i);
+  assert.match(seen, /SAME SKU as the hero/i);
+});
+
 test("lastError names the Craft reject, not only a generic both-missed string", async () => {
   const flat = await renderMutePlate({ kind: "flat_well" });
   await assert.rejects(
