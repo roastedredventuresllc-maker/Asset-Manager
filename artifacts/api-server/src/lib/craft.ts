@@ -428,27 +428,60 @@ function channelMedian(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)]!;
 }
 
-function subjectConnectsToWell(
-  x0: number,
-  y0: number,
-  wellY: number,
+/**
+ * Fraction of the type band occupied by the central well SKU (flood-fill).
+ * A cabinet or window that never touches the product is not a lifted SKU.
+ */
+function wellSkuInTypeBand(
   w: number,
+  h: number,
+  bandH: number,
+  bandPad: number,
+  wellY0: number,
+  wellY1: number,
   isSubject: (x: number, y: number) => boolean,
-): boolean {
-  let x = x0;
-  for (let y = y0; y <= wellY; y++) {
-    if (isSubject(x, y)) continue;
-    if (x > 0 && isSubject(x - 1, y)) {
-      x -= 1;
-      continue;
+): number {
+  const cx0 = Math.round(w * 0.28);
+  const cx1 = Math.round(w * 0.72);
+  const seen = new Uint8Array(w * h);
+  const qx: number[] = [];
+  const qy: number[] = [];
+  for (let y = wellY0; y < wellY1; y++) {
+    for (let x = cx0; x < cx1; x++) {
+      if (!isSubject(x, y)) continue;
+      const i = y * w + x;
+      if (seen[i]) continue;
+      seen[i] = 1;
+      qx.push(x);
+      qy.push(y);
     }
-    if (x < w - 1 && isSubject(x + 1, y)) {
-      x += 1;
-      continue;
-    }
-    return false;
   }
-  return true;
+  let n = 0;
+  while (n < qx.length) {
+    const x = qx[n]!;
+    const y = qy[n]!;
+    n++;
+    const nbrs = [x + 1, y, x - 1, y, x, y + 1, x, y - 1];
+    for (let k = 0; k < nbrs.length; k += 2) {
+      const nx = nbrs[k]!;
+      const ny = nbrs[k + 1]!;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const i = ny * w + nx;
+      if (seen[i] || !isSubject(nx, ny)) continue;
+      seen[i] = 1;
+      qx.push(nx);
+      qy.push(ny);
+    }
+  }
+  let lifted = 0;
+  let bandN = 0;
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      bandN++;
+      if (seen[y * w + x]) lifted++;
+    }
+  }
+  return lifted / Math.max(bandN, 1);
 }
 
 export async function rejectIfUnsafeSafeZone(
@@ -514,20 +547,15 @@ export async function rejectIfUnsafeSafeZone(
   const x0 = Math.round(w * SAFE_ZONE.insetX);
   const x1 = Math.round(w * (1 - SAFE_ZONE.insetX));
   const y0 = Math.round(h * SAFE_ZONE.wellY0);
+  const y1 = Math.round(h * SAFE_ZONE.wellY1);
   if (slot?.role === "context") {
-    let lifted = 0;
-    for (let y = 0; y < bandH; y++) {
-      for (let x = bandPad; x < w - bandPad; x++) {
-        if (isSubject(x, y) && subjectConnectsToWell(x, y, y0, w, isSubject)) lifted++;
-      }
-    }
-    if (bandN > 0 && lifted / bandN > SAFE_ZONE.maxTypeBandBusy) {
+    const lifted = wellSkuInTypeBand(w, h, bandH, bandPad, y0, y1, isSubject);
+    if (lifted > SAFE_ZONE.maxTypeBandBusy) {
       throw new CraftReject("product_in_type_band");
     }
   } else if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
     throw new CraftReject("product_in_type_band");
   }
-  const y1 = Math.round(h * SAFE_ZONE.wellY1);
   let wellProduct = 0;
   let wellN = 0;
   let intN = 0;
@@ -777,15 +805,9 @@ async function contextPlateStats(buffer: Buffer): Promise<{
       if (isSubject(x, y)) wellProduct++;
     }
   }
-  let lifted = 0;
-  for (let y = 0; y < bandH; y++) {
-    for (let x = bandPad; x < w - bandPad; x++) {
-      if (isSubject(x, y) && subjectConnectsToWell(x, y, y0, w, isSubject)) lifted++;
-    }
-  }
   return {
     typeBandBusy: bandBusy / Math.max(bandN, 1),
-    liftedSku: lifted / Math.max(bandN, 1),
+    liftedSku: wellSkuInTypeBand(w, h, bandH, bandPad, y0, y1, isSubject),
     wellOcc: wellProduct / Math.max(wellN, 1),
   };
 }
