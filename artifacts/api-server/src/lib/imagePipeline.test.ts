@@ -11,10 +11,12 @@ import {
   GPT_IMAGE_FALLBACK_MODEL,
   rejectIfBakedType,
   rejectIfCheapGrade,
+  rejectIfUnsafeSafeZone,
   assertCraftPlate,
   slotForIndex,
 } from "./craft.js";
 import { toImagineAspect, IMAGINE_ASPECTS } from "@workspace/integrations-xai";
+import { renderLegalMutePlate, renderMutePlate } from "./mutePlateFixtures.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,13 +37,8 @@ const job: GenerateImageJob = {
   },
 };
 
-async function noisyPhoto(): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
-  const raw = Buffer.alloc(64 * 80 * 3);
-  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 256;
-  return sharp(raw, { raw: { width: 64, height: 80, channels: 3 } })
-    .png()
-    .toBuffer();
+async function legalPlate(): Promise<Buffer> {
+  return renderLegalMutePlate({ width: 160, height: 200 });
 }
 
 async function bakedTypePhoto(): Promise<Buffer> {
@@ -121,7 +118,7 @@ test("Imagine never receives 4:5 — hero/tight map to 3:4", () => {
 });
 
 test("photoreal stub composites 4:5 without shipping a gradient", async () => {
-  const photo = await noisyPhoto();
+  const photo = await legalPlate();
   const { buffer, model } = await generateImageBuffer(job, {
     generateWithImagine: async () => photo,
     generateWithGptImage2: async () => null,
@@ -136,7 +133,7 @@ test("photoreal stub composites 4:5 without shipping a gradient", async () => {
 
 test("baked type on Imagine plate triggers a NEW gpt-image-2 plate, not inpaint", async () => {
   const typed = await bakedTypePhoto();
-  const fresh = await noisyPhoto();
+  const fresh = await legalPlate();
   let imagineBuf: Buffer | undefined;
   let gptBuf: Buffer | undefined;
   const { model } = await generateImageBuffer(job, {
@@ -198,6 +195,38 @@ test("rejectIfCheapGrade kills teal-orange cinematic grade", async () => {
   );
 });
 
-test("assertCraftPlate lets a noisy photograph through", async () => {
-  await assertCraftPlate(await noisyPhoto());
+test("assertCraftPlate lets a legal mute plate through", async () => {
+  await assertCraftPlate(await legalPlate());
+});
+
+test("kill list fails closed: type band, empty well, lettermark, off-safe crop", async () => {
+  const typeBand = await renderMutePlate({ kind: "type_band" });
+  const empty = await renderMutePlate({ kind: "empty" });
+  const lettermark = await renderMutePlate({ kind: "lettermark" });
+  const offSafe = await renderMutePlate({ kind: "off_safe" });
+  const wet = await renderMutePlate({ kind: "wet_sheen" });
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(typeBand),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(empty),
+    (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(lettermark),
+    (err: unknown) => err instanceof CraftReject && /lettermark/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(offSafe),
+    (err: unknown) => err instanceof CraftReject && /product_off_safe_zone/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfCheapGrade(wet),
+    (err: unknown) => err instanceof CraftReject && /wet_plastic_sheen/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => assertCraftPlate(empty),
+    (err: unknown) => err instanceof CraftReject,
+  );
 });

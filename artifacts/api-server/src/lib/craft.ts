@@ -88,8 +88,9 @@ HARD NOS — if you would violate any of these, refuse the image rather than gue
 - No AI-cheap light: no neon void, no plastic sheen, no floating product, no missing contact shadow. The product sits on a real surface with a real contact shadow. Light is ONE window (north window / overcast daylight / simple studio window) — not a glow, not cinematic bloom, not teal-orange grade.
 - Wet plastic sheen, over-smooth CGI product, teal-and-orange cinematic grade, and bloomed highlights are refuse. Real material, one window, honest texture.
 - The model stays MUTE. Absolutely no text, no words, no letters, no numbers, no logos, no watermarks, no packaging claims rendered as type. No fake label type. No sky type. No garbled letters. Typography is composited later in designed negative space. If the product has letters on it, photograph it MUTE — blank the type rather than invent glyphs.
-- Product occupies 40–60% of the frame — not a tiny floating trinket, not a full-bleed crop that leaves no room for type.
+- Product occupies 40–60% of the frame — not a tiny floating trinket, not a lettermark, not an empty well, not a full-bleed crop that leaves no room for type.
 - Leave designed empty negative space in the TOP of the frame (about the top third) with no product, no busy texture, no faces. That band is for type we add ourselves. Never place the product in that top band.
+- Paid-social safe zone: keep the product inside the frame, out of the top type band and out of the outer 12% gutters. A plate that would crop the product off the 4:5 or 9:16 safe zone is refuse.
 `.trim();
 
 const PHOTO_STYLE =
@@ -335,28 +336,118 @@ export async function rejectIfCheapGrade(buffer: Buffer): Promise<void> {
     throw new CraftReject("cinematic_bloom");
   }
 
-  let lap = 0;
-  let lapN = 0;
+  let brightLap = 0;
+  let brightLapN = 0;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      const v =
-        Math.abs(
-          4 * luma[i]! -
-            luma[i - 1]! -
-            luma[i + 1]! -
-            luma[i - w]! -
-            luma[i + w]!,
-        );
-      lap += v;
-      lapN++;
+      if (luma[i]! < 200) continue;
+      const ring = [luma[i - 1]!, luma[i + 1]!, luma[i - w]!, luma[i + w]!];
+      if (ring.some((v) => v < 180)) continue;
+      const v = Math.abs(4 * luma[i]! - ring[0]! - ring[1]! - ring[2]! - ring[3]!);
+      brightLap += v;
+      brightLapN++;
     }
   }
-  const meanLap = lap / Math.max(lapN, 1);
+  const meanBrightLap = brightLap / Math.max(brightLapN, 1);
   const specular = clip / n;
-  if (meanLap < 6 && specular > 0.08) {
+  if (specular > 0.08 && brightLapN > 20 && meanBrightLap < 6) {
     throw new CraftReject("wet_plastic_sheen");
   }
+}
+
+/**
+ * Paid-social safe zone on the MUTE plate (before Inter is composited).
+ * Type band stays empty. Product sits in the well, not a lettermark,
+ * not in the 12% gutters that 9:16 cover-crop eats.
+ */
+export const SAFE_ZONE = {
+  typeBand: 0.32,
+  insetX: 0.12,
+  wellY0: 0.42,
+  wellY1: 0.88,
+  maxTypeBandBusy: 0.12,
+  minWellOccupancy: 0.08,
+  lettermarkOccupancy: 0.025,
+} as const;
+
+function lumaOf(r: number, g: number, b: number): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
+  const sharp = await loadSharp();
+  const { data, info } = await sharp(buffer)
+    .resize({ width: 240, height: 320, fit: "inside" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = info.width;
+  const h = info.height;
+  const ch = info.channels;
+  const isProduct = (x: number, y: number): boolean => {
+    const i = (y * w + x) * ch;
+    return lumaOf(data[i]!, data[i + 1]!, data[i + 2]!) > 55;
+  };
+
+  const bandH = Math.round(h * SAFE_ZONE.typeBand);
+  const bandPad = Math.max(1, Math.round(w * 0.04));
+  let bandBusy = 0;
+  let bandN = 0;
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      bandN++;
+      if (isProduct(x, y)) bandBusy++;
+    }
+  }
+  if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
+    throw new CraftReject("product_in_type_band");
+  }
+
+  const x0 = Math.round(w * SAFE_ZONE.insetX);
+  const x1 = Math.round(w * (1 - SAFE_ZONE.insetX));
+  const y0 = Math.round(h * SAFE_ZONE.wellY0);
+  const y1 = Math.round(h * SAFE_ZONE.wellY1);
+  let wellProduct = 0;
+  let wellN = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      wellN++;
+      if (isProduct(x, y)) wellProduct++;
+    }
+  }
+  const wellOcc = wellProduct / Math.max(wellN, 1);
+
+  let gutterProduct = 0;
+  let gutterN = 0;
+  let bottomProduct = 0;
+  let bottomN = 0;
+  const yBottom = Math.round(h * 0.9);
+  for (let y = y0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const hit = isProduct(x, y);
+      if (y >= yBottom) {
+        bottomN++;
+        if (hit) bottomProduct++;
+      }
+      if (y < y1 && (x < x0 || x >= x1)) {
+        gutterN++;
+        if (hit) gutterProduct++;
+      }
+    }
+  }
+  const gutterRatio = gutterProduct / Math.max(gutterN, 1);
+  const bottomRatio = bottomProduct / Math.max(bottomN, 1);
+
+  if (wellOcc >= SAFE_ZONE.minWellOccupancy) return;
+
+  if (gutterRatio > 0.04 || bottomRatio > 0.08) {
+    throw new CraftReject("product_off_safe_zone");
+  }
+  if (wellOcc >= SAFE_ZONE.lettermarkOccupancy) {
+    throw new CraftReject("lettermark");
+  }
+  throw new CraftReject("empty_frame");
 }
 
 /** Run every Craft lock check. Composite type only after this passes. */
@@ -365,4 +456,5 @@ export async function assertCraftPlate(buffer: Buffer): Promise<void> {
   await rejectIfFlatGradient(buffer);
   await rejectIfBakedType(buffer);
   await rejectIfCheapGrade(buffer);
+  await rejectIfUnsafeSafeZone(buffer);
 }

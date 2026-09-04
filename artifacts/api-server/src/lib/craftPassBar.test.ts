@@ -9,8 +9,16 @@ import {
   assertChannelReadyPng,
   preferredSlotIndex,
 } from "./channelCreative.js";
-import { slotForIndex } from "./craft.js";
-import { ImageGenerationFailed } from "./craft.js";
+import {
+  slotForIndex,
+  ImageGenerationFailed,
+  CraftReject,
+  rejectIfBakedType,
+  rejectIfCheapGrade,
+  rejectIfUnsafeSafeZone,
+  assertCraftPlate,
+} from "./craft.js";
+import { renderLegalMutePlate, renderMutePlate } from "./mutePlateFixtures.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
 /**
@@ -65,12 +73,7 @@ test("2. Briefing maps all three stills to imageUrl", () => {
 });
 
 test("3. Inter type-burn is readable on the generated plate", async () => {
-  const { default: sharp } = await import("sharp");
-  const raw = Buffer.alloc(64 * 80 * 3);
-  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 256;
-  const photo = await sharp(raw, { raw: { width: 64, height: 80, channels: 3 } })
-    .png()
-    .toBuffer();
+  const photo = await renderLegalMutePlate({ width: 160, height: 200 });
   const { buffer } = await generateImageBuffer(job, {
     generateWithImagine: async () => photo,
     generateWithGptImage2: async () => null,
@@ -82,6 +85,7 @@ test("3. Inter type-burn is readable on the generated plate", async () => {
 test("4. Mute product: Craft rejects baked letters; type is composited after", () => {
   assert.match(craft, /The model stays MUTE/);
   assert.match(craft, /rejectIfBakedType/);
+  assert.match(craft, /rejectIfUnsafeSafeZone/);
   assert.match(pipeline, /assertCraftPlate\(raw\)/);
   const acceptThenComposite = pipeline.indexOf("await assertCraftPlate");
   const composite = pipeline.indexOf("await compositeAdImage");
@@ -124,12 +128,7 @@ test("creatives are paid-social run-ready plates, not table-only prints", async 
   assert.equal(preferredSlotIndex("google"), 0);
   const publish = readFileSync(resolve(here, "publish.ts"), "utf8");
   assert.match(publish, /assertRunReadyCreative\(adsWithImages, platform\)/);
-  const { default: sharp } = await import("sharp");
-  const raw = Buffer.alloc(64 * 80 * 3);
-  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 256;
-  const photo = await sharp(raw, { raw: { width: 64, height: 80, channels: 3 } })
-    .png()
-    .toBuffer();
+  const photo = await renderLegalMutePlate({ width: 160, height: 200 });
   for (const idx of [0, 1, 2] as const) {
     const { buffer } = await generateImageBuffer(
       { ...job, idx, adAssetId: `ast_run_${idx}` },
@@ -147,4 +146,61 @@ test("out of scope stays locked: ADS_MODE mock, no iframe, no mute-plate /p/ her
   assert.doesNotMatch(home, /<iframe/);
   assert.match(landing, /hero = the plate PNG sharp/);
   assert.doesNotMatch(pipeline, /gemini-3/);
+});
+
+test("kill list never ships: baked type, wrong crop, wet sheen, empty or lettermark", async () => {
+  assert.match(craft, /rejectIfBakedType/);
+  assert.match(craft, /rejectIfUnsafeSafeZone/);
+  assert.match(craft, /wet_plastic_sheen/);
+  assert.match(craft, /lettermark/);
+  assert.match(craft, /empty_frame/);
+  assert.match(craft, /product_in_type_band/);
+  assert.match(craft, /product_off_safe_zone/);
+  assert.match(craft, /await rejectIfUnsafeSafeZone/);
+
+  const { default: sharp } = await import("sharp");
+  const baked = await sharp(
+    Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500">
+        <rect width="400" height="500" fill="#1a1a1a"/>
+        <text x="28" y="70" font-size="48" font-family="Arial" fill="#ffffff" font-weight="700">SALE</text>
+        <text x="28" y="130" font-size="48" font-family="Arial" fill="#ffffff" font-weight="700">NOW</text>
+        <text x="28" y="190" font-size="48" font-family="Arial" fill="#ffffff" font-weight="700">FREE</text>
+      </svg>`,
+    ),
+  )
+    .png()
+    .toBuffer();
+
+  const typeBand = await renderMutePlate({ kind: "type_band" });
+  const offSafe = await renderMutePlate({ kind: "off_safe" });
+  const wet = await renderMutePlate({ kind: "wet_sheen" });
+  const empty = await renderMutePlate({ kind: "empty" });
+  const lettermark = await renderMutePlate({ kind: "lettermark" });
+
+  await assert.rejects(
+    () => rejectIfBakedType(baked),
+    (err: unknown) => err instanceof CraftReject && /baked_type/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(typeBand),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(offSafe),
+    (err: unknown) => err instanceof CraftReject && /product_off_safe_zone/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfCheapGrade(wet),
+    (err: unknown) => err instanceof CraftReject && /wet_plastic_sheen/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(empty),
+    (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(lettermark),
+    (err: unknown) => err instanceof CraftReject && /lettermark/.test((err as Error).message),
+  );
+  await assertCraftPlate(await renderLegalMutePlate({ width: 160, height: 200 }));
 });

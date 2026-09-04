@@ -61,6 +61,8 @@ test("craft prompt encodes mute model, their product, and campaign coherence", (
   assert.match(prompt, /neon void/i);
   assert.match(prompt, /teal-orange/i);
   assert.match(prompt, /window/i);
+  assert.match(prompt, /lettermark/i);
+  assert.match(prompt, /safe zone/i);
 });
 
 test("SVG markup is kill-on-sight", () => {

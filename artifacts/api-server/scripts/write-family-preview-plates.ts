@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { generateImageBuffer } from "../src/lib/imagePipeline.js";
 import { slotForIndex } from "../src/lib/craft.js";
 import { assertChannelReadyPng } from "../src/lib/channelCreative.js";
+import { renderLegalMutePlate } from "../src/lib/mutePlateFixtures.js";
 import type { CampaignAd } from "../src/ads/types.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,24 +45,7 @@ const ads: CampaignAd[] = [
 ];
 
 async function photograph(width: number, height: number, seed: number): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
-  const raw = Buffer.alloc(width * height * 3);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 3;
-      const product =
-        x > width * (0.3 + seed * 0.02) &&
-        x < width * (0.7 - seed * 0.02) &&
-        y > height * (0.38 + seed * 0.04) &&
-        y < height * 0.9;
-      raw[i] = product ? 170 + ((x + seed * 11) % 8) : 26 + ((y + seed) % 10);
-      raw[i + 1] = product ? 148 : 22 + (x % 5);
-      raw[i + 2] = product ? 128 : 18;
-    }
-  }
-  return sharp(raw, { raw: { width, height, channels: 3 } })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  return renderLegalMutePlate({ width, height, seed });
 }
 
 const names = ["hero", "context", "close"] as const;

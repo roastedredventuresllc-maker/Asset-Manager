@@ -14,6 +14,7 @@ import {
 } from "./channelCreative.js";
 import { generateImageBuffer } from "./imagePipeline.js";
 import { slotForIndex } from "./craft.js";
+import { renderLegalMutePlate } from "./mutePlateFixtures.js";
 import type { CampaignAd } from "../ads/types.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
@@ -30,20 +31,7 @@ const ad = (hook: string, cta: string): CampaignAd => ({
 });
 
 async function photograph(width: number, height: number): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
-  const raw = Buffer.alloc(width * height * 3);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 3;
-      const product = x > width * 0.32 && x < width * 0.68 && y > height * 0.4 && y < height * 0.9;
-      raw[i] = product ? 168 + (x % 5) : 28 + (y % 9);
-      raw[i + 1] = product ? 150 : 24 + (x % 6);
-      raw[i + 2] = product ? 132 : 20;
-    }
-  }
-  return sharp(raw, { raw: { width, height, channels: 3 } })
-    .png()
-    .toBuffer();
+  return renderLegalMutePlate({ width, height });
 }
 
 test("AD_SLOTS are Meta 4:5 / TikTok 9:16 / Google 4:5 plates", () => {
