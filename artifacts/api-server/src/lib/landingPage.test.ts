@@ -35,18 +35,30 @@ test("landing without stills is fail-closed, not a lettermark kit", () => {
   assert.match(html, /#161310/);
 });
 
-test("landing with a still is a product page with the photograph, no fake stars", () => {
+test("landing with a still is a dark-room product page: sharp plate, no cream kit", () => {
   const html = buildLandingHtml({
     slug: "noxrun-x",
     campaign: sample,
     productImg: "https://blob.example/ad-images/cmp/0.png",
     canonical: "https://example.com/p/noxrun-x",
   });
-  assert.match(html, /ad-images\/cmp\/0\.png/);
-  assert.match(html, /<img /);
+  assert.match(html, /<img src="https:\/\/blob\.example\/ad-images\/cmp\/0\.png"/);
+  assert.match(html, /class="hero-still/);
+  assert.match(html, /Get the bottle/);
+  assert.match(html, /#161310/);
   assert.doesNotMatch(html, /★★★★★/);
   assert.doesNotMatch(html, /hv-mark/);
-  assert.match(html, /Get the bottle/);
+  assert.doesNotMatch(html, /F9F7F4/);
+  assert.doesNotMatch(html, /249,\s*247,\s*244/);
+  assert.doesNotMatch(html, /--canvas/);
+  assert.doesNotMatch(html, /See how it works/);
+  assert.doesNotMatch(html, /class="halo"/);
+  assert.doesNotMatch(html, /radial-gradient/);
+  assert.doesNotMatch(html, /filter:\s*blur/);
+  assert.doesNotMatch(html, /blur-placeholder/);
+  assert.doesNotMatch(html, /hero-visual/);
+  assert.doesNotMatch(html, /family=Inter|'Inter'|\"Inter\"/);
+  assert.doesNotMatch(html, /class="closing"/);
 });
 
 test("pickLandingPhoto prefers a done still over the founder upload", () => {
