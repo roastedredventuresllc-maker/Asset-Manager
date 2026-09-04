@@ -1,12 +1,9 @@
 import { CampaignFamily } from "@/components/campaign-board";
 
 /**
- * DEV-only table so Craft can taste Hero / In use / Close without generating.
- * Same still, three beats — if this reads as three matching cards, the family failed.
+ * DEV-only table of the actual channel plates (Inter type-burn, 4:5 / 9:16 / 4:5).
+ * Not a raw photo crop. Not a labeled A/B/C row.
  */
-const STILL =
-  "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&h=1350&q=80";
-
 export default function FamilyPreview() {
   return (
     <div className="min-h-[100dvh] bg-background pb-28">
@@ -27,18 +24,18 @@ export default function FamilyPreview() {
       <CampaignFamily
         boards={[
           {
-            hook: "Wake up already clear",
-            imageUrl: STILL,
+            hook: "Wake up clearer",
+            imageUrl: "/family-preview/hero.png",
             status: "done",
           },
           {
-            hook: "The second cup at the desk",
-            imageUrl: STILL,
+            hook: "Night then quiet",
+            imageUrl: "/family-preview/context.png",
             status: "done",
           },
           {
-            hook: "Hold the heat",
-            imageUrl: STILL,
+            hook: "Hold the glass",
+            imageUrl: "/family-preview/close.png",
             status: "done",
           },
         ]}

@@ -18,14 +18,13 @@ export const FAMILY_SLOT_CLASS: Record<BoardBeat, string> = {
 };
 
 /**
- * Ready stills are already the slot aspect, so object-position alone is a no-op.
- * Close must zoom the crop; hero stays grounded; in-use stays the tall full scene.
+ * Show the exported plate as-is. A CSS zoom would clip Inter type + CTA
+ * and turn the table into a mockup of a different creative.
  */
 export const FAMILY_CROP_CLASS: Record<BoardBeat, string> = {
-  hero: "absolute inset-0 h-full w-full object-cover object-bottom",
-  context: "absolute inset-0 h-full w-full object-cover object-center",
-  close:
-    "absolute inset-0 h-full w-full object-cover object-[center_56%] scale-[1.24] origin-[center_56%]",
+  hero: "absolute inset-0 h-full w-full object-cover",
+  context: "absolute inset-0 h-full w-full object-cover",
+  close: "absolute inset-0 h-full w-full object-cover",
 };
 
 export const FAMILY_ASPECT_CLASS: Record<BoardBeat, string> = {

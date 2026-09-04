@@ -77,13 +77,15 @@ test("three ready prints are one family, not an identical card gallery", () => {
   assert.match(slots[2]!, /mt-16/);
 
   const crops = recordStringValues(board, "FAMILY_CROP_CLASS");
-  assert.equal(crops.length, 3, "exactly three crops");
-  assert.equal(new Set(crops).size, 3, "ready stills must crop differently per beat");
-  assert.match(crops[0]!, /object-bottom/);
-  assert.doesNotMatch(crops[0]!, /scale-/);
-  assert.match(crops[1]!, /object-center/);
-  assert.doesNotMatch(crops[1]!, /scale-/);
-  assert.match(crops[2]!, /scale-\[1\.24\]/);
+  assert.equal(crops.length, 3, "exactly three ready-plate classes");
+  for (const crop of crops) {
+    assert.match(crop, /object-cover/);
+    assert.doesNotMatch(
+      crop,
+      /scale-/,
+      "CSS scale clips Inter type-burn — the table must show the uploadable PNG",
+    );
+  }
 
   const aspects = recordStringValues(board, "FAMILY_ASPECT_CLASS");
   assert.equal(aspects[0], "aspect-[4/5]");
@@ -123,12 +125,10 @@ test("three ready prints are one family, not an identical card gallery", () => {
   assert.match(app, /import\.meta\.env\.DEV \? <Route path="\/__family"/);
   assert.match(familyPreview, /CampaignFamily/);
   assert.doesNotMatch(familyPreview, /Variant\s*[ABC]/i);
-  const previewStills = familyPreview.match(/imageUrl:\s*STILL/g) ?? [];
-  assert.equal(
-    previewStills.length,
-    3,
-    "DEV table must reuse one still across three beats — three photos would hide a crop regression",
-  );
+  assert.match(familyPreview, /family-preview\/hero\.png/);
+  assert.match(familyPreview, /family-preview\/context\.png/);
+  assert.match(familyPreview, /family-preview\/close\.png/);
+  assert.doesNotMatch(familyPreview, /unsplash/);
 });
 
 test("failed photography is not shipped as a gradient ad", () => {
