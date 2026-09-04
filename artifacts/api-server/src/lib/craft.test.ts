@@ -4,6 +4,7 @@ import {
   AD_SLOTS,
   billboardLine,
   buildCraftPrompt,
+  assertCraftPlate,
   fillBleedContextPlate,
   neutralizeContextLift,
   rejectIfNotAPhotograph,
@@ -182,14 +183,32 @@ test("fillBleedContextPlate crops a cream side panel to a 9:16 photograph", asyn
   await rejectIfSplitPanel(filled);
 });
 
-test("fillBleedContextPlate settles a mid-frame SKU below the type band", async () => {
+test("a lifted SKU is product_in_type_band on In-use; compositor still emits 9:16", async () => {
   const lifted = await renderMutePlate({ kind: "lifted", width: 160, height: 280 });
   await assert.rejects(
     () => rejectIfUnsafeSafeZone(lifted),
     (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
   );
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(lifted, slotForIndex(1)),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
+  );
   const settled = await fillBleedContextPlate(lifted, 1080, 1920);
-  await rejectIfUnsafeSafeZone(settled);
+  const { default: sharp } = await import("sharp");
+  const meta = await sharp(settled).metadata();
+  assert.equal(meta.width, 1080);
+  assert.equal(meta.height, 1920);
+});
+
+test("full-bleed kitchen window is not a product_in_type_band on In-use", async () => {
+  const kitchen = await renderMutePlate({ kind: "kitchen_window", width: 160, height: 280 });
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(kitchen),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
+  );
+  await rejectIfUnsafeSafeZone(kitchen, slotForIndex(1));
+  const filled = await fillBleedContextPlate(kitchen, 1080, 1920);
+  await assertCraftPlate(filled, slotForIndex(1));
 });
 
 test("type-band-only product stays Craft-closed after the compositor", async () => {

@@ -153,7 +153,7 @@ async function acceptOrNull(
       slot?.role === "context"
         ? await fillBleedContextPlate(raw, slot.width, slot.height)
         : raw;
-    await assertCraftPlate(plate);
+    await assertCraftPlate(plate, slot);
     return { raw: plate };
   } catch (err) {
     const reject =

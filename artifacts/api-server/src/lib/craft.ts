@@ -428,7 +428,33 @@ function channelMedian(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)]!;
 }
 
-export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
+function subjectConnectsToWell(
+  x0: number,
+  y0: number,
+  wellY: number,
+  w: number,
+  isSubject: (x: number, y: number) => boolean,
+): boolean {
+  let x = x0;
+  for (let y = y0; y <= wellY; y++) {
+    if (isSubject(x, y)) continue;
+    if (x > 0 && isSubject(x - 1, y)) {
+      x -= 1;
+      continue;
+    }
+    if (x < w - 1 && isSubject(x + 1, y)) {
+      x += 1;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+export async function rejectIfUnsafeSafeZone(
+  buffer: Buffer,
+  slot?: AdSlot,
+): Promise<void> {
   const sharp = await loadSharp();
   const { data, info } = await sharp(buffer)
     .resize({ width: 240, height: 320, fit: "inside" })
@@ -485,13 +511,22 @@ export async function rejectIfUnsafeSafeZone(buffer: Buffer): Promise<void> {
       if (isSubject(x, y)) bandBusy++;
     }
   }
-  if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
-    throw new CraftReject("product_in_type_band");
-  }
-
   const x0 = Math.round(w * SAFE_ZONE.insetX);
   const x1 = Math.round(w * (1 - SAFE_ZONE.insetX));
   const y0 = Math.round(h * SAFE_ZONE.wellY0);
+  if (slot?.role === "context") {
+    let lifted = 0;
+    for (let y = 0; y < bandH; y++) {
+      for (let x = bandPad; x < w - bandPad; x++) {
+        if (isSubject(x, y) && subjectConnectsToWell(x, y, y0, w, isSubject)) lifted++;
+      }
+    }
+    if (bandN > 0 && lifted / bandN > SAFE_ZONE.maxTypeBandBusy) {
+      throw new CraftReject("product_in_type_band");
+    }
+  } else if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
+    throw new CraftReject("product_in_type_band");
+  }
   const y1 = Math.round(h * SAFE_ZONE.wellY1);
   let wellProduct = 0;
   let wellN = 0;
@@ -686,6 +721,7 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
 
 async function contextPlateStats(buffer: Buffer): Promise<{
   typeBandBusy: number;
+  liftedSku: number;
   wellOcc: number;
 }> {
   const sharp = await loadSharp();
@@ -741,8 +777,15 @@ async function contextPlateStats(buffer: Buffer): Promise<{
       if (isSubject(x, y)) wellProduct++;
     }
   }
+  let lifted = 0;
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      if (isSubject(x, y) && subjectConnectsToWell(x, y, y0, w, isSubject)) lifted++;
+    }
+  }
   return {
     typeBandBusy: bandBusy / Math.max(bandN, 1),
+    liftedSku: lifted / Math.max(bandN, 1),
     wellOcc: wellProduct / Math.max(wellN, 1),
   };
 }
@@ -758,7 +801,7 @@ async function settleContextTypeBand(
   height: number,
 ): Promise<Buffer> {
   const start = await contextPlateStats(buffer);
-  if (start.typeBandBusy <= SAFE_ZONE.maxTypeBandBusy) return buffer;
+  if (start.liftedSku <= SAFE_ZONE.maxTypeBandBusy) return buffer;
   const sharp = await loadSharp();
   for (const scale of [1.18, 1.36, 1.58, 1.82]) {
     const scaledW = Math.round(width * scale);
@@ -775,7 +818,7 @@ async function settleContextTypeBand(
       .toBuffer();
     const next = await contextPlateStats(candidate);
     if (
-      next.typeBandBusy <= SAFE_ZONE.maxTypeBandBusy &&
+      next.liftedSku <= SAFE_ZONE.maxTypeBandBusy &&
       next.wellOcc >= SAFE_ZONE.minWellOccupancy
     ) {
       return candidate;
@@ -911,11 +954,11 @@ export async function fillBleedContextPlate(
 }
 
 /** Run every Craft lock check. Composite type only after this passes. */
-export async function assertCraftPlate(buffer: Buffer): Promise<void> {
+export async function assertCraftPlate(buffer: Buffer, slot?: AdSlot): Promise<void> {
   rejectIfNotAPhotograph(buffer);
   await rejectIfFlatGradient(buffer);
   await rejectIfBakedType(buffer);
   await rejectIfCheapGrade(buffer);
   await rejectIfSplitPanel(buffer);
-  await rejectIfUnsafeSafeZone(buffer);
+  await rejectIfUnsafeSafeZone(buffer, slot);
 }

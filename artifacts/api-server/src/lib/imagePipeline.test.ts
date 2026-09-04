@@ -242,6 +242,21 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
   await assertCraftPlate(paleLinen);
 });
 
+test("in-use accepts a full-bleed kitchen with a window in the type band", async () => {
+  const kitchen = await renderMutePlate({ kind: "kitchen_window", width: 160, height: 280 });
+  const { buffer } = await generateImageBuffer(
+    { ...job, idx: 1, adAssetId: "ast_kitchen_window" },
+    {
+      generateWithImagine: async () => kitchen,
+      generateWithGptImage2: async () => null,
+    },
+  );
+  const { default: sharp } = await import("sharp");
+  const meta = await sharp(buffer).metadata();
+  assert.equal(meta.width, 1080);
+  assert.equal(meta.height, 1920);
+});
+
 test("in-use compositor fills a split cream panel before Craft", async () => {
   const split = await renderMutePlate({ kind: "split_panel", width: 160, height: 280 });
   const { buffer } = await generateImageBuffer(

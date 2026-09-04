@@ -11,7 +11,8 @@ export type MutePlateKind =
   | "pale_linen"
   | "split_panel"
   | "letterbox"
-  | "lifted";
+  | "lifted"
+  | "kitchen_window";
 
 type Ground = "dark" | "linen";
 
@@ -32,7 +33,8 @@ export async function renderMutePlate(opts: {
   const kind = opts.kind ?? "legal";
   const raw = Buffer.alloc(width * height * 3);
 
-  const ground: Ground = kind === "pale_linen" ? "linen" : "dark";
+  const ground: Ground =
+    kind === "pale_linen" || kind === "kitchen_window" ? "linen" : "dark";
 
   const paintGround = (x: number, y: number, i: number) => {
     if (ground === "linen") {
@@ -167,6 +169,13 @@ export async function renderMutePlate(opts: {
       bodyBot: height * 0.7,
       bodyRx: width * 0.18,
     };
+  } else if (kind === "kitchen_window") {
+    bottle = {
+      cx: width * 0.5,
+      bodyTop: height * 0.52,
+      bodyBot: height * 0.84,
+      bodyRx: width * 0.17,
+    };
   }
 
   for (let y = 0; y < height; y++) {
@@ -176,6 +185,17 @@ export async function renderMutePlate(opts: {
         raw[i] = 236;
         raw[i + 1] = 228;
         raw[i + 2] = 214;
+        continue;
+      }
+      if (
+        kind === "kitchen_window" &&
+        y < Math.round(height * 0.26) &&
+        x >= Math.round(width * 0.08) &&
+        x < Math.round(width * 0.4)
+      ) {
+        raw[i] = 62 + (x % 5);
+        raw[i + 1] = 70 + (y % 4);
+        raw[i + 2] = 82;
         continue;
       }
       if (
