@@ -667,6 +667,129 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
   }
 }
 
+/**
+ * Context compositor: crop dead cream (side panel or letterbox bars) and
+ * cover-fill a 9:16 plate. Craft rejects still run on the filled mute.
+ */
+export async function fillBleedContextPlate(
+  buffer: Buffer,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const sharp = await loadSharp();
+  const meta = await sharp(buffer).metadata();
+  const srcW = meta.width ?? 0;
+  const srcH = meta.height ?? 0;
+  if (srcW < 16 || srcH < 16) return buffer;
+
+  const { data, info } = await sharp(buffer)
+    .resize({ width: 240, height: 320, fit: "inside" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = info.width;
+  const h = info.height;
+  const ch = info.channels;
+  const lumaAt = (x: number, y: number): number => {
+    const i = (y * w + x) * ch;
+    return lumaOf(data[i]!, data[i + 1]!, data[i + 2]!);
+  };
+  const yBand = Math.round(h * 0.28);
+  const colStd = new Float32Array(w);
+  const colMean = new Float32Array(w);
+  const colGrad = new Float32Array(w);
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    let sum2 = 0;
+    let gsum = 0;
+    let n = 0;
+    for (let y = yBand; y < h; y++) {
+      const L = lumaAt(x, y);
+      sum += L;
+      sum2 += L * L;
+      n++;
+      if (x > 0 && x < w - 1 && y > yBand && y < h - 1) {
+        gsum += Math.hypot(lumaAt(x + 1, y) - lumaAt(x - 1, y), lumaAt(x, y + 1) - lumaAt(x, y - 1));
+      }
+    }
+    const mean = sum / Math.max(n, 1);
+    colMean[x] = mean;
+    colStd[x] = Math.sqrt(Math.max(0, sum2 / Math.max(n, 1) - mean * mean));
+    colGrad[x] = gsum / Math.max(n, 1);
+  }
+  const colDead = (x: number) =>
+    colGrad[x]! < 4.2 && colStd[x]! < 7.5 && colMean[x]! > 150;
+  let leftRun = 0;
+  while (leftRun < w && colDead(leftRun)) leftRun++;
+  let rightRun = 0;
+  while (rightRun < w && colDead(w - 1 - rightRun)) rightRun++;
+
+  const rowStd = new Float32Array(h);
+  const rowMean = new Float32Array(h);
+  const rowGrad = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    let sum = 0;
+    let sum2 = 0;
+    let gsum = 0;
+    let n = 0;
+    for (let x = 0; x < w; x++) {
+      const L = lumaAt(x, y);
+      sum += L;
+      sum2 += L * L;
+      n++;
+      if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
+        gsum += Math.hypot(lumaAt(x + 1, y) - lumaAt(x - 1, y), lumaAt(x, y + 1) - lumaAt(x, y - 1));
+      }
+    }
+    const mean = sum / Math.max(n, 1);
+    rowMean[y] = mean;
+    rowStd[y] = Math.sqrt(Math.max(0, sum2 / Math.max(n, 1) - mean * mean));
+    rowGrad[y] = gsum / Math.max(n, 1);
+  }
+  const rowDead = (y: number) =>
+    rowMean[y]! > 170 && rowStd[y]! < 3.2 && rowGrad[y]! < 2.2;
+  let topRun = 0;
+  while (topRun < h && rowDead(topRun)) topRun++;
+  let bottomRun = 0;
+  while (bottomRun < h && rowDead(h - 1 - bottomRun)) bottomRun++;
+
+  let nx0 = 0;
+  let nx1 = 1;
+  let ny0 = 0;
+  let ny1 = 1;
+  if (!(leftRun > w * 0.12 && rightRun > w * 0.12)) {
+    if (rightRun / w >= 0.26) nx1 = (w - rightRun) / w;
+    if (leftRun / w >= 0.26) nx0 = leftRun / w;
+  }
+  if (bottomRun / h >= 0.12) ny1 = (h - bottomRun) / h;
+  if (topRun / h >= 0.12 && topRun / h <= 0.45) ny0 = topRun / h;
+
+  const cropW = nx1 - nx0;
+  const cropH = ny1 - ny0;
+  if (cropW >= 0.92 && cropH >= 0.92) {
+    return sharp(buffer)
+      .resize(width, height, { fit: "cover", position: "centre" })
+      .png()
+      .toBuffer();
+  }
+  if (cropW < 0.34 || cropH < 0.28) {
+    return sharp(buffer)
+      .resize(width, height, { fit: "cover", position: "centre" })
+      .png()
+      .toBuffer();
+  }
+
+  const left = Math.max(0, Math.floor(nx0 * srcW));
+  const top = Math.max(0, Math.floor(ny0 * srcH));
+  const extractW = Math.min(srcW - left, Math.ceil(cropW * srcW));
+  const extractH = Math.min(srcH - top, Math.ceil(cropH * srcH));
+  return sharp(buffer)
+    .extract({ left, top, width: extractW, height: extractH })
+    .resize(width, height, { fit: "cover", position: "centre" })
+    .png()
+    .toBuffer();
+}
+
 /** Run every Craft lock check. Composite type only after this passes. */
 export async function assertCraftPlate(buffer: Buffer): Promise<void> {
   rejectIfNotAPhotograph(buffer);

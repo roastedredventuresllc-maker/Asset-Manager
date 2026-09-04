@@ -87,7 +87,7 @@ test("4. Mute product: Craft rejects baked letters; type is composited after", (
   assert.match(craft, /The model stays MUTE/);
   assert.match(craft, /rejectIfBakedType/);
   assert.match(craft, /rejectIfUnsafeSafeZone/);
-  assert.match(pipeline, /assertCraftPlate\(raw\)/);
+  assert.match(pipeline, /assertCraftPlate\(plate\)/);
   const acceptThenComposite = pipeline.indexOf("await assertCraftPlate");
   const composite = pipeline.indexOf("await compositeAdImage");
   assert.ok(
@@ -150,6 +150,8 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(craft, /FULL-BLEED photograph of the entire 9:16 plate/);
   assert.match(craft, /gooseneck kettle/);
   assert.match(pipeline, /skuLock: job\.skuLock/);
+  assert.match(pipeline, /fillBleedContextPlate/);
+  assert.match(pipeline, /0\.mute\.png/);
   const skuLocks = service.match(/skuLock:/g);
   assert.ok(skuLocks && skuLocks.length >= 3, "generate, render-stills, and revise must pass skuLock");
   assert.match(service, /skuLockFromAds/);

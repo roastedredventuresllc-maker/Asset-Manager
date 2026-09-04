@@ -242,6 +242,24 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
   await assertCraftPlate(paleLinen);
 });
 
+test("in-use compositor fills a split cream panel before Craft", async () => {
+  const split = await renderMutePlate({ kind: "split_panel", width: 160, height: 280 });
+  const { buffer } = await generateImageBuffer(
+    { ...job, idx: 1, adAssetId: "ast_fill_bleed" },
+    {
+      generateWithImagine: async () => split,
+      generateWithGptImage2: async () => null,
+    },
+  );
+  const { default: sharp } = await import("sharp");
+  const meta = await sharp(buffer).metadata();
+  assert.equal(meta.width, 1080);
+  assert.equal(meta.height, 1920);
+  const src = readFileSync(join(here, "imagePipeline.ts"), "utf8");
+  assert.match(src, /fillBleedContextPlate/);
+  assert.match(src, /0\.mute\.png/);
+});
+
 test("in-use still prompt is full-bleed of the hero SKU", async () => {
   const photo = await legalPlate();
   let seen = "";

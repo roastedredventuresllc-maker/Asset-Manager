@@ -55,9 +55,28 @@ export async function processPendingJobs(
     limit,
   });
 
+  const heroJobs = pendingJobs.filter(
+    (j) => j.type === "generate_image" && (j.payload as { idx?: number }).idx === 0,
+  );
+  const restJobs = pendingJobs.filter((j) => !heroJobs.includes(j));
+  if (heroJobs.length > 0 && restJobs.length > 0) {
+    const first = await runJobBatch(heroJobs);
+    const next = await runJobBatch(restJobs);
+    return {
+      processed: first.processed + next.processed,
+      succeeded: first.succeeded + next.succeeded,
+      failed: first.failed + next.failed,
+    };
+  }
+
+  return runJobBatch(pendingJobs);
+}
+
+async function runJobBatch(
+  pendingJobs: Array<typeof jobsTable.$inferSelect>,
+): Promise<WorkerResult> {
   // Process the batch concurrently — image generation is I/O-bound and slow
-  // (~15-20s each), so running the 3 ad images in parallel keeps the whole
-  // campaign under the latency budget instead of summing each one.
+  // (~15-20s each). Hero stills run first so In-use can lock the mute SKU.
   const results = await Promise.all(
     pendingJobs.map(async (job): Promise<"succeeded" | "failed" | "skipped"> => {
       const claimed = await db

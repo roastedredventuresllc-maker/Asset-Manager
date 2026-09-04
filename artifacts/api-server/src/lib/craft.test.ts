@@ -4,7 +4,9 @@ import {
   AD_SLOTS,
   billboardLine,
   buildCraftPrompt,
+  fillBleedContextPlate,
   rejectIfNotAPhotograph,
+  rejectIfSplitPanel,
   skuLockFromAds,
   slotForIndex,
   CraftReject,
@@ -12,6 +14,7 @@ import {
   GPT_IMAGE_FALLBACK_MODEL,
   wordCount,
 } from "./craft.js";
+import { renderMutePlate } from "./mutePlateFixtures.js";
 import type { CampaignAd } from "../ads/types.js";
 
 const ad: CampaignAd = {
@@ -141,6 +144,20 @@ test("buildCraftPrompt locks in-use as full-bleed of the hero SKU", () => {
   assert.match(prompt, /No gooseneck kettle/i);
   assert.match(prompt, /D-shaped handle/);
   assert.match(prompt, /SKU LOCK from the hero still/i);
+});
+
+test("fillBleedContextPlate crops a cream side panel to a 9:16 photograph", async () => {
+  const split = await renderMutePlate({ kind: "split_panel", width: 160, height: 280 });
+  await assert.rejects(
+    () => rejectIfSplitPanel(split),
+    (err: unknown) => err instanceof CraftReject && /split_panel/.test((err as Error).message),
+  );
+  const filled = await fillBleedContextPlate(split, 1080, 1920);
+  const { default: sharp } = await import("sharp");
+  const meta = await sharp(filled).metadata();
+  assert.equal(meta.width, 1080);
+  assert.equal(meta.height, 1920);
+  await rejectIfSplitPanel(filled);
 });
 
 test("SVG markup is kill-on-sight", () => {

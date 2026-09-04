@@ -12,6 +12,7 @@ import { resolveFetchableUrl } from "./assetUrl.js";
 import {
   buildCraftPrompt,
   assertCraftPlate,
+  fillBleedContextPlate,
   slotForIndex,
   ImageGenerationFailed,
   CraftReject,
@@ -19,6 +20,7 @@ import {
   GPT_IMAGE_FALLBACK_MODEL,
   type AdSlot,
 } from "./craft.js";
+import { publicAssetUrl } from "./assetUrl.js";
 import type { CampaignAd } from "../ads/types.js";
 
 export interface GenerateImageJob {
@@ -143,11 +145,16 @@ type PlateAttempt = {
 async function acceptOrNull(
   raw: Buffer | null,
   label: string,
+  slot?: AdSlot,
 ): Promise<PlateAttempt> {
   if (!raw) return { raw: null };
   try {
-    await assertCraftPlate(raw);
-    return { raw };
+    const plate =
+      slot?.role === "context"
+        ? await fillBleedContextPlate(raw, slot.width, slot.height)
+        : raw;
+    await assertCraftPlate(plate);
+    return { raw: plate };
   } catch (err) {
     const reject =
       err instanceof CraftReject
@@ -168,10 +175,15 @@ async function acceptOrNull(
 export async function generateImageBuffer(
   job: GenerateImageJob,
   generators: ImageGenerators = defaultImageGenerators,
-): Promise<{ buffer: Buffer; model: string }> {
+): Promise<{ buffer: Buffer; model: string; mute: Buffer }> {
   const slot = slotForIndex(job.idx);
   const heroImageUrl = job.productImageNoBgUrl ?? job.productImageUrl;
-  const productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
+  let productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
+  if (!productPng && job.idx > 0 && process.env.VERCEL) {
+    productPng = await fetchProductImage(
+      publicAssetUrl(`ad-images/${job.campaignId}/0.mute.png`),
+    );
+  }
   const hasProductPhoto = !!productPng;
   const founderPng = hasProductPhoto ? productPng : undefined;
 
@@ -186,6 +198,7 @@ export async function generateImageBuffer(
   const imagine = await acceptOrNull(
     await generators.generateWithImagine(prompt, slot, founderPng),
     GROK_IMAGINE_MODEL,
+    slot,
   );
   let raw = imagine.raw;
   let model = raw
@@ -201,6 +214,7 @@ export async function generateImageBuffer(
     gpt = await acceptOrNull(
       await generators.generateWithGptImage2(prompt, slot, founderPng),
       GPT_IMAGE_FALLBACK_MODEL,
+      slot,
     );
     raw = gpt.raw;
     if (raw) {
@@ -226,7 +240,7 @@ export async function generateImageBuffer(
     height: slot.height,
   });
 
-  return { buffer: finalBuffer, model };
+  return { buffer: finalBuffer, model, mute: raw };
 }
 
 export async function processImageJob(
@@ -242,7 +256,14 @@ export async function processImageJob(
     .where(eq(adAssetsTable.id, job.adAssetId));
 
   try {
-    const { buffer, model } = await generateImageBuffer(job, generators);
+    const { buffer, model, mute } = await generateImageBuffer(job, generators);
+    if (job.idx === 0 && mute) {
+      await uploadBuffer(
+        `ad-images/${job.campaignId}/0.mute.png`,
+        mute,
+        "image/png",
+      );
+    }
     const key = `ad-images/${job.campaignId}/${job.idx}.png`;
     const imageUrl = await uploadBuffer(key, buffer, "image/png");
 

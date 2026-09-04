@@ -107,6 +107,8 @@ test("worker does not retry generate_image (one Imagine + one gpt-image-2 alread
   assert.match(src, /jobIds/);
   assert.match(src, /campaignId/);
   assert.match(src, /reclaimStaleProcessingJobs/);
+  assert.match(src, /idx === 0/);
+  assert.match(src, /runJobBatch\(heroJobs\)/);
 });
 
 test("mock publish skips Stripe and allows unclaimed house in production", () => {
