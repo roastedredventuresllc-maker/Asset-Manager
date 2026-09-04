@@ -53,4 +53,7 @@ test("landing route does not ship a lettermark kit when stills miss", () => {
   assert.doesNotMatch(landingPage, /hv-mark/);
   assert.doesNotMatch(landingPage, /★★★★★/);
   assert.doesNotMatch(landingPage, /function initials/);
+  assert.doesNotMatch(landingPage, /F9F7F4/);
+  assert.doesNotMatch(landingPage, /See how it works/);
+  assert.doesNotMatch(landingPage, /class="halo"/);
 });
