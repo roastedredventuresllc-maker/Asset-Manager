@@ -556,8 +556,9 @@ export async function rejectIfUnsafeSafeZone(
   const y0 = Math.round(h * SAFE_ZONE.wellY0);
   const y1 = Math.round(h * SAFE_ZONE.wellY1);
   if (slot?.role === "context") {
-    const lifted = wellSkuStats(w, h, bandH, bandPad, y0, y1, isSubject).lifted;
-    if (lifted > SAFE_ZONE.maxTypeBandBusy) {
+    const sku = wellSkuStats(w, h, bandH, bandPad, y0, y1, isSubject);
+    // skuTop ~0 means the well blob is the room (wall/cabinet), not a lifted pack-shot.
+    if (sku.skuTop >= 0.08 && sku.lifted > SAFE_ZONE.maxTypeBandBusy) {
       throw new CraftReject("product_in_type_band");
     }
   } else if (bandN > 0 && bandBusy / bandN > SAFE_ZONE.maxTypeBandBusy) {
@@ -833,7 +834,7 @@ async function settleContextTypeBand(
   height: number,
 ): Promise<Buffer> {
   const start = await contextPlateStats(buffer);
-  if (start.liftedSku <= SAFE_ZONE.maxTypeBandBusy) return buffer;
+  if (start.liftedSku <= SAFE_ZONE.maxTypeBandBusy || start.skuTop < 0.08) return buffer;
   const sharp = await loadSharp();
   const aimed = Math.min(2.15, Math.max(1.08, 0.34 / Math.max(start.skuTop, 0.08)));
   for (const scale of [aimed, aimed * 1.12, 1.18, 1.36, 1.58, 1.82]) {
