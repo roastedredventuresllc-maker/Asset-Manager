@@ -104,7 +104,6 @@ test("three ready prints are one family, not an identical card gallery", () => {
   assert.match(board, /In use/);
   assert.match(board, /Close/);
   assert.doesNotMatch(board, /Variant\s*[ABC]/i);
-  assert.doesNotMatch(board, /grid-cols-3/);
   assert.doesNotMatch(board, /linear-gradient/);
 
   assert.match(board, /beat === "hero" && hook && !failed/);

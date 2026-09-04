@@ -2,7 +2,7 @@ import { CampaignFamily } from "@/components/campaign-board";
 
 /**
  * DEV-only table so Craft can taste Hero / In use / Close without generating.
- * Same still, three beats — if this reads as Variant A/B/C, the family failed.
+ * Same still, three beats — if this reads as three matching cards, the family failed.
  */
 const STILL =
   "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&h=1350&q=80";

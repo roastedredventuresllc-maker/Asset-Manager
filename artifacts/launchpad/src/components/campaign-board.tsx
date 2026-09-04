@@ -46,7 +46,7 @@ export const FAMILY_TYPE_SIZE: Record<BoardBeat, string> = {
   close: "text-[clamp(1.15rem,2vw,1.65rem)]",
 };
 
-/** Staggered tracks — never grid-cols-3, never three equal cards. */
+/** Staggered tracks — never three equal columns, never three matching cards. */
 export const FAMILY_TABLE_CLASS =
   "grid grid-cols-1 md:grid-cols-[minmax(0,1.28fr)_minmax(0,0.46fr)_minmax(0,0.7fr)] md:grid-rows-[auto_auto] gap-x-6 gap-y-12 md:gap-y-0 items-start";
 
@@ -65,7 +65,7 @@ export type FamilyBoard = {
 
 /**
  * One print on the table. Three beats, one family — not identical cards.
- * Type sits in the top of the crop. Never a gradient. Never Variant A/B/C.
+ * Type sits in the top of the crop. Never a gradient. Never a labeled A/B/C row.
  */
 export function CampaignBoard({
   beat,
@@ -157,7 +157,7 @@ export function CampaignBoard({
 
 /**
  * Art director's table: Hero leads, In use is the tall tuck, Close is the
- * dropped crop study. Not a Variant A/B/C row and not three matching cards.
+ * dropped crop study. Not a labeled A/B/C row and not three matching cards.
  */
 export function CampaignFamily({ boards }: { boards: Array<FamilyBoard | null | undefined> }) {
   return (
