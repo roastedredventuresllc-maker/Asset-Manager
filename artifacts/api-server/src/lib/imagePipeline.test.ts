@@ -273,6 +273,7 @@ test("in-use compositor fills a split cream panel before Craft", async () => {
   const src = readFileSync(join(here, "imagePipeline.ts"), "utf8");
   assert.match(src, /fillBleedContextPlate/);
   assert.match(src, /0\.mute\.png/);
+  assert.match(src, /getAsset\(`ad-images\/\$\{job\.campaignId\}\/0\.mute\.png`\)/);
 });
 
 test("in-use still prompt is full-bleed of the hero SKU", async () => {

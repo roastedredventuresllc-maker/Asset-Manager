@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
-import { uploadBuffer } from "./storage.js";
+import { getAsset, uploadBuffer } from "./storage.js";
 import { compositeAdImage } from "./imageComposite.js";
 import { reencodeToPng } from "./imageMime.js";
 import { resolveFetchableUrl } from "./assetUrl.js";
@@ -20,7 +20,6 @@ import {
   GPT_IMAGE_FALLBACK_MODEL,
   type AdSlot,
 } from "./craft.js";
-import { publicAssetUrl } from "./assetUrl.js";
 import type { CampaignAd } from "../ads/types.js";
 
 export interface GenerateImageJob {
@@ -179,10 +178,9 @@ export async function generateImageBuffer(
   const slot = slotForIndex(job.idx);
   const heroImageUrl = job.productImageNoBgUrl ?? job.productImageUrl;
   let productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
-  if (!productPng && job.idx > 0 && process.env.VERCEL) {
-    productPng = await fetchProductImage(
-      publicAssetUrl(`ad-images/${job.campaignId}/0.mute.png`),
-    );
+  if (!productPng && job.idx > 0) {
+    const mute = await getAsset(`ad-images/${job.campaignId}/0.mute.png`);
+    if (mute?.buffer) productPng = mute.buffer;
   }
   const hasProductPhoto = !!productPng;
   const founderPng = hasProductPhoto ? productPng : undefined;
