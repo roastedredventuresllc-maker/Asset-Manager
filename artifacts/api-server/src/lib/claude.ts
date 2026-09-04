@@ -1,7 +1,7 @@
 import { grokJsonChat, parseJsonObject } from "@workspace/integrations-xai";
 import { buildReferencePlaybook } from "./referenceLibrary.js";
 import { getIndexedReferenceNotes } from "./referenceAssets.js";
-import { billboardLine } from "./craft.js";
+import { billboardLine, neutralizeContextLift } from "./craft.js";
 
 /** Testable chat seam. Production uses Grok (`grokJsonChat`). */
 export type CampaignJsonChat = (opts: {
@@ -104,7 +104,7 @@ Rules:
 - starter = $25/day (early stage, tight budget), growth = $75/day (scaling), scale = $200/day (established traction)
 - The founder's product description is the only creative input. Write an intelligent campaign FROM that prompt. Do not fill templates, placeholders, or lorem. Do not label ads Variant A/B/C.
 - Use distinct creative angles across the 3 ads — but they are ONE campaign: same product, same light family, same color temperature, ONE SKU. Three beats: hero, context, tight crop. Not three random boards. Copy must be runnable as paid social (2–6 word hooks).
-- Ad index 1 (context, 9:16) imagePrompt MUST be a FULL-BLEED kitchen photograph of the same SKU as ad 0. Fill the entire frame — no cream side panel, no blank column, no letterbox. If the hero is open-top, keep it open (no lid). A mug prop is OK. Do not invent a gooseneck kettle or a second vessel.
+- Ad index 1 (context, 9:16) imagePrompt MUST be a FULL-BLEED kitchen photograph of the same SKU as ad 0. Fill the entire frame — no cream side panel, no blank column, no letterbox, no blank bottom bar. Product sits entirely below the top 28% type band; the kitchen continues to the bottom edge. Never write "keep the bottom fifth clear" or "centered mid-frame" — that lifts the SKU into the type. If the hero is open-top, keep it open (no lid). A mug prop is OK. Do not invent a gooseneck kettle or a second vessel.
 - Ad index 2 (tight crop) imagePrompt MUST keep the exact product anatomy from ad 0 — same silhouette, same clay color, same handle/spout/lid if the hero has them. Write a closer crop through the body (spout, rim, handle bite; base out of frame). Do not write a second hero pack-shot. Do not drop a handle. Do not invent a handle-less pitcher or a different vessel.
 - imagePrompt should be a professional photographer/art director brief — describe the actual scene in detail
 - imagePrompt must describe pure photography only (no text, words, letters, logos, or watermarks — on-brand typography is composited later in designed top negative space)
@@ -126,7 +126,7 @@ Apply ONLY the requested change. Return the complete updated campaign JSON (same
 Also append a boolean field "visualChanged": true/false indicating if any imagePrompt changed (so images need to be regenerated).
 
 Craft law still applies after a revision:
-- Three ads remain ONE campaign: same product, same SKU, same clay color, same light family, same color temperature. Beats: hero, context, tight crop — not three random boards. Tight crop keeps the hero silhouette (handle stays if the hero has a handle) and crops through the body, not a second full pack-shot. Context stays a full-bleed 9:16 of that same open SKU — no cream panel, no lid if the hero is open, no gooseneck kettle.
+- Three ads remain ONE campaign: same product, same SKU, same clay color, same light family, same color temperature. Beats: hero, context, tight crop — not three random boards. Tight crop keeps the hero silhouette (handle stays if the hero has a handle) and crops through the body, not a second full pack-shot. Context stays a full-bleed 9:16 of that same open SKU — no cream panel, no blank bottom fifth, no lid if the hero is open, no gooseneck kettle. Product stays below the top type band.
 - Hooks stay 2–6 words. imagePrompt is photography only (no text, letters, logos). Typography is composited later.
 - Ad index 0 is 4:5 hero, 1 is 9:16 context, 2 is 4:5 tight crop. Product 40–60% of frame with empty top negative space.`;
 
@@ -138,7 +138,7 @@ Craft law still applies after a revision:
  * defensively before the prompt reaches the image pipeline.
  */
 function sanitizeImagePrompt(prompt: string): string {
-  return prompt
+  const cleaned = prompt
     .replace(
       /\b(?:[a-z]+\s+){0,3}(?:reading|that\s+says|saying|says|labell?ed|with\s+the\s+(?:words|text)|displaying(?:\s+the\s+text)?|spelling\s+out)\s+["'][^"']*["']/gi,
       "",
@@ -146,7 +146,8 @@ function sanitizeImagePrompt(prompt: string): string {
     .replace(
       /\b(?:visible\s+)?(?:texts?|lettering|typography|logos?|watermarks?|captions?|signage)\b/gi,
       "",
-    )
+    );
+  return neutralizeContextLift(cleaned)
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.])/g, "$1")
     .replace(/,\s*,/g, ",")

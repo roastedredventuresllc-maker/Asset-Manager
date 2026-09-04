@@ -5,8 +5,10 @@ import {
   billboardLine,
   buildCraftPrompt,
   fillBleedContextPlate,
+  neutralizeContextLift,
   rejectIfNotAPhotograph,
   rejectIfSplitPanel,
+  rejectIfUnsafeSafeZone,
   skuLockFromAds,
   slotForIndex,
   CraftReject,
@@ -92,6 +94,7 @@ test("context direction forces full-bleed 9:16 of the same open SKU", () => {
   assert.match(context.direction, /no lid/i);
   assert.match(context.direction, /gooseneck kettle/i);
   assert.doesNotMatch(context.direction, /lower-right clear/i);
+  assert.match(context.direction, /no blank bottom fifth/i);
 });
 
 test("tight crop direction forces the same handled SKU, never a handle-less pitcher", () => {
@@ -144,6 +147,25 @@ test("buildCraftPrompt locks in-use as full-bleed of the hero SKU", () => {
   assert.match(prompt, /No gooseneck kettle/i);
   assert.match(prompt, /D-shaped handle/);
   assert.match(prompt, /SKU LOCK from the hero still/i);
+  assert.match(prompt, /no blank bottom fifth/i);
+});
+
+test("neutralizeContextLift strips a reserved bottom bar from the photographer brief", () => {
+  const raw =
+    "Full-bleed kitchen, carafe centered mid-frame, bottom fifth kept clear. No kettle.";
+  const cleaned = neutralizeContextLift(raw);
+  assert.doesNotMatch(cleaned, /bottom fifth kept clear/i);
+  assert.doesNotMatch(cleaned, /centered mid-frame/i);
+  assert.match(cleaned, /kitchen continues to the bottom edge/i);
+  const prompt = buildCraftPrompt({
+    ad: { ...ad, imagePrompt: raw },
+    slot: slotForIndex(1),
+    brandName: "STILLPOUR",
+    hasProductPhoto: false,
+    skuLock: "open-top handled carafe",
+  });
+  assert.doesNotMatch(prompt, /bottom fifth kept clear/i);
+  assert.match(prompt, /kitchen continues to the bottom edge/i);
 });
 
 test("fillBleedContextPlate crops a cream side panel to a 9:16 photograph", async () => {
@@ -158,6 +180,25 @@ test("fillBleedContextPlate crops a cream side panel to a 9:16 photograph", asyn
   assert.equal(meta.width, 1080);
   assert.equal(meta.height, 1920);
   await rejectIfSplitPanel(filled);
+});
+
+test("fillBleedContextPlate settles a mid-frame SKU below the type band", async () => {
+  const lifted = await renderMutePlate({ kind: "lifted", width: 160, height: 280 });
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(lifted),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band/.test((err as Error).message),
+  );
+  const settled = await fillBleedContextPlate(lifted, 1080, 1920);
+  await rejectIfUnsafeSafeZone(settled);
+});
+
+test("type-band-only product stays Craft-closed after the compositor", async () => {
+  const band = await renderMutePlate({ kind: "type_band", width: 160, height: 280 });
+  const filled = await fillBleedContextPlate(band, 1080, 1920);
+  await assert.rejects(
+    () => rejectIfUnsafeSafeZone(filled),
+    (err: unknown) => err instanceof CraftReject && /product_in_type_band|empty_frame/.test((err as Error).message),
+  );
 });
 
 test("SVG markup is kill-on-sight", () => {

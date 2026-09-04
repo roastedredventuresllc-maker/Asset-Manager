@@ -10,7 +10,8 @@ export type MutePlateKind =
   | "flat_well"
   | "pale_linen"
   | "split_panel"
-  | "letterbox";
+  | "letterbox"
+  | "lifted";
 
 type Ground = "dark" | "linen";
 
@@ -157,6 +158,13 @@ export async function renderMutePlate(opts: {
       cx: width * 0.5,
       bodyTop: height * 0.42,
       bodyBot: height * 0.72,
+      bodyRx: width * 0.18,
+    };
+  } else if (kind === "lifted") {
+    bottle = {
+      cx: width * 0.5,
+      bodyTop: height * 0.18,
+      bodyBot: height * 0.7,
       bodyRx: width * 0.18,
     };
   }

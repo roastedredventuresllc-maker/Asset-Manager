@@ -271,7 +271,10 @@ test("in-use still prompt is full-bleed of the hero SKU", async () => {
       idx: 1,
       adAssetId: "ast_sku_context",
       skuLock: heroSku,
-      ad: { ...job.ad, imagePrompt: "carafe on a kitchen counter" },
+      ad: {
+        ...job.ad,
+        imagePrompt: "carafe on a kitchen counter, centered mid-frame, bottom fifth kept clear",
+      },
     },
     {
       generateWithImagine: async (prompt) => {
@@ -285,6 +288,8 @@ test("in-use still prompt is full-bleed of the hero SKU", async () => {
   assert.match(seen, /No cream side panel/i);
   assert.match(seen, /No gooseneck kettle/i);
   assert.match(seen, /open-top handled matte carafe/);
+  assert.doesNotMatch(seen, /bottom fifth kept clear/i);
+  assert.match(seen, /kitchen continues to the bottom edge/i);
 });
 
 test("close still prompt carries the hero SKU lock", async () => {

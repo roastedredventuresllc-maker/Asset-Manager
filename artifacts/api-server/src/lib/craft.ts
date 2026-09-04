@@ -46,7 +46,7 @@ export const AD_SLOTS: readonly AdSlot[] = [
     format: "1080x1920",
     label: "Ad 2 — context (Reels / Stories / TikTok, 9:16)",
     direction:
-      "Context shot: a FULL-BLEED 9:16 photograph of the SAME open SKU as the hero, in a real kitchen. The kitchen photograph fills the plate from under the type band to the bottom edge and both side edges — not a square inset, not cream bars above or below, no cream side panel, no letterbox, no picture-in-picture, no split layout. Same silhouette as the hero: D-handle and spout if the hero has them, OPEN TOP (no lid, no hinged cover). A mug prop is OK. Do not invent a gooseneck kettle or any second vessel. Same light family and color temperature as Ad 1. Product 40–60% of frame, entirely below the TOP 28% type band.",
+      "Context shot: a FULL-BLEED 9:16 photograph of the SAME open SKU as the hero, in a real kitchen. The kitchen photograph fills the plate from under the type band to the bottom edge and both side edges — not a square inset, not cream bars above or below, no cream side panel, no letterbox, no picture-in-picture, no split layout, no blank bottom fifth. Same silhouette as the hero: D-handle and spout if the hero has them, OPEN TOP (no lid, no hinged cover). A mug prop is OK. Do not invent a gooseneck kettle or any second vessel. Same light family and color temperature as Ad 1. Product 40–60% of frame, entirely below the TOP 28% type band. Never lift the SKU to mid-frame to reserve the bottom.",
   },
   {
     idx: 2,
@@ -99,12 +99,29 @@ HARD NOS — if you would violate any of these, refuse the image rather than gue
 - Leave designed empty negative space in the TOP of the frame (about the top third) with no product, no busy texture, no faces. That band is for type we add ourselves. Never place the product in that top band.
 - Paid-social safe zone: keep the product inside the frame, out of the top type band and out of the outer 12% gutters. A plate that would crop the product off the 4:5 or 9:16 safe zone is refuse.
 - THREE STILLS, ONE SKU. Do not drop a handle, add a handle, change the spout, shift the clay color, or invent a different vessel. Tight crop is a closer photograph of the hero object — crop through the body; spout, rim, and handle bite if the hero has a handle. A handle-less pitcher when the hero has a handle is refuse. A second full-body hero pack-shot in the tight-crop slot is refuse.
-- Context / in-use is a FULL-BLEED photograph of the entire 9:16 plate. No cream side panel, no blank column, no letterbox, no square inset, no split layout. The kitchen continues to every edge, including the bottom. A square photo sitting in cream on a 9:16 plate is refuse.
+- Context / in-use is a FULL-BLEED photograph of the entire 9:16 plate. No cream side panel, no blank column, no letterbox, no square inset, no split layout. The kitchen continues to every edge, including the bottom. A square photo sitting in cream on a 9:16 plate is refuse. A blank bottom fifth that lifts the SKU into the type band is refuse.
 - If the hero SKU is open-top, do not add a lid. Do not invent a gooseneck kettle or a second vessel as the product. A mug as a small prop is OK.
 `.trim();
 
 const PHOTO_STYLE =
   " Photoreal advertising photography, shot on a real camera, sharp focus, high detail, premium commercial campaign quality, natural color, believable materials, one window light.";
+
+/** Copy sometimes reserves a blank bottom bar; that lifts the SKU into the type. */
+export function neutralizeContextLift(prompt: string): string {
+  return prompt
+    .replace(
+      /\b(?:keep(?:s|ing)?|leave|left)\s+(?:the\s+)?bottom\s+(?:fifth|third|quarter|~?\d+\s*percent|~\s*\d+%|\d+%)\s+(?:kept\s+)?clear\b/gi,
+      "kitchen continues to the bottom edge",
+    )
+    .replace(
+      /\bbottom\s+(?:fifth|third|quarter|~?\d+\s*percent|~\s*\d+%|\d+%)\s+(?:kept\s+)?clear\b/gi,
+      "kitchen continues to the bottom edge",
+    )
+    .replace(
+      /\bcentered mid-frame\b/gi,
+      "grounded in the lower well, entirely below the top type band",
+    );
+}
 
 export function buildCraftPrompt(opts: {
   ad: CampaignAd;
@@ -122,7 +139,7 @@ export function buildCraftPrompt(opts: {
     slot.role === "hero"
       ? "HERO: single product, centered-low, grounded, iconic. This still defines the SKU for the other two."
       : slot.role === "context"
-        ? "CONTEXT: FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. The photograph fills the plate edge to edge — not a square inset in cream. No cream side panel, no letterbox. Open top — no lid. No gooseneck kettle. Mug prop OK. Same campaign light."
+        ? "CONTEXT: FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. The photograph fills the plate edge to edge — not a square inset in cream. No cream side panel, no letterbox, no blank bottom fifth. Product entirely below the top 28% type band. Open top — no lid. No gooseneck kettle. Mug prop OK. Same campaign light."
         : "TIGHT CROP: the SAME SKU as the hero, closer, tactile. Crop through the body — lose the base. Spout, rim, and any handle stay in the lower frame. Same clay color as the hero. Never a handle-less pitcher. Never a second hero pack-shot. Same campaign light.";
 
   const skuClause = skuLock
@@ -135,7 +152,7 @@ export function buildCraftPrompt(opts: {
     slot.direction,
     productClause,
     skuClause,
-    `Photographer's brief for this beat: ${ad.imagePrompt}`,
+    `Photographer's brief for this beat: ${neutralizeContextLift(ad.imagePrompt)}`,
     CRAFT_HARD_NOS,
     PHOTO_STYLE,
   ].join(" ");
@@ -667,6 +684,106 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
   }
 }
 
+async function contextPlateStats(buffer: Buffer): Promise<{
+  typeBandBusy: number;
+  wellOcc: number;
+}> {
+  const sharp = await loadSharp();
+  const { data, info } = await sharp(buffer)
+    .resize({ width: 240, height: 320, fit: "inside" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = info.width;
+  const h = info.height;
+  const ch = info.channels;
+  const at = (x: number, y: number) => {
+    const i = (y * w + x) * ch;
+    return [data[i]!, data[i + 1]!, data[i + 2]!] as const;
+  };
+  const bandH = Math.round(h * SAFE_ZONE.typeBand);
+  const bandPad = Math.max(1, Math.round(w * 0.04));
+  const fieldR: number[] = [];
+  const fieldG: number[] = [];
+  const fieldB: number[] = [];
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      const [r, g, b] = at(x, y);
+      fieldR.push(r);
+      fieldG.push(g);
+      fieldB.push(b);
+    }
+  }
+  const fr = channelMedian(fieldR);
+  const fg = channelMedian(fieldG);
+  const fb = channelMedian(fieldB);
+  const isSubject = (x: number, y: number): boolean => {
+    const [r, g, b] = at(x, y);
+    return colorDist(r, g, b, fr, fg, fb) > SAFE_ZONE.fieldDelta;
+  };
+  let bandBusy = 0;
+  let bandN = 0;
+  for (let y = 0; y < bandH; y++) {
+    for (let x = bandPad; x < w - bandPad; x++) {
+      bandN++;
+      if (isSubject(x, y)) bandBusy++;
+    }
+  }
+  const x0 = Math.round(w * SAFE_ZONE.insetX);
+  const x1 = Math.round(w * (1 - SAFE_ZONE.insetX));
+  const y0 = Math.round(h * SAFE_ZONE.wellY0);
+  const y1 = Math.round(h * SAFE_ZONE.wellY1);
+  let wellProduct = 0;
+  let wellN = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      wellN++;
+      if (isSubject(x, y)) wellProduct++;
+    }
+  }
+  return {
+    typeBandBusy: bandBusy / Math.max(bandN, 1),
+    wellOcc: wellProduct / Math.max(wellN, 1),
+  };
+}
+
+/**
+ * Mid-frame SKU with a reserved bottom bar sits in the type. Zoom the top
+ * of the plate (crop the empty bottom) so the product drops below 28%.
+ * A plate whose only subject is in the type band stays rejected.
+ */
+async function settleContextTypeBand(
+  buffer: Buffer,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const start = await contextPlateStats(buffer);
+  if (start.typeBandBusy <= SAFE_ZONE.maxTypeBandBusy) return buffer;
+  const sharp = await loadSharp();
+  for (const scale of [1.18, 1.36, 1.58, 1.82]) {
+    const scaledW = Math.round(width * scale);
+    const scaledH = Math.round(height * scale);
+    const candidate = await sharp(buffer)
+      .resize(scaledW, scaledH)
+      .extract({
+        left: Math.max(0, Math.round((scaledW - width) / 2)),
+        top: 0,
+        width,
+        height,
+      })
+      .png()
+      .toBuffer();
+    const next = await contextPlateStats(candidate);
+    if (
+      next.typeBandBusy <= SAFE_ZONE.maxTypeBandBusy &&
+      next.wellOcc >= SAFE_ZONE.minWellOccupancy
+    ) {
+      return candidate;
+    }
+  }
+  return buffer;
+}
+
 /**
  * Context compositor: crop dead cream (side panel or letterbox bars) and
  * cover-fill a 9:16 plate. Craft rejects still run on the filled mute.
@@ -767,27 +884,30 @@ export async function fillBleedContextPlate(
   const cropW = nx1 - nx0;
   const cropH = ny1 - ny0;
   if (cropW >= 0.92 && cropH >= 0.92) {
-    return sharp(buffer)
+    const filled = await sharp(buffer)
       .resize(width, height, { fit: "cover", position: "centre" })
       .png()
       .toBuffer();
+    return settleContextTypeBand(filled, width, height);
   }
   if (cropW < 0.34 || cropH < 0.28) {
-    return sharp(buffer)
+    const filled = await sharp(buffer)
       .resize(width, height, { fit: "cover", position: "centre" })
       .png()
       .toBuffer();
+    return settleContextTypeBand(filled, width, height);
   }
 
   const left = Math.max(0, Math.floor(nx0 * srcW));
   const top = Math.max(0, Math.floor(ny0 * srcH));
   const extractW = Math.min(srcW - left, Math.ceil(cropW * srcW));
   const extractH = Math.min(srcH - top, Math.ceil(cropH * srcH));
-  return sharp(buffer)
+  const filled = await sharp(buffer)
     .extract({ left, top, width: extractW, height: extractH })
     .resize(width, height, { fit: "cover", position: "centre" })
     .png()
     .toBuffer();
+  return settleContextTypeBand(filled, width, height);
 }
 
 /** Run every Craft lock check. Composite type only after this passes. */
