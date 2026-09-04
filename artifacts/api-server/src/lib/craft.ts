@@ -589,25 +589,32 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
     colStd[x] = Math.sqrt(Math.max(0, sum2 / Math.max(n, 1) - mean * mean));
     colGrad[x] = gsum / Math.max(n, 1);
   }
+  // Side cream columns and square-inset letterbox are 9:16 In-use kills.
+  // 4:5 pack-shots on pale stone must not trip either check.
+  if (h / Math.max(w, 1) < 1.55) return;
+
   const dead = (x: number) =>
     colGrad[x]! < 4.2 && colStd[x]! < 7.5 && colMean[x]! > 150;
   let leftRun = 0;
   while (leftRun < w && dead(leftRun)) leftRun++;
   let rightRun = 0;
   while (rightRun < w && dead(w - 1 - rightRun)) rightRun++;
-  if (leftRun > w * 0.12 && rightRun > w * 0.12) return;
-  const deadRun = Math.max(leftRun, rightRun);
-  const liveFrom = leftRun >= rightRun ? leftRun : 0;
-  const liveTo = leftRun >= rightRun ? w : w - rightRun;
-  let liveG = 0;
-  let liveN = 0;
-  for (let x = liveFrom; x < liveTo; x++) {
-    if (dead(x)) continue;
-    liveG += colGrad[x]!;
-    liveN++;
-  }
-  if (deadRun / w >= 0.26 && liveN > w * 0.2 && liveG / liveN >= 7) {
-    throw new CraftReject("split_panel");
+  if (leftRun > w * 0.12 && rightRun > w * 0.12) {
+    // both gutters empty — centered product, not a split
+  } else {
+    const deadRun = Math.max(leftRun, rightRun);
+    const liveFrom = leftRun >= rightRun ? leftRun : 0;
+    const liveTo = leftRun >= rightRun ? w : w - rightRun;
+    let liveG = 0;
+    let liveN = 0;
+    for (let x = liveFrom; x < liveTo; x++) {
+      if (dead(x)) continue;
+      liveG += colGrad[x]!;
+      liveN++;
+    }
+    if (deadRun / w >= 0.26 && liveN > w * 0.2 && liveG / liveN >= 7) {
+      throw new CraftReject("split_panel");
+    }
   }
 
   const rowStd = new Float32Array(h);
@@ -633,7 +640,7 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
     rowGrad[y] = gsum / Math.max(n, 1);
   }
   const rowDead = (y: number) =>
-    rowMean[y]! > 150 && rowStd[y]! < 8 && rowGrad[y]! < 4.5;
+    rowMean[y]! > 170 && rowStd[y]! < 3.2 && rowGrad[y]! < 2.2;
   let bottomRun = 0;
   while (bottomRun < h && rowDead(h - 1 - bottomRun)) bottomRun++;
   let liveStart = -1;
