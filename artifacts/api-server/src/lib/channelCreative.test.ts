@@ -7,6 +7,7 @@ import {
   adsForPlatform,
   assertAllSlotsAreChannelCreatives,
   assertChannelReadyPng,
+  assertRunReadyCreative,
   preferredSlotIndex,
   slotMatchesChannelSpec,
   typeBandRatio,
@@ -67,6 +68,19 @@ test("publish sends TikTok the 9:16 plate and Meta/Google the 4:5 hero", () => {
   assert.equal(adsForPlatform(ads, "meta")[0]?.imageUrl, "https://blob.example/0.png");
   assert.equal(adsForPlatform(ads, "google")[0]?.imageUrl, "https://blob.example/0.png");
   assert.equal(adsForPlatform(ads, "tiktok").length, 3);
+  assert.equal(assertRunReadyCreative(ads, "tiktok")[0]?.imageUrl, "https://blob.example/1.png");
+  assert.throws(
+    () =>
+      assertRunReadyCreative(
+        [
+          { hook: "Hero line", imageUrl: null },
+          { hook: "In use", imageUrl: null },
+          { hook: "Close", imageUrl: null },
+        ],
+        "meta",
+      ),
+    /Generation failed/,
+  );
 });
 
 test("all three generated plates are uploadable Meta/TikTok/Google PNGs", async () => {
@@ -108,7 +122,7 @@ test("generate always opens three stills jobs; a miss is failed not a cream kit"
 
 test("publish wires adsForPlatform and never assigns ADS_MODE", () => {
   const publish = readFileSync(join(here, "publish.ts"), "utf8");
-  assert.match(publish, /adsForPlatform\(adsWithImages, platform\)/);
+  assert.match(publish, /assertRunReadyCreative\(adsWithImages, platform\)/);
   assert.equal(/process\.env\.ADS_MODE\s*=/.test(publish), false);
   const pipeline = readFileSync(join(here, "imagePipeline.ts"), "utf8");
   assert.match(pipeline, /compositeAdImage/);

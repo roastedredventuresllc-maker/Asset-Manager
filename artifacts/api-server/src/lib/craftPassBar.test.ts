@@ -4,7 +4,11 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateImageBuffer } from "./imagePipeline.js";
-import { assertChannelReadyPng } from "./channelCreative.js";
+import {
+  assertAllSlotsAreChannelCreatives,
+  assertChannelReadyPng,
+  preferredSlotIndex,
+} from "./channelCreative.js";
 import { slotForIndex } from "./craft.js";
 import { ImageGenerationFailed } from "./craft.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
@@ -108,6 +112,34 @@ test("6. Fail-closed if a still misses", async () => {
   assert.match(pipeline, /imageUrl: null/);
   assert.match(board, /Generation failed/);
   assert.match(home, /assetsFailed/);
+});
+
+test("creatives are paid-social run-ready plates, not table-only prints", async () => {
+  assertAllSlotsAreChannelCreatives();
+  assert.equal(slotForIndex(0).format, "1080x1350");
+  assert.equal(slotForIndex(1).format, "1080x1920");
+  assert.equal(slotForIndex(2).format, "1080x1350");
+  assert.equal(preferredSlotIndex("tiktok"), 1);
+  assert.equal(preferredSlotIndex("meta"), 0);
+  assert.equal(preferredSlotIndex("google"), 0);
+  const publish = readFileSync(resolve(here, "publish.ts"), "utf8");
+  assert.match(publish, /assertRunReadyCreative\(adsWithImages, platform\)/);
+  const { default: sharp } = await import("sharp");
+  const raw = Buffer.alloc(64 * 80 * 3);
+  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 256;
+  const photo = await sharp(raw, { raw: { width: 64, height: 80, channels: 3 } })
+    .png()
+    .toBuffer();
+  for (const idx of [0, 1, 2] as const) {
+    const { buffer } = await generateImageBuffer(
+      { ...job, idx, adAssetId: `ast_run_${idx}` },
+      {
+        generateWithImagine: async () => photo,
+        generateWithGptImage2: async () => null,
+      },
+    );
+    await assertChannelReadyPng(buffer, slotForIndex(idx), job.ad.hook);
+  }
 });
 
 test("out of scope stays locked: ADS_MODE mock, no iframe, no mute-plate /p/ hero work", () => {

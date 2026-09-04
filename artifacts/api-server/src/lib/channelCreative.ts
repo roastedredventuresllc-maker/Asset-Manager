@@ -67,6 +67,21 @@ export function adsForPlatform<T extends CampaignAd>(
   return [head, ...ads.filter((_, i) => i !== preferred)];
 }
 
+/** Run-ready publish: the plate for this channel must exist. A miss is not an ad. */
+export function assertRunReadyCreative<T extends CampaignAd>(
+  ads: T[],
+  platform: PaidSocialPlatform,
+): T[] {
+  const ordered = adsForPlatform(ads, platform);
+  const plate = ordered[0];
+  if (!plate?.imageUrl) {
+    throw new Error(
+      "Generation failed. Photography did not come back. Not publishing a plate-less ad.",
+    );
+  }
+  return ordered;
+}
+
 export async function assertChannelReadyPng(
   buffer: Buffer,
   slot: AdSlot,
