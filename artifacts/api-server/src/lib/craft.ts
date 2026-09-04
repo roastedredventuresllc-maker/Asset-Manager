@@ -46,7 +46,7 @@ export const AD_SLOTS: readonly AdSlot[] = [
     format: "1080x1920",
     label: "Ad 2 — context (Reels / Stories / TikTok, 9:16)",
     direction:
-      "Context shot: a FULL-BLEED 9:16 photograph of the SAME open SKU as the hero, in a real kitchen. The photograph fills every edge — no cream side panel, no blank column, no letterbox, no picture-in-picture, no split layout. Same silhouette as the hero: D-handle and spout if the hero has them, open top (no lid). A mug prop is OK. Do not invent a gooseneck kettle or a second vessel. Same light family and color temperature as Ad 1. Product 40–60% of frame, below the TOP 28% type band and inside the outer 12% gutters. Do not paint a blank panel for chrome.",
+      "Context shot: a FULL-BLEED 9:16 photograph of the SAME open SKU as the hero, in a real kitchen. The kitchen photograph fills the plate from under the type band to the bottom edge and both side edges — not a square inset, not cream bars above or below, no cream side panel, no letterbox, no picture-in-picture, no split layout. Same silhouette as the hero: D-handle and spout if the hero has them, OPEN TOP (no lid, no hinged cover). A mug prop is OK. Do not invent a gooseneck kettle or any second vessel. Same light family and color temperature as Ad 1. Product 40–60% of frame, entirely below the TOP 28% type band.",
   },
   {
     idx: 2,
@@ -99,7 +99,7 @@ HARD NOS — if you would violate any of these, refuse the image rather than gue
 - Leave designed empty negative space in the TOP of the frame (about the top third) with no product, no busy texture, no faces. That band is for type we add ourselves. Never place the product in that top band.
 - Paid-social safe zone: keep the product inside the frame, out of the top type band and out of the outer 12% gutters. A plate that would crop the product off the 4:5 or 9:16 safe zone is refuse.
 - THREE STILLS, ONE SKU. Do not drop a handle, add a handle, change the spout, shift the clay color, or invent a different vessel. Tight crop is a closer photograph of the hero object — crop through the body; spout, rim, and handle bite if the hero has a handle. A handle-less pitcher when the hero has a handle is refuse. A second full-body hero pack-shot in the tight-crop slot is refuse.
-- Context / in-use is a FULL-BLEED photograph of the entire 9:16 plate. No cream side panel, no blank column, no letterbox, no split layout. The kitchen continues to every edge.
+- Context / in-use is a FULL-BLEED photograph of the entire 9:16 plate. No cream side panel, no blank column, no letterbox, no square inset, no split layout. The kitchen continues to every edge, including the bottom. A square photo sitting in cream on a 9:16 plate is refuse.
 - If the hero SKU is open-top, do not add a lid. Do not invent a gooseneck kettle or a second vessel as the product. A mug as a small prop is OK.
 `.trim();
 
@@ -122,7 +122,7 @@ export function buildCraftPrompt(opts: {
     slot.role === "hero"
       ? "HERO: single product, centered-low, grounded, iconic. This still defines the SKU for the other two."
       : slot.role === "context"
-        ? "CONTEXT: FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. Photograph fills the plate. No cream side panel, no letterbox. Open top — no lid. No gooseneck kettle. Mug prop OK. Same campaign light."
+        ? "CONTEXT: FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. The photograph fills the plate edge to edge — not a square inset in cream. No cream side panel, no letterbox. Open top — no lid. No gooseneck kettle. Mug prop OK. Same campaign light."
         : "TIGHT CROP: the SAME SKU as the hero, closer, tactile. Crop through the body — lose the base. Spout, rim, and any handle stay in the lower frame. Same clay color as the hero. Never a handle-less pitcher. Never a second hero pack-shot. Same campaign light.";
 
   const skuClause = skuLock
@@ -608,6 +608,55 @@ export async function rejectIfSplitPanel(buffer: Buffer): Promise<void> {
   }
   if (deadRun / w >= 0.26 && liveN > w * 0.2 && liveG / liveN >= 7) {
     throw new CraftReject("split_panel");
+  }
+
+  const rowStd = new Float32Array(h);
+  const rowMean = new Float32Array(h);
+  const rowGrad = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    let sum = 0;
+    let sum2 = 0;
+    let gsum = 0;
+    let n = 0;
+    for (let x = 0; x < w; x++) {
+      const L = lumaAt(x, y);
+      sum += L;
+      sum2 += L * L;
+      n++;
+      if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
+        gsum += Math.hypot(lumaAt(x + 1, y) - lumaAt(x - 1, y), lumaAt(x, y + 1) - lumaAt(x, y - 1));
+      }
+    }
+    const mean = sum / Math.max(n, 1);
+    rowMean[y] = mean;
+    rowStd[y] = Math.sqrt(Math.max(0, sum2 / Math.max(n, 1) - mean * mean));
+    rowGrad[y] = gsum / Math.max(n, 1);
+  }
+  const rowDead = (y: number) =>
+    rowMean[y]! > 150 && rowStd[y]! < 8 && rowGrad[y]! < 4.5;
+  let bottomRun = 0;
+  while (bottomRun < h && rowDead(h - 1 - bottomRun)) bottomRun++;
+  let liveStart = -1;
+  let liveEnd = -1;
+  let runS = -1;
+  for (let y = 0; y < h; y++) {
+    const live = !rowDead(y) && (rowStd[y]! > 10 || rowGrad[y]! > 6);
+    if (live && runS < 0) runS = y;
+    if (!live && runS >= 0) {
+      if (liveEnd - liveStart < y - runS) {
+        liveStart = runS;
+        liveEnd = y;
+      }
+      runS = -1;
+    }
+  }
+  if (runS >= 0 && liveEnd - liveStart < h - runS) {
+    liveStart = runS;
+    liveEnd = h;
+  }
+  const liveFrac = liveStart >= 0 ? (liveEnd - liveStart) / h : 0;
+  if (liveFrac >= 0.36 && liveFrac <= 0.62 && bottomRun / h >= 0.12) {
+    throw new CraftReject("letterbox");
   }
 }
 

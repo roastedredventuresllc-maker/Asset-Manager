@@ -173,6 +173,7 @@ test("kill list never ships: baked type, wrong crop, wet sheen, empty or letterm
   assert.match(craft, /await rejectIfUnsafeSafeZone/);
   assert.match(craft, /rejectIfSplitPanel/);
   assert.match(craft, /split_panel/);
+  assert.match(craft, /letterbox/);
 
   const { default: sharp } = await import("sharp");
   const baked = await sharp(
@@ -233,5 +234,14 @@ test("kill list never ships: baked type, wrong crop, wet sheen, empty or letterm
   await assert.rejects(
     () => assertCraftPlate(split),
     (err: unknown) => err instanceof CraftReject && /split_panel/.test((err as Error).message),
+  );
+  const letterbox = await renderMutePlate({ kind: "letterbox", width: 160, height: 280 });
+  await assert.rejects(
+    () => rejectIfSplitPanel(letterbox),
+    (err: unknown) => err instanceof CraftReject && /letterbox/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => assertCraftPlate(letterbox),
+    (err: unknown) => err instanceof CraftReject && /letterbox/.test((err as Error).message),
   );
 });

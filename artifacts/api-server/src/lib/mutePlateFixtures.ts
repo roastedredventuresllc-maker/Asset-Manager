@@ -9,7 +9,8 @@ export type MutePlateKind =
   | "wet_sheen"
   | "flat_well"
   | "pale_linen"
-  | "split_panel";
+  | "split_panel"
+  | "letterbox";
 
 type Ground = "dark" | "linen";
 
@@ -151,12 +152,28 @@ export async function renderMutePlate(opts: {
       bodyBot: height * 0.84,
       bodyRx: width * 0.14,
     };
+  } else if (kind === "letterbox") {
+    bottle = {
+      cx: width * 0.5,
+      bodyTop: height * 0.42,
+      bodyBot: height * 0.72,
+      bodyRx: width * 0.18,
+    };
   }
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 3;
       if (kind === "split_panel" && x >= Math.round(width * 0.58)) {
+        raw[i] = 236;
+        raw[i + 1] = 228;
+        raw[i + 2] = 214;
+        continue;
+      }
+      if (
+        kind === "letterbox" &&
+        (y < Math.round(height * 0.3) || y >= Math.round(height * 0.8))
+      ) {
         raw[i] = 236;
         raw[i + 1] = 228;
         raw[i + 2] = 214;

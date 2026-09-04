@@ -84,6 +84,7 @@ test("context direction forces full-bleed 9:16 of the same open SKU", () => {
   assert.match(context.direction, /FULL-BLEED/i);
   assert.match(context.direction, /no cream side panel/i);
   assert.match(context.direction, /no letterbox/i);
+  assert.match(context.direction, /not a square inset/i);
   assert.match(context.direction, /open top/i);
   assert.match(context.direction, /no lid/i);
   assert.match(context.direction, /gooseneck kettle/i);
