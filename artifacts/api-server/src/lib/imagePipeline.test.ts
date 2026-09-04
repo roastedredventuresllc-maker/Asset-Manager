@@ -242,6 +242,33 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
   await assertCraftPlate(paleLinen);
 });
 
+test("in-use still prompt is full-bleed of the hero SKU", async () => {
+  const photo = await legalPlate();
+  let seen = "";
+  const heroSku =
+    "open-top handled matte carafe with a D-shaped handle and integrated pouring spout, no lid";
+  await generateImageBuffer(
+    {
+      ...job,
+      idx: 1,
+      adAssetId: "ast_sku_context",
+      skuLock: heroSku,
+      ad: { ...job.ad, imagePrompt: "carafe on a kitchen counter" },
+    },
+    {
+      generateWithImagine: async (prompt) => {
+        seen = prompt;
+        return photo;
+      },
+      generateWithGptImage2: async () => null,
+    },
+  );
+  assert.match(seen, /FULL-BLEED 9:16/i);
+  assert.match(seen, /No cream side panel/i);
+  assert.match(seen, /No gooseneck kettle/i);
+  assert.match(seen, /open-top handled matte carafe/);
+});
+
 test("close still prompt carries the hero SKU lock", async () => {
   const photo = await legalPlate();
   let seen = "";

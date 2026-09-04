@@ -16,6 +16,7 @@ import {
   rejectIfBakedType,
   rejectIfCheapGrade,
   rejectIfUnsafeSafeZone,
+  rejectIfSplitPanel,
   assertCraftPlate,
 } from "./craft.js";
 import { renderLegalMutePlate, renderMutePlate } from "./mutePlateFixtures.js";
@@ -146,6 +147,8 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(craft, /Never invent a handle-less pitcher/);
   assert.match(craft, /handle bite is required if the hero has a handle/);
   assert.match(craft, /THREE STILLS, ONE SKU/);
+  assert.match(craft, /FULL-BLEED photograph of the entire 9:16 plate/);
+  assert.match(craft, /gooseneck kettle/);
   assert.match(pipeline, /skuLock: job\.skuLock/);
   const skuLocks = service.match(/skuLock:/g);
   assert.ok(skuLocks && skuLocks.length >= 3, "generate, render-stills, and revise must pass skuLock");
@@ -168,6 +171,8 @@ test("kill list never ships: baked type, wrong crop, wet sheen, empty or letterm
   assert.match(craft, /product_in_type_band/);
   assert.match(craft, /product_off_safe_zone/);
   assert.match(craft, /await rejectIfUnsafeSafeZone/);
+  assert.match(craft, /rejectIfSplitPanel/);
+  assert.match(craft, /split_panel/);
 
   const { default: sharp } = await import("sharp");
   const baked = await sharp(
@@ -219,5 +224,14 @@ test("kill list never ships: baked type, wrong crop, wet sheen, empty or letterm
   await assert.rejects(
     () => rejectIfUnsafeSafeZone(flatWell),
     (err: unknown) => err instanceof CraftReject && /empty_frame/.test((err as Error).message),
+  );
+  const split = await renderMutePlate({ kind: "split_panel", width: 160, height: 280 });
+  await assert.rejects(
+    () => rejectIfSplitPanel(split),
+    (err: unknown) => err instanceof CraftReject && /split_panel/.test((err as Error).message),
+  );
+  await assert.rejects(
+    () => assertCraftPlate(split),
+    (err: unknown) => err instanceof CraftReject && /split_panel/.test((err as Error).message),
   );
 });

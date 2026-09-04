@@ -8,7 +8,8 @@ export type MutePlateKind =
   | "off_safe"
   | "wet_sheen"
   | "flat_well"
-  | "pale_linen";
+  | "pale_linen"
+  | "split_panel";
 
 type Ground = "dark" | "linen";
 
@@ -143,11 +144,24 @@ export async function renderMutePlate(opts: {
       y0: Math.round(height * 0.48),
       y1: Math.round(height * 0.86),
     };
+  } else if (kind === "split_panel") {
+    bottle = {
+      cx: width * 0.32,
+      bodyTop: height * 0.5,
+      bodyBot: height * 0.84,
+      bodyRx: width * 0.14,
+    };
   }
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 3;
+      if (kind === "split_panel" && x >= Math.round(width * 0.58)) {
+        raw[i] = 236;
+        raw[i + 1] = 228;
+        raw[i + 2] = 214;
+        continue;
+      }
       paintGround(x, y, i);
       if (
         bottle &&

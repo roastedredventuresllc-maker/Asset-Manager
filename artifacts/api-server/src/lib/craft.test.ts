@@ -79,6 +79,17 @@ test("skuLockFromAds is the hero imagePrompt — Close inherits that SKU", () =>
   assert.equal(skuLockFromAds([null, { imagePrompt: "cousin" }]), "");
 });
 
+test("context direction forces full-bleed 9:16 of the same open SKU", () => {
+  const context = slotForIndex(1);
+  assert.match(context.direction, /FULL-BLEED/i);
+  assert.match(context.direction, /no cream side panel/i);
+  assert.match(context.direction, /no letterbox/i);
+  assert.match(context.direction, /open top/i);
+  assert.match(context.direction, /no lid/i);
+  assert.match(context.direction, /gooseneck kettle/i);
+  assert.doesNotMatch(context.direction, /lower-right clear/i);
+});
+
 test("tight crop direction forces the same handled SKU, never a handle-less pitcher", () => {
   const close = slotForIndex(2);
   assert.match(close.direction, /SAME SKU/i);
@@ -111,6 +122,24 @@ test("buildCraftPrompt injects hero SKU lock into the close still", () => {
   assert.match(prompt, /THREE STILLS, ONE SKU/);
   assert.match(prompt, /handle-less pitcher when the hero has a handle is refuse/i);
   assert.match(prompt, /second full-body hero pack-shot in the tight-crop slot is refuse/i);
+});
+
+test("buildCraftPrompt locks in-use as full-bleed of the hero SKU", () => {
+  const heroSku =
+    "Hero pack-shot of an open-top handled matte carafe, D-shaped handle, integrated spout, no lid";
+  const prompt = buildCraftPrompt({
+    ad: { ...ad, imagePrompt: "carafe on a kitchen counter" },
+    slot: slotForIndex(1),
+    brandName: "STILLPOUR",
+    hasProductPhoto: false,
+    skuLock: heroSku,
+  });
+  assert.match(prompt, /FULL-BLEED 9:16/i);
+  assert.match(prompt, /No cream side panel/i);
+  assert.match(prompt, /no lid/i);
+  assert.match(prompt, /No gooseneck kettle/i);
+  assert.match(prompt, /D-shaped handle/);
+  assert.match(prompt, /SKU LOCK from the hero still/i);
 });
 
 test("SVG markup is kill-on-sight", () => {

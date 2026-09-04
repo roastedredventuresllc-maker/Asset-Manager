@@ -80,6 +80,8 @@ test("generate writes a campaign from the founder prompt via Grok (mocked)", asy
       assert.match(system, /ONE SKU/);
       assert.match(system, /Do not drop a handle/);
       assert.match(system, /handle-less pitcher/);
+      assert.match(system, /FULL-BLEED kitchen photograph/);
+      assert.match(system, /gooseneck kettle/);
       assert.match(system, /closer crop through the body/);
       assert.match(system, /Do not write a second hero pack-shot/);
       assert.doesNotMatch(system, /claude-sonnet/);
@@ -123,6 +125,8 @@ test("revise applies the founder's request and reports visualChanged", async () 
       assert.match(user, /Fold & Pour/);
       assert.match(system, /ONE campaign/);
       assert.match(system, /Tight crop keeps the hero silhouette/);
+      assert.match(system, /full-bleed 9:16/);
+      assert.match(system, /gooseneck kettle/);
       return JSON.stringify(updated);
     },
   });
