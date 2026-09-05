@@ -115,6 +115,13 @@ test("Imagine never receives 4:5 — hero/tight map to 3:4", () => {
   assert.match(xaiImage, /toImagineAspect/);
   assert.match(xaiImage, /aspect_ratio: aspect/);
   assert.doesNotMatch(xaiImage, /aspect_ratio:\s*["']4:5["']/);
+  const editFn = xaiImage.slice(
+    xaiImage.indexOf("export async function editImagineImage"),
+  );
+  assert.match(editFn, /application\/json/);
+  assert.match(editFn, /images\/edits/);
+  assert.doesNotMatch(editFn, /client\.images\.edit/);
+  assert.doesNotMatch(editFn, /toFile/);
 });
 
 test("photoreal stub composites 4:5 without shipping a gradient", async () => {
