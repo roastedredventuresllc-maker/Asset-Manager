@@ -180,7 +180,7 @@ export async function generateImageBuffer(
   let productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
   if (!productPng && job.idx > 0) {
     const mute = await getAsset(`ad-images/${job.campaignId}/0.mute.png`);
-    if (mute?.buffer) productPng = mute.buffer;
+    if (mute?.buffer) productPng = await reencodeToPng(mute.buffer);
     if (!productPng) {
       productPng = await fetchProductImage(
         publicAssetUrl(`ad-images/${job.campaignId}/0.mute.png`),

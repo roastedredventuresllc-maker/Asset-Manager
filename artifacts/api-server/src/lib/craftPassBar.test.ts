@@ -155,6 +155,7 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(pipeline, /0\.mute\.png/);
   assert.match(pipeline, /lockToMute/);
   assert.match(pipeline, /Hero mute missing/);
+  assert.match(pipeline, /reencodeToPng\(mute\.buffer\)/);
   assert.match(pipeline, /publicAssetUrl\(`ad-images\/\$\{job\.campaignId\}\/0\.mute\.png`\)/);
   const worker = readFileSync(resolve(here, "worker.ts"), "utf8");
   assert.match(worker, /Holding In-use\/Close until hero mute exists/);

@@ -314,6 +314,34 @@ test("in-use still prompt is full-bleed of the hero SKU", async () => {
   assert.match(seen, /kitchen continues to the bottom edge/i);
 });
 
+test("in-use reencodes JPEG hero mute to PNG before Imagine edit", async () => {
+  const { default: sharp } = await import("sharp");
+  const jpeg = await sharp(await legalPlate()).jpeg().toBuffer();
+  assert.equal(jpeg[0], 0xff);
+  const campaignId = "cmp_jpeg_mute";
+  await seedHeroMute(campaignId, jpeg);
+  const kitchen = await renderMutePlate({
+    kind: "kitchen_window",
+    width: 160,
+    height: 280,
+  });
+  let seen: Buffer | undefined;
+  const { model } = await generateImageBuffer(
+    { ...job, campaignId, idx: 1, adAssetId: "ast_jpeg_mute" },
+    {
+      generateWithImagine: async (_prompt, _slot, productPng) => {
+        seen = productPng;
+        return kitchen;
+      },
+      generateWithGptImage2: async () => null,
+    },
+  );
+  assert.equal(model, `${GROK_IMAGINE_MODEL}-edit`);
+  assert.ok(seen);
+  assert.equal(seen[0], 0x89);
+  assert.equal(seen[1], 0x50);
+});
+
 test("in-use without hero mute fails closed instead of inventing a lid", async () => {
   await assert.rejects(
     () =>
