@@ -152,6 +152,8 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(pipeline, /skuLock: job\.skuLock/);
   assert.match(pipeline, /fillBleedContextPlate/);
   assert.match(pipeline, /0\.mute\.png/);
+  assert.match(pipeline, /lockToMute/);
+  assert.match(pipeline, /publicAssetUrl\(`ad-images\/\$\{job\.campaignId\}\/0\.mute\.png`\)/);
   assert.match(pipeline, /assertCraftPlate\(plate, slot\)/);
   assert.match(craft, /wellSkuStats/);
   assert.match(craft, /slot\?\.role === "context"/);

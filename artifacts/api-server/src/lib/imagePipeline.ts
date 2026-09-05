@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
 import { getAsset, uploadBuffer } from "./storage.js";
 import { compositeAdImage } from "./imageComposite.js";
 import { reencodeToPng } from "./imageMime.js";
-import { resolveFetchableUrl } from "./assetUrl.js";
+import { publicAssetUrl, resolveFetchableUrl } from "./assetUrl.js";
 import {
   buildCraftPrompt,
   assertCraftPlate,
@@ -181,9 +181,17 @@ export async function generateImageBuffer(
   if (!productPng && job.idx > 0) {
     const mute = await getAsset(`ad-images/${job.campaignId}/0.mute.png`);
     if (mute?.buffer) productPng = mute.buffer;
+    if (!productPng) {
+      productPng = await fetchProductImage(
+        publicAssetUrl(`ad-images/${job.campaignId}/0.mute.png`),
+      );
+    }
   }
   const hasProductPhoto = !!productPng;
   const founderPng = hasProductPhoto ? productPng : undefined;
+  // In-use / Close must edit the hero mute. An unreferenced generate invents
+  // a lid or a kettle cousin. Fail closed if mute-edit misses.
+  const lockToMute = Boolean(founderPng) && job.idx > 0;
 
   const prompt = buildCraftPrompt({
     ad: job.ad,
@@ -200,7 +208,7 @@ export async function generateImageBuffer(
     slot,
   );
   if (imagine.raw && founderPng) imagineUsedRef = true;
-  if (!imagine.raw && founderPng) {
+  if (!imagine.raw && founderPng && !lockToMute) {
     imagine = await acceptOrNull(
       await generators.generateWithImagine(prompt, slot, undefined),
       GROK_IMAGINE_MODEL,
@@ -223,7 +231,7 @@ export async function generateImageBuffer(
       GPT_IMAGE_FALLBACK_MODEL,
       slot,
     );
-    if (!gpt.raw && founderPng) {
+    if (!gpt.raw && founderPng && !lockToMute) {
       gpt = await acceptOrNull(
         await generators.generateWithGptImage2(prompt, slot, undefined),
         GPT_IMAGE_FALLBACK_MODEL,

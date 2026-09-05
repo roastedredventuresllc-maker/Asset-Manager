@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { generateImageBuffer, imagineAspect } from "./imagePipeline.js";
@@ -303,9 +303,89 @@ test("in-use still prompt is full-bleed of the hero SKU", async () => {
   assert.match(seen, /FULL-BLEED 9:16/i);
   assert.match(seen, /No cream side panel/i);
   assert.match(seen, /No gooseneck kettle/i);
+  assert.match(seen, /OPEN TOP/i);
+  assert.match(seen, /no cover, no cap/i);
+  assert.match(seen, /FORBIDDEN/i);
   assert.match(seen, /open-top handled matte carafe/);
   assert.doesNotMatch(seen, /bottom fifth kept clear/i);
   assert.match(seen, /kitchen continues to the bottom edge/i);
+});
+
+test("in-use with hero mute never generates an unreferenced cousin", async () => {
+  const mute = await legalPlate();
+  const kitchen = await renderMutePlate({
+    kind: "kitchen_window",
+    width: 160,
+    height: 280,
+  });
+  const campaignId = "cmp_mute_lock";
+  const muteDir = join("/tmp/launchpad-assets/ad-images", campaignId);
+  mkdirSync(muteDir, { recursive: true });
+  writeFileSync(join(muteDir, "0.mute.png"), mute);
+  const pngFlags: boolean[] = [];
+  try {
+    const { model } = await generateImageBuffer(
+      { ...job, campaignId, idx: 1, adAssetId: "ast_mute_lock" },
+      {
+        generateWithImagine: async (_prompt, _slot, productPng) => {
+          pngFlags.push(Boolean(productPng));
+          return null;
+        },
+        generateWithGptImage2: async (_prompt, _slot, productPng) => {
+          pngFlags.push(Boolean(productPng));
+          return kitchen;
+        },
+      },
+    );
+    assert.equal(model, `${GPT_IMAGE_FALLBACK_MODEL}-edit`);
+    assert.ok(pngFlags.length >= 2);
+    assert.ok(
+      pngFlags.every((flag) => flag === true),
+      "In-use Imagine/gpt calls must all receive the hero mute PNG",
+    );
+  } finally {
+    rmSync(join(muteDir, "0.mute.png"), { force: true });
+  }
+});
+
+test("in-use mute-edit miss fails closed instead of inventing a lid", async () => {
+  const mute = await legalPlate();
+  const kitchen = await renderMutePlate({
+    kind: "kitchen_window",
+    width: 160,
+    height: 280,
+  });
+  const campaignId = "cmp_mute_fail_closed";
+  const muteDir = join("/tmp/launchpad-assets/ad-images", campaignId);
+  mkdirSync(muteDir, { recursive: true });
+  writeFileSync(join(muteDir, "0.mute.png"), mute);
+  const pngFlags: boolean[] = [];
+  try {
+    await assert.rejects(
+      () =>
+        generateImageBuffer(
+          { ...job, campaignId, idx: 1, adAssetId: "ast_mute_fail_closed" },
+          {
+            generateWithImagine: async (_prompt, _slot, productPng) => {
+              pngFlags.push(Boolean(productPng));
+              return productPng ? null : kitchen;
+            },
+            generateWithGptImage2: async (_prompt, _slot, productPng) => {
+              pngFlags.push(Boolean(productPng));
+              return productPng ? null : kitchen;
+            },
+          },
+        ),
+      (err: unknown) => err instanceof ImageGenerationFailed,
+    );
+    assert.ok(pngFlags.length >= 2);
+    assert.ok(
+      pngFlags.every((flag) => flag === true),
+      "must not fall back to generate without the hero mute",
+    );
+  } finally {
+    rmSync(join(muteDir, "0.mute.png"), { force: true });
+  }
 });
 
 test("close still prompt carries the hero SKU lock", async () => {

@@ -93,6 +93,8 @@ test("context direction forces full-bleed 9:16 of the same open SKU", () => {
   assert.match(context.direction, /not a square inset/i);
   assert.match(context.direction, /open top/i);
   assert.match(context.direction, /no lid/i);
+  assert.match(context.direction, /FORBIDDEN/i);
+  assert.match(context.direction, /cover, cap/i);
   assert.match(context.direction, /gooseneck kettle/i);
   assert.doesNotMatch(context.direction, /lower-right clear/i);
   assert.match(context.direction, /no blank bottom fifth/i);
@@ -145,6 +147,8 @@ test("buildCraftPrompt locks in-use as full-bleed of the hero SKU", () => {
   assert.match(prompt, /FULL-BLEED 9:16/i);
   assert.match(prompt, /No cream side panel/i);
   assert.match(prompt, /no lid/i);
+  assert.match(prompt, /no cover, no cap/i);
+  assert.match(prompt, /FORBIDDEN/i);
   assert.match(prompt, /No gooseneck kettle/i);
   assert.match(prompt, /D-shaped handle/);
   assert.match(prompt, /SKU LOCK from the hero still/i);

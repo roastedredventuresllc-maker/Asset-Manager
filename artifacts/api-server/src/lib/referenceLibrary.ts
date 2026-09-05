@@ -260,7 +260,7 @@ export const AD_SLOT_CONTRACTS: AdSlotContract[] = [
     label: "Ad 2 — context (9:16)",
     placement: "vertical",
     direction:
-      "FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. Photograph fills every edge — no cream side panel, no letterbox, no blank bottom fifth. Open top if the hero is open (no lid). Mug prop OK. No gooseneck kettle. Same light family as Ad 1. Product 40–60% of frame, entirely below the top 28% type band.",
+      "FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. Photograph fills every edge — no cream side panel, no letterbox, no blank bottom fifth. Open top if the hero is open — no lid, no cover, no cap. Mug prop OK. No gooseneck kettle. Same light family as Ad 1. Product 40–60% of frame, entirely below the top 28% type band.",
   },
   {
     idx: 2,

@@ -82,6 +82,7 @@ test("generate writes a campaign from the founder prompt via Grok (mocked)", asy
       assert.match(system, /handle-less pitcher/);
       assert.match(system, /FULL-BLEED kitchen photograph/);
       assert.match(system, /gooseneck kettle/);
+      assert.match(system, /no lid, no cover, no cap/);
       assert.match(system, /bottom fifth clear/);
       assert.doesNotMatch(system, /bottom ~22%/);
       assert.match(system, /closer crop through the body/);
@@ -129,6 +130,7 @@ test("revise applies the founder's request and reports visualChanged", async () 
       assert.match(system, /Tight crop keeps the hero silhouette/);
       assert.match(system, /full-bleed 9:16/);
       assert.match(system, /gooseneck kettle/);
+      assert.match(system, /no lid if the hero is open/);
       assert.match(system, /blank bottom fifth/);
       return JSON.stringify(updated);
     },
