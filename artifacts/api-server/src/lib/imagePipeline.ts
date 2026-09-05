@@ -190,7 +190,12 @@ export async function generateImageBuffer(
   const hasProductPhoto = !!productPng;
   const founderPng = hasProductPhoto ? productPng : undefined;
   // In-use / Close must edit the hero mute. An unreferenced generate invents
-  // a lid or a kettle cousin. Fail closed if mute-edit misses.
+  // a lid or a kettle cousin. Fail closed if mute is missing or mute-edit misses.
+  if (job.idx > 0 && !founderPng) {
+    throw new ImageGenerationFailed(
+      "Hero mute missing. In-use/Close must edit the open SKU — an unreferenced generate invents a lid.",
+    );
+  }
   const lockToMute = Boolean(founderPng) && job.idx > 0;
 
   const prompt = buildCraftPrompt({

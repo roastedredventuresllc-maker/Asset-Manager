@@ -261,3 +261,17 @@ export function renderLegalMutePlate(opts: {
 } = {}): Promise<Buffer> {
   return renderMutePlate({ ...opts, kind: "legal" });
 }
+
+/** Write hero mute so In-use/Close tests edit the open SKU, not invent a lid. */
+export async function seedHeroMute(
+  campaignId: string,
+  plate?: Buffer,
+): Promise<Buffer> {
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const mute = plate ?? (await renderLegalMutePlate({ width: 160, height: 200 }));
+  const dir = join("/tmp/launchpad-assets/ad-images", campaignId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "0.mute.png"), mute);
+  return mute;
+}

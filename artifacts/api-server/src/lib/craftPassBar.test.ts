@@ -19,7 +19,7 @@ import {
   rejectIfSplitPanel,
   assertCraftPlate,
 } from "./craft.js";
-import { renderLegalMutePlate, renderMutePlate } from "./mutePlateFixtures.js";
+import { renderLegalMutePlate, renderMutePlate, seedHeroMute } from "./mutePlateFixtures.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
 /**
@@ -130,6 +130,7 @@ test("creatives are paid-social run-ready plates, not table-only prints", async 
   const publish = readFileSync(resolve(here, "publish.ts"), "utf8");
   assert.match(publish, /assertRunReadyCreative\(adsWithImages, platform\)/);
   const photo = await renderLegalMutePlate({ width: 160, height: 200 });
+  await seedHeroMute(job.campaignId);
   for (const idx of [0, 1, 2] as const) {
     const { buffer } = await generateImageBuffer(
       { ...job, idx, adAssetId: `ast_run_${idx}` },
@@ -153,7 +154,10 @@ test("three stills are one SKU: close inherits the hero imagePrompt", () => {
   assert.match(pipeline, /fillBleedContextPlate/);
   assert.match(pipeline, /0\.mute\.png/);
   assert.match(pipeline, /lockToMute/);
+  assert.match(pipeline, /Hero mute missing/);
   assert.match(pipeline, /publicAssetUrl\(`ad-images\/\$\{job\.campaignId\}\/0\.mute\.png`\)/);
+  const worker = readFileSync(resolve(here, "worker.ts"), "utf8");
+  assert.match(worker, /Holding In-use\/Close until hero mute exists/);
   assert.match(pipeline, /assertCraftPlate\(plate, slot\)/);
   assert.match(craft, /wellSkuStats/);
   assert.match(craft, /slot\?\.role === "context"/);

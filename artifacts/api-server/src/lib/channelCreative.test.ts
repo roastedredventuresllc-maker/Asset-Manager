@@ -14,7 +14,7 @@ import {
 } from "./channelCreative.js";
 import { generateImageBuffer } from "./imagePipeline.js";
 import { slotForIndex } from "./craft.js";
-import { renderLegalMutePlate } from "./mutePlateFixtures.js";
+import { renderLegalMutePlate, seedHeroMute } from "./mutePlateFixtures.js";
 import type { CampaignAd } from "../ads/types.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
@@ -72,6 +72,7 @@ test("publish sends TikTok the 9:16 plate and Meta/Google the 4:5 hero", () => {
 });
 
 test("all three generated plates are uploadable Meta/TikTok/Google PNGs", async () => {
+  await seedHeroMute("cmp_channel");
   for (const idx of [0, 1, 2] as const) {
     const slot = slotForIndex(idx);
     const photo = await photograph(640, 800);

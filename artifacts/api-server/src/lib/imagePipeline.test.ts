@@ -16,7 +16,7 @@ import {
   slotForIndex,
 } from "./craft.js";
 import { toImagineAspect, IMAGINE_ASPECTS } from "@workspace/integrations-xai";
-import { renderLegalMutePlate, renderMutePlate } from "./mutePlateFixtures.js";
+import { renderLegalMutePlate, renderMutePlate, seedHeroMute } from "./mutePlateFixtures.js";
 import type { GenerateImageJob } from "./imagePipeline.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -243,6 +243,7 @@ test("kill list fails closed: type band, empty well, lettermark, off-safe crop",
 });
 
 test("in-use accepts a full-bleed kitchen with a window in the type band", async () => {
+  await seedHeroMute(job.campaignId);
   const kitchen = await renderMutePlate({ kind: "kitchen_window", width: 160, height: 280 });
   const { buffer } = await generateImageBuffer(
     { ...job, idx: 1, adAssetId: "ast_kitchen_window" },
@@ -258,6 +259,7 @@ test("in-use accepts a full-bleed kitchen with a window in the type band", async
 });
 
 test("in-use compositor fills a split cream panel before Craft", async () => {
+  await seedHeroMute(job.campaignId);
   const split = await renderMutePlate({ kind: "split_panel", width: 160, height: 280 });
   const { buffer } = await generateImageBuffer(
     { ...job, idx: 1, adAssetId: "ast_fill_bleed" },
@@ -277,6 +279,7 @@ test("in-use compositor fills a split cream panel before Craft", async () => {
 });
 
 test("in-use still prompt is full-bleed of the hero SKU", async () => {
+  await seedHeroMute(job.campaignId);
   const photo = await legalPlate();
   let seen = "";
   const heroSku =
@@ -309,6 +312,22 @@ test("in-use still prompt is full-bleed of the hero SKU", async () => {
   assert.match(seen, /open-top handled matte carafe/);
   assert.doesNotMatch(seen, /bottom fifth kept clear/i);
   assert.match(seen, /kitchen continues to the bottom edge/i);
+});
+
+test("in-use without hero mute fails closed instead of inventing a lid", async () => {
+  await assert.rejects(
+    () =>
+      generateImageBuffer(
+        { ...job, campaignId: "cmp_no_mute", idx: 1, adAssetId: "ast_no_mute" },
+        {
+          generateWithImagine: async () => renderMutePlate({ kind: "kitchen_window", width: 160, height: 280 }),
+          generateWithGptImage2: async () => null,
+        },
+      ),
+    (err: unknown) =>
+      err instanceof ImageGenerationFailed &&
+      /Hero mute missing/.test((err as Error).message),
+  );
 });
 
 test("in-use with hero mute never generates an unreferenced cousin", async () => {
@@ -389,6 +408,7 @@ test("in-use mute-edit miss fails closed instead of inventing a lid", async () =
 });
 
 test("close still prompt carries the hero SKU lock", async () => {
+  await seedHeroMute(job.campaignId);
   const photo = await legalPlate();
   let seen = "";
   const heroSku =
