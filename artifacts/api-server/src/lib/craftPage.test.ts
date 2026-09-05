@@ -29,6 +29,7 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.match(home, /\bMedia\b/);
   assert.match(home, /briefing/);
   assert.doesNotMatch(home, /<iframe/);
+  assert.doesNotMatch(home, /facebook\.com|tiktok\.com|adsmanager|InSituAd/i);
   assert.doesNotMatch(home, /The live page/);
   assert.match(home, /The page/);
   assert.doesNotMatch(home, /Writing…|Writing the campaign/);

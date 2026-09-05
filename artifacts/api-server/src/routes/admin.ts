@@ -103,6 +103,12 @@ function verifyAdminToken(token: string | undefined, secret: string): boolean {
   return Number.isFinite(exp) && exp > Date.now();
 }
 
+// GET /api/admin/status — unauthenticated. Tells the login screen whether
+// ADMIN_PASSWORD exists. Never returns the password or connector values.
+router.get("/status", (_req: Request, res: Response) => {
+  return res.json({ configured: Boolean(adminSecret()), adsMode: adsMode() });
+});
+
 // POST /api/admin/login — exchange the admin password for a short-lived token.
 router.post("/login", (req: Request, res: Response) => {
   const secret = adminSecret();

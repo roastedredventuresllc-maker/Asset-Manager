@@ -18,7 +18,11 @@ function Router() {
       <Route path="/campaigns" component={Campaigns} />
       <Route path="/docs" component={Docs} />
       <Route path="/p/:slug" component={LandingPlaceholder} />
+      <Route path="/admin/connectors" component={Admin} />
+      <Route path="/admin/clients" component={Admin} />
+      <Route path="/admin/library" component={Admin} />
       <Route path="/admin" component={Admin} />
+      <Route path="/login" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );
