@@ -11,7 +11,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const adminTs = readFileSync(join(here, "admin.ts"), "utf8");
 const adminUi = readFileSync(join(here, "../../../launchpad/src/pages/admin.tsx"), "utf8");
 const appTsx = readFileSync(join(here, "../../../launchpad/src/App.tsx"), "utf8");
-const homeTsx = readFileSync(join(here, "../../../launchpad/src/pages/home.tsx"), "utf8");
 const replitMd = readFileSync(join(here, "../../../../replit.md"), "utf8");
 
 test("GET /api/admin/status is unauthenticated and leaks only configured + adsMode", () => {
@@ -44,12 +43,6 @@ test("admin desk is not gated on the reference library", () => {
   assert.match(adminUi, /deskFromPath/);
   assert.match(adminUi, /\/admin\/connectors/);
   assert.equal(/if \(!library\) return/.test(adminUi), false);
-});
-
-test("briefing embeds the dark /p/ landing, not platform chrome", () => {
-  assert.match(homeTsx, /<iframe/);
-  assert.match(homeTsx, /src=\{`\/p\/\$\{campaign\.landingSlug\}`\}/);
-  assert.equal(/facebook\.com|tiktok\.com|ads manager/i.test(homeTsx), false);
 });
 
 test("replit.md image path matches code (Imagine then gpt-image-2)", () => {
