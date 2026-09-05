@@ -107,8 +107,9 @@ export async function typeInkStats(
 export async function assertCompositedTypeIsReadable(
   png: Buffer,
   label: string,
+  bandRatio = 0.32,
 ): Promise<TypeInkStats> {
-  const stats = await typeInkStats(png);
+  const stats = await typeInkStats(png, bandRatio);
   if (stats.hollowBoxes > 0) {
     throw new Error(
       `Tofu boxes in composite (${label}): ${stats.hollowBoxes} hollow rects. Inter did not load.`,

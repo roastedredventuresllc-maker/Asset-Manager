@@ -16,7 +16,7 @@ import { resizeImage } from "@/lib/image-upload";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CampaignBoard, beatForIndex } from "@/components/campaign-board";
+import { CampaignFamily } from "@/components/campaign-board";
 
 const POST_CHECKOUT_KEY = "launchpad_post_checkout";
 /** Hang safety only. Production copy-first generate returns 201 in ~100–160s; 55s was a false fail. */
@@ -547,55 +547,25 @@ function BriefingState({
       )}
 
       {/* Art director's table: one family, three different prints — not a card gallery. */}
-      <div className="px-6 md:px-10 max-w-[80rem]">
-        <div className="flex flex-col md:flex-row md:items-end gap-10 md:gap-8 lg:gap-12">
-          {ads[0] ? (
-            <div className="md:w-[46%] md:flex-none">
-              <CampaignBoard
-                beat={beatForIndex(0)}
-                hook={ads[0].hook ?? ""}
-                imageUrl={statusRes.adAssets?.find((a) => a.idx === 0)?.imageUrl}
-                status={statusRes.adAssets?.find((a) => a.idx === 0)?.status}
-                onOpen={
-                  assetsGenerating
-                    ? undefined
-                    : () => openBoard(`the hero board (hook: "${ads[0].hook}")`)
-                }
-              />
-            </div>
-          ) : null}
-          {ads[1] ? (
-            <div className="w-[58%] max-w-[280px] md:w-[22%] md:max-w-none md:flex-none">
-              <CampaignBoard
-                beat={beatForIndex(1)}
-                hook={ads[1].hook ?? ""}
-                imageUrl={statusRes.adAssets?.find((a) => a.idx === 1)?.imageUrl}
-                status={statusRes.adAssets?.find((a) => a.idx === 1)?.status}
-                onOpen={
-                  assetsGenerating
-                    ? undefined
-                    : () => openBoard(`the in-use board (hook: "${ads[1].hook}")`)
-                }
-              />
-            </div>
-          ) : null}
-          {ads[2] ? (
-            <div className="w-[70%] max-w-[340px] md:w-[28%] md:max-w-none md:flex-none md:mb-16">
-              <CampaignBoard
-                beat={beatForIndex(2)}
-                hook={ads[2].hook ?? ""}
-                imageUrl={statusRes.adAssets?.find((a) => a.idx === 2)?.imageUrl}
-                status={statusRes.adAssets?.find((a) => a.idx === 2)?.status}
-                onOpen={
-                  assetsGenerating
-                    ? undefined
-                    : () => openBoard(`the close board (hook: "${ads[2].hook}")`)
-                }
-              />
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <CampaignFamily
+        boards={[0, 1, 2].map((idx) => {
+          const ad = ads[idx];
+          if (!ad) return null;
+          const asset = statusRes.adAssets?.find((a) => a.idx === idx);
+          const target =
+            idx === 1
+              ? `the in-use board (hook: "${ad.hook}")`
+              : idx === 2
+                ? `the close board (hook: "${ad.hook}")`
+                : `the hero board (hook: "${ad.hook}")`;
+          return {
+            hook: ad.hook ?? "",
+            imageUrl: asset?.imageUrl,
+            status: asset?.status,
+            onOpen: assetsGenerating ? undefined : () => openBoard(target),
+          };
+        })}
+      />
 
       {landing ? (
         <div className="px-6 md:px-10 mt-20 max-w-[40rem]">

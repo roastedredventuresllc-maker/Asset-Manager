@@ -1,4 +1,3 @@
-import { toFile } from "openai";
 import { getXaiClient } from "./client";
 import { resolveImagineModel, resolveXaiAuth } from "./auth";
 
@@ -84,14 +83,35 @@ export async function editImagineImage(
   aspectRatio: string,
 ): Promise<Buffer> {
   const aspect = toImagineAspect(aspectRatio);
-  const client = getXaiClient();
-  const image = await toFile(productPng, "product.png", { type: "image/png" });
-  const response = await client.images.edit({
-    model: resolveImagineModel(),
-    image,
-    prompt,
-    response_format: "b64_json",
-    ...({ aspect_ratio: aspect } as Record<string, unknown>),
+  const auth = resolveXaiAuth();
+  if (!auth) {
+    throw new Error(
+      "Grok is not configured. On Vercel, enable AI Gateway (OIDC or AI_GATEWAY_API_KEY). Fallback: set XAI_API_KEY.",
+    );
+  }
+  // xAI / Gateway reject OpenAI images.edit multipart. JSON + data URI only.
+  const dataUri = `data:image/png;base64,${productPng.toString("base64")}`;
+  const res = await fetch(`${auth.baseURL.replace(/\/$/, "")}/images/edits`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${auth.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: resolveImagineModel(),
+      prompt,
+      n: 1,
+      response_format: "b64_json",
+      aspect_ratio: aspect,
+      image: { url: dataUri, type: "image_url" },
+    }),
   });
-  return bufferFromImageResponse(response.data);
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 240);
+    throw new Error(`Grok Imagine edit missed (${res.status}) ${detail}`.trim());
+  }
+  const json = (await res.json()) as {
+    data?: Array<{ b64_json?: string | null; url?: string | null }>;
+  };
+  return bufferFromImageResponse(json.data);
 }

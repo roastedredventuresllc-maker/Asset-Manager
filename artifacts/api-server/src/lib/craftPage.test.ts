@@ -10,6 +10,7 @@ const board = readFileSync(
   resolve(here, "../../../launchpad/src/components/campaign-board.tsx"),
   "utf8",
 );
+const app = readFileSync(resolve(here, "../../../launchpad/src/App.tsx"), "utf8");
 
 test("briefing is an art director table, not a variant gallery", () => {
   assert.doesNotMatch(home, /Variant\s*[ABC]/i);
@@ -41,6 +42,86 @@ test("briefing is an art director table, not a variant gallery", () => {
     timeoutMs >= 240_000,
     `client generate timeout ${timeoutMs}ms must not fire before a normal 100–160s copy-first 201`,
   );
+});
+
+function recordStringValues(src: string, name: string): string[] {
+  const block = src.match(new RegExp(`export const ${name}[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};`));
+  assert.ok(block, `${name} must be an exported record of string slots`);
+  return [...block[1].matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]!);
+}
+
+test("three ready prints are one family, not an identical card gallery", () => {
+  assert.match(home, /CampaignFamily/);
+  assert.match(board, /data-campaign-family/);
+  assert.match(board, /data-family-table/);
+  assert.match(board, /data-family-slot/);
+  assert.match(board, /FAMILY_CROP_CLASS\[beat\]/);
+
+  const tableClass = board.match(/export const FAMILY_TABLE_CLASS\s*=\s*"([^"]+)"/);
+  assert.ok(tableClass, "FAMILY_TABLE_CLASS must be a string literal");
+  assert.doesNotMatch(tableClass[1], /grid-cols-3/);
+  assert.match(tableClass[1], /md:grid-cols-\[/);
+  assert.match(tableClass[1], /1\.28fr/);
+  assert.match(tableClass[1], /0\.46fr/);
+  assert.match(tableClass[1], /0\.7fr/);
+
+  const slots = recordStringValues(board, "FAMILY_SLOT_CLASS");
+  assert.equal(slots.length, 3, "exactly three table slots");
+  assert.equal(new Set(slots).size, 3, "slot classes must differ — matching wrappers are a card gallery");
+  assert.match(slots[0]!, /row-span-2/);
+  assert.match(slots[1]!, /col-start-2/);
+  assert.match(slots[2]!, /row-start-2/);
+  assert.match(slots[2]!, /mt-16/);
+
+  const crops = recordStringValues(board, "FAMILY_CROP_CLASS");
+  assert.equal(crops.length, 3, "exactly three ready-plate classes");
+  for (const crop of crops) {
+    assert.match(crop, /object-cover/);
+    assert.doesNotMatch(
+      crop,
+      /scale-/,
+      "CSS scale clips Inter type-burn — the table must show the uploadable PNG",
+    );
+  }
+
+  const aspects = recordStringValues(board, "FAMILY_ASPECT_CLASS");
+  assert.equal(aspects[0], "aspect-[4/5]");
+  assert.equal(aspects[1], "aspect-[9/16]");
+  assert.equal(aspects[2], "aspect-[4/5]");
+
+  const bands = recordStringValues(board, "FAMILY_TYPE_BAND");
+  assert.equal(bands[0], "h-[32%]");
+  assert.equal(bands[1], "h-[28%]");
+  assert.equal(bands[2], "h-[32%]");
+
+  const typeSizes = recordStringValues(board, "FAMILY_TYPE_SIZE");
+  assert.equal(new Set(typeSizes).size, 3, "pending type in the crop must change size per beat");
+
+  assert.match(board, /idx === 1\) return "context"/);
+  assert.match(board, /idx === 2\) return "close"/);
+  assert.match(board, /Hero/);
+  assert.match(board, /In use/);
+  assert.match(board, /Close/);
+  assert.doesNotMatch(board, /Variant\s*[ABC]/i);
+  assert.doesNotMatch(board, /linear-gradient/);
+
+  assert.match(board, /beat === "hero" && hook && !failed/);
+  assert.match(board, /data-family-caption/);
+
+  const briefing = home.slice(
+    home.indexOf("Art director's table"),
+    home.indexOf("{landing ?"),
+  );
+  assert.ok(briefing.length > 40, "briefing table region must stay in home.tsx");
+  assert.match(briefing, /CampaignFamily/);
+  assert.doesNotMatch(briefing, /grid-cols-3/);
+  assert.doesNotMatch(briefing, /flex-row/);
+  assert.doesNotMatch(briefing, /InSituAd/);
+  assert.doesNotMatch(briefing, /<iframe/);
+
+  assert.doesNotMatch(app, /__family/);
+  assert.doesNotMatch(app, /FamilyPreview/);
+  assert.doesNotMatch(app, /family-preview/);
 });
 
 test("failed photography is not shipped as a gradient ad", () => {

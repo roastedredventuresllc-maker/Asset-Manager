@@ -1,5 +1,6 @@
 import type { CampaignAd } from "../ads/types.js";
 import { billboardLine } from "./craft.js";
+import { typeBandRatio } from "./channelCreative.js";
 import { loadSharp } from "./loadSharp.js";
 import {
   COMPOSITE_FONT_FAMILY,
@@ -55,7 +56,7 @@ export async function compositeAdImage(opts: CompositeOptions): Promise<Buffer> 
   }
 
   const line = billboardLine(ad.hook);
-  const bandH = Math.round(height * 0.32);
+  const bandH = Math.round(height * typeBandRatio(width, height));
   const hookSize = width > 1000 ? 42 : 32;
   const cx = width / 2;
   const brandY = Math.round(bandH * 0.38);

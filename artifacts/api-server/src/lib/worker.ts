@@ -1,6 +1,7 @@
 import { db, jobsTable } from "@workspace/db";
 import { eq, and, lte, desc, inArray, sql } from "drizzle-orm";
 import { processImageJob } from "./imagePipeline.js";
+import { getAsset } from "./storage.js";
 import { logger } from "./logger.js";
 import { JOB_STATUS } from "./jobStatus.js";
 
@@ -55,9 +56,60 @@ export async function processPendingJobs(
     limit,
   });
 
+  const heroJobs = pendingJobs.filter(
+    (j) => j.type === "generate_image" && (j.payload as { idx?: number }).idx === 0,
+  );
+  const restJobs = pendingJobs.filter((j) => !heroJobs.includes(j));
+  const unlockedRest: typeof restJobs = [];
+  for (const job of restJobs) {
+    if (job.type !== "generate_image") {
+      unlockedRest.push(job);
+      continue;
+    }
+    const payload = job.payload as { idx?: number; campaignId?: string };
+    const idx = payload.idx ?? 0;
+    const campaignId = payload.campaignId;
+    if (idx === 0 || !campaignId) {
+      unlockedRest.push(job);
+      continue;
+    }
+    const heroInThisDrain = heroJobs.some(
+      (h) => (h.payload as { campaignId?: string }).campaignId === campaignId,
+    );
+    if (heroInThisDrain) {
+      unlockedRest.push(job);
+      continue;
+    }
+    const mute = await getAsset(`ad-images/${campaignId}/0.mute.png`);
+    if (mute?.buffer) {
+      unlockedRest.push(job);
+    } else {
+      logger.info(
+        { campaignId, idx },
+        "Holding In-use/Close until hero mute exists",
+      );
+    }
+  }
+
+  if (heroJobs.length > 0 && unlockedRest.length > 0) {
+    const first = await runJobBatch(heroJobs);
+    const next = await runJobBatch(unlockedRest);
+    return {
+      processed: first.processed + next.processed,
+      succeeded: first.succeeded + next.succeeded,
+      failed: first.failed + next.failed,
+    };
+  }
+  if (heroJobs.length > 0) return runJobBatch(heroJobs);
+  if (unlockedRest.length > 0) return runJobBatch(unlockedRest);
+  return { processed: 0, succeeded: 0, failed: 0 };
+}
+
+async function runJobBatch(
+  pendingJobs: Array<typeof jobsTable.$inferSelect>,
+): Promise<WorkerResult> {
   // Process the batch concurrently — image generation is I/O-bound and slow
-  // (~15-20s each), so running the 3 ad images in parallel keeps the whole
-  // campaign under the latency budget instead of summing each one.
+  // (~15-20s each). Hero stills run first so In-use can lock the mute SKU.
   const results = await Promise.all(
     pendingJobs.map(async (job): Promise<"succeeded" | "failed" | "skipped"> => {
       const claimed = await db

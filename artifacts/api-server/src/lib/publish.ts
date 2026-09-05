@@ -7,6 +7,7 @@ import { generateId } from "./ids.js";
 import { logger } from "./logger.js";
 import { resolveGoogleSharePct } from "./channelSplit.js";
 import { publicOrigin } from "./assetUrl.js";
+import { assertRunReadyCreative } from "./channelCreative.js";
 import type { CampaignData } from "./claude.js";
 import type { PublicAccountTarget } from "../ads/accountTarget.js";
 
@@ -115,7 +116,7 @@ export async function publishCampaignToPlatforms(
         landingUrl,
         dailyBudgetCents: platformBudget,
         audience: cj.audience,
-        ads: adsWithImages,
+        ads: assertRunReadyCreative(adsWithImages, platform),
         targetAccount: {
           scope: target.scope,
           metaAdAccountId: target.publicTarget.metaAdAccountId,

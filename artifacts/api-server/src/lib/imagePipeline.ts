@@ -5,13 +5,14 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
-import { uploadBuffer } from "./storage.js";
+import { getAsset, uploadBuffer } from "./storage.js";
 import { compositeAdImage } from "./imageComposite.js";
 import { reencodeToPng } from "./imageMime.js";
-import { resolveFetchableUrl } from "./assetUrl.js";
+import { publicAssetUrl, resolveFetchableUrl } from "./assetUrl.js";
 import {
   buildCraftPrompt,
   assertCraftPlate,
+  fillBleedContextPlate,
   slotForIndex,
   ImageGenerationFailed,
   CraftReject,
@@ -29,6 +30,8 @@ export interface GenerateImageJob {
   brandName: string;
   productImageUrl?: string | null;
   productImageNoBgUrl?: string | null;
+  /** Hero imagePrompt — Close must photograph this SKU, not invent a cousin. */
+  skuLock?: string | null;
 }
 
 export interface ImageGenerators {
@@ -133,17 +136,33 @@ export const defaultImageGenerators: ImageGenerators = {
   generateWithGptImage2: defaultGptImage2,
 };
 
+type PlateAttempt = {
+  raw: Buffer | null;
+  reject?: string;
+};
+
 async function acceptOrNull(
   raw: Buffer | null,
   label: string,
-): Promise<Buffer | null> {
-  if (!raw) return null;
+  slot?: AdSlot,
+): Promise<PlateAttempt> {
+  if (!raw) return { raw: null };
   try {
-    await assertCraftPlate(raw);
-    return raw;
+    const plate =
+      slot?.role === "context"
+        ? await fillBleedContextPlate(raw, slot.width, slot.height)
+        : raw;
+    await assertCraftPlate(plate, slot);
+    return { raw: plate };
   } catch (err) {
-    logger.warn({ err, label }, "Craft lock rejected plate");
-    return null;
+    const reject =
+      err instanceof CraftReject
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    logger.warn({ err, label, reject }, "Craft lock rejected plate");
+    return { raw: null, reject };
   }
 }
 
@@ -155,37 +174,76 @@ async function acceptOrNull(
 export async function generateImageBuffer(
   job: GenerateImageJob,
   generators: ImageGenerators = defaultImageGenerators,
-): Promise<{ buffer: Buffer; model: string }> {
+): Promise<{ buffer: Buffer; model: string; mute: Buffer }> {
   const slot = slotForIndex(job.idx);
   const heroImageUrl = job.productImageNoBgUrl ?? job.productImageUrl;
-  const productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
+  let productPng = heroImageUrl ? await fetchProductImage(heroImageUrl) : undefined;
+  if (!productPng && job.idx > 0) {
+    const mute = await getAsset(`ad-images/${job.campaignId}/0.mute.png`);
+    if (mute?.buffer) productPng = await reencodeToPng(mute.buffer);
+    if (!productPng) {
+      productPng = await fetchProductImage(
+        publicAssetUrl(`ad-images/${job.campaignId}/0.mute.png`),
+      );
+    }
+  }
   const hasProductPhoto = !!productPng;
   const founderPng = hasProductPhoto ? productPng : undefined;
+  // In-use / Close must edit the hero mute. An unreferenced generate invents
+  // a lid or a kettle cousin. Fail closed if mute is missing or mute-edit misses.
+  if (job.idx > 0 && !founderPng) {
+    throw new ImageGenerationFailed(
+      "Hero mute missing. In-use/Close must edit the open SKU — an unreferenced generate invents a lid.",
+    );
+  }
+  const lockToMute = Boolean(founderPng) && job.idx > 0;
 
   const prompt = buildCraftPrompt({
     ad: job.ad,
     slot,
     brandName: job.brandName,
     hasProductPhoto,
+    skuLock: job.skuLock,
   });
 
-  let raw = await acceptOrNull(
+  let imagineUsedRef = false;
+  let imagine = await acceptOrNull(
     await generators.generateWithImagine(prompt, slot, founderPng),
     GROK_IMAGINE_MODEL,
+    slot,
   );
+  if (imagine.raw && founderPng) imagineUsedRef = true;
+  if (!imagine.raw && founderPng && !lockToMute) {
+    imagine = await acceptOrNull(
+      await generators.generateWithImagine(prompt, slot, undefined),
+      GROK_IMAGINE_MODEL,
+      slot,
+    );
+  }
+  let raw = imagine.raw;
   let model = raw
-    ? hasProductPhoto
+    ? imagineUsedRef
       ? `${GROK_IMAGINE_MODEL}-edit`
       : GROK_IMAGINE_MODEL
     : "";
 
+  let gpt: PlateAttempt = { raw: null };
   if (!raw) {
     // NEW plate. Founder product photo is allowed as reference.
     // The rejected Imagine buffer is not passed — not a rescue/inpaint.
-    raw = await acceptOrNull(
+    gpt = await acceptOrNull(
       await generators.generateWithGptImage2(prompt, slot, founderPng),
       GPT_IMAGE_FALLBACK_MODEL,
+      slot,
     );
+    if (!gpt.raw && founderPng && !lockToMute) {
+      gpt = await acceptOrNull(
+        await generators.generateWithGptImage2(prompt, slot, undefined),
+        GPT_IMAGE_FALLBACK_MODEL,
+        slot,
+      );
+    }
+    raw = gpt.raw;
     if (raw) {
       model = hasProductPhoto
         ? `${GPT_IMAGE_FALLBACK_MODEL}-edit`
@@ -194,8 +252,10 @@ export async function generateImageBuffer(
   }
 
   if (!raw) {
+    const imagineWhy = imagine.reject ?? "missed";
+    const gptWhy = gpt.reject ?? "missed";
     throw new ImageGenerationFailed(
-      "Generation failed. Grok Imagine and gpt-image-2 both missed or were Craft-rejected. A branded gradient is not an ad.",
+      `Generation failed. Imagine: ${imagineWhy}. gpt-image-2: ${gptWhy}. A branded gradient is not an ad.`,
     );
   }
 
@@ -207,7 +267,7 @@ export async function generateImageBuffer(
     height: slot.height,
   });
 
-  return { buffer: finalBuffer, model };
+  return { buffer: finalBuffer, model, mute: raw };
 }
 
 export async function processImageJob(
@@ -223,7 +283,14 @@ export async function processImageJob(
     .where(eq(adAssetsTable.id, job.adAssetId));
 
   try {
-    const { buffer, model } = await generateImageBuffer(job, generators);
+    const { buffer, model, mute } = await generateImageBuffer(job, generators);
+    if (job.idx === 0 && mute) {
+      await uploadBuffer(
+        `ad-images/${job.campaignId}/0.mute.png`,
+        mute,
+        "image/png",
+      );
+    }
     const key = `ad-images/${job.campaignId}/${job.idx}.png`;
     const imageUrl = await uploadBuffer(key, buffer, "image/png");
 

@@ -84,9 +84,9 @@ export const PLACEMENT_SPECS: Record<AdSurface, PlacementSpec> = {
     aspectRatio: "9:16",
     dimensions: "1080 x 1920",
     safeZone:
-      "Center the subject; leave the top ~14% and bottom ~22% clear of key elements so platform UI, captions and the CTA do not cover them.",
+      "Full-bleed 9:16. Empty TOP ~28% for composited type. Product sits entirely below that band, grounded. Kitchen photograph continues to the bottom edge and both sides — never a blank bottom fifth, never a cream side panel.",
     imageryNotes:
-      "Full-bleed, immersive, native/creator energy over studio gloss. Authentic lighting, single subject, motion-friendly composition. Designed vertical-first.",
+      "Full-bleed kitchen photograph, immersive, native/creator energy over studio gloss. Authentic lighting, single subject. Designed vertical-first. No letterbox, no split plate.",
     copyNorms:
       "Ultra-short, punchy. Hook 4–7 words readable in the first second. Body one tight line. CTA 2–3 words.",
   },
@@ -97,7 +97,7 @@ export const PLACEMENT_SPECS: Record<AdSurface, PlacementSpec> = {
     aspectRatio: "9:16",
     dimensions: "1080 x 1920",
     safeZone:
-      "Keep text and product within the central column; right ~12% and bottom ~25% hold TikTok's action rail and caption.",
+      "Product in the central column below the top ~28% type band. Kitchen fills the bottom edge — do not reserve a blank bottom bar for TikTok chrome (type is composited in the top band).",
     imageryNotes:
       "Looks like organic content, not an ad: creator-led, hand-held feel, sound-on intent, immediate payoff. Avoid corporate polish.",
     copyNorms:
@@ -260,7 +260,7 @@ export const AD_SLOT_CONTRACTS: AdSlotContract[] = [
     label: "Ad 2 — context (9:16)",
     placement: "vertical",
     direction:
-      "Context shot of the SAME product in a real environment. Same light family and color temperature as Ad 1. Product 40–60% of frame. Empty top band for type. Keep lower-right clear of the product (platform chrome).",
+      "FULL-BLEED 9:16 of the SAME open SKU in a real kitchen. Photograph fills every edge — no cream side panel, no letterbox, no blank bottom fifth. Open top if the hero is open — no lid, no cover, no cap. Mug prop OK. No gooseneck kettle. Same light family as Ad 1. Product 40–60% of frame, entirely below the top 28% type band.",
   },
   {
     idx: 2,
