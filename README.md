@@ -22,7 +22,7 @@ The product URL is the Vite app in `artifacts/launchpad`. Generate and revise ru
 | `AI_GATEWAY_API_KEY` | Preferred for copy | Vercel AI Gateway. On Vercel, OIDC (`VERCEL_OIDC_TOKEN`) is injected — enable Secure backend access with OIDC + AI Gateway so Grok (`xai/grok-4.6`) works without a pasted xAI console key. |
 | `XAI_API_KEY` | Fallback for copy | Only if Gateway is unavailable. Set in Vercel env; never commit. |
 | `PUBLIC_APP_URL` | Recommended | Production origin, e.g. `https://your-domain.vercel.app` (Stripe return + landing URLs) |
-| `ADMIN_PASSWORD` | For `/admin` | 503 on admin login without it |
+| `ADMIN_PASSWORD` | For `/admin` | Operator password. Without it, `/admin` shows “not configured” and `/api/admin/*` returns 503. Set on the **api** service, then **redeploy**. |
 | `BLOB_READ_WRITE_TOKEN` | **Yes** (production images) | Vercel Blob. Required on Vercel so generated ads persist across invocations — `/tmp` does not. Names only here; set the value in Vercel env. |
 | `CRON_SECRET` / `WORKER_SECRET` | Optional | Vercel Cron sends `Authorization: Bearer CRON_SECRET` to `/api/jobs/worker` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Payments | Webhook: `https://<deployment>/api/webhooks/stripe` |
@@ -73,7 +73,31 @@ Copy `.env.example` to `.env` in the repo root. Names only — no values in the 
 ADS_MODE=mock
 ```
 
-`ADMIN_PASSWORD` is required for `/admin`. Without it, admin login returns 503.
+`ADMIN_PASSWORD` is required for `/admin` and `/login`. Without it, the desk shows “not configured” and `/api/admin/*` returns 503.
+
+### Operator checklist (Michael — admin + connectors)
+
+Production admin is blocked only by a missing env, not by missing code. After this is set, `/admin` is a password login and Connectors accepts pasted secrets.
+
+1. Vercel → Project → Settings → Environment Variables.
+2. Add `ADMIN_PASSWORD` (strong). Attach to the **api** service, Production + Preview (and Development if you use `vercel dev`).
+3. Leave `ADS_MODE=mock`. Do not set live. Saving connectors never flips this.
+4. Redeploy Production (existing functions do not pick up a new name until redeploy).
+5. Open `https://<deployment>/admin` (same form at `/login` and `/admin/connectors`).
+6. Enter that password. Open **Connectors**. Paste house Meta / TikTok / Google values. The UI shows key **names** only; status is Connected or Not connected. Values are encrypted at rest with a key derived from `ADMIN_PASSWORD`.
+7. Optional: the same names can live in Vercel env instead of the form. Status still reflects connected/missing.
+
+House connector names (paste in Connectors or set in Vercel env — never commit values):
+
+| Platform | Required names | Optional |
+|----------|----------------|----------|
+| Meta | `META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID` (house/test **Ad Account ID**, digits only, no `act_`), `META_DEFAULT_PAGE_ID` | — |
+| TikTok | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_BC_ID`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_IDENTITY_ID` (CUSTOMIZED_USER) | — |
+| Google | `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID` | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (MCC) |
+
+Rotating `ADMIN_PASSWORD` invalidates stored (encrypted) credentials; they must be pasted again. Env-var secrets are unaffected.
+
+Client brands do **not** publish through these house IDs. After a founder ships, set per-customer Ad Account / advertiser / Customer IDs under Admin → Clients. Isolate-per-customer stays law.
 
 Local Stripe return uses `PUBLIC_APP_URL` if set, otherwise Vite (`http://127.0.0.1:5173`). If the webhook has not flipped status yet, Home still shows ReviewState (not the ship UI) while status is `publishing`.
 

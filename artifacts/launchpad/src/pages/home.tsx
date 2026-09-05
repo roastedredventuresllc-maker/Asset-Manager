@@ -618,14 +618,23 @@ function BriefingState({
             ) : null}
           </button>
           {campaign?.landingSlug ? (
-            <a
-              href={`/p/${campaign.landingSlug}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
-            >
-              The page
-            </a>
+            <>
+              <a
+                href={`/p/${campaign.landingSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-6 inline-block font-serif italic text-[14px] text-[#6e675e] hover:text-[#ede6dc]"
+              >
+                The page
+              </a>
+              <div className="mt-8 w-full max-w-[28rem] overflow-hidden bg-[#161310] h-[36rem]">
+                <iframe
+                  src={`/p/${campaign.landingSlug}`}
+                  title={`${data.brandName ?? "Campaign"} landing`}
+                  className="h-full w-full border-0 bg-[#161310]"
+                />
+              </div>
+            </>
           ) : null}
         </div>
       ) : null}

@@ -113,13 +113,24 @@ function hashHue(s: string): number {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
   return h;
 }
+
+type AdminDesk = "review" | "clients" | "connectors" | "library";
+
+function deskFromPath(path: string): AdminDesk {
+  if (path.startsWith("/admin/connectors")) return "connectors";
+  if (path.startsWith("/admin/clients")) return "clients";
+  if (path.startsWith("/admin/library")) return "library";
+  return "review";
+}
+
 export default function Admin() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [library, setLibrary] = useState<Library | null>(null);
   const [phase, setPhase] = useState<"login" | "loading" | "ready" | "unconfigured">(
     token ? "loading" : "login",
   );
+  const desk = deskFromPath(location);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -208,13 +219,30 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    if (!token) {
-      setPhase("login");
-      return;
-    }
+    if (token) return;
     let cancelled = false;
     setPhase("loading");
-    fetch("/api/admin/reference-library", { headers: { "x-admin-token": token } })
+    fetch("/api/admin/status")
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { configured?: boolean };
+        if (cancelled) return;
+        setPhase(data.configured === false ? "unconfigured" : "login");
+      })
+      .catch(() => {
+        if (!cancelled) setPhase("login");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    setPhase("loading");
+    // Validate the token against connectors — not the reference library.
+    // A library miss must not block linking Meta / TikTok / Google.
+    fetch("/api/admin/connectors", { headers: { "x-admin-token": token } })
       .then(async (res) => {
         if (cancelled) return;
         if (res.status === 401) {
@@ -228,13 +256,13 @@ export default function Admin() {
           return;
         }
         if (!res.ok) {
-          setError("Couldn't load the library.");
+          setError("Couldn't open admin.");
           setPhase("login");
           return;
         }
-        const data = (await res.json()) as Library;
+        const data = (await res.json()) as ConnectorsResponse;
         if (!cancelled) {
-          setLibrary(data);
+          setConnectors(data);
           setPhase("ready");
         }
       })
@@ -243,6 +271,15 @@ export default function Admin() {
           setError("Network error. Try again.");
           setPhase("login");
         }
+      });
+    fetch("/api/admin/reference-library", { headers: { "x-admin-token": token } })
+      .then(async (res) => {
+        if (cancelled || !res.ok) return;
+        const data = (await res.json()) as Library;
+        if (!cancelled) setLibrary(data);
+      })
+      .catch(() => {
+        /* library is optional; connectors still work */
       });
     return () => {
       cancelled = true;
@@ -290,6 +327,7 @@ export default function Admin() {
       localStorage.setItem(TOKEN_KEY, data.token);
       setPassword("");
       setToken(data.token);
+      if (location === "/login") setLocation("/admin");
     } catch {
       setError("Network error. Try again.");
     } finally {
@@ -311,11 +349,14 @@ export default function Admin() {
         <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-6">
           <Lock className="w-5 h-5 text-muted-foreground" />
         </div>
-        <h1 className="font-serif text-4xl mb-3">Not configured</h1>
-        <p className="font-sans text-sm text-muted-foreground max-w-sm">
-          Admin access isn't set up yet. Add an{" "}
-          <code className="bg-secondary px-1 rounded text-xs">ADMIN_PASSWORD</code> secret to the
-          server, then reload this page.
+        <h1 className="font-serif text-4xl mb-3">Admin is not configured</h1>
+        <p className="font-sans text-sm text-muted-foreground max-w-md text-left">
+          Set <code className="bg-secondary px-1 rounded text-xs">ADMIN_PASSWORD</code> on the
+          Vercel <strong>api</strong> service (Production and Preview), then{" "}
+          <strong>redeploy</strong>. After that, this page is a password login. Saving Meta /
+          TikTok / Google credentials never flips{" "}
+          <code className="bg-secondary px-1 rounded text-xs">ADS_MODE</code> — leave it{" "}
+          <code className="bg-secondary px-1 rounded text-xs">mock</code>.
         </p>
         <button
           onClick={() => setLocation("/")}
@@ -327,11 +368,11 @@ export default function Admin() {
     );
   }
 
-  if (phase === "loading" && !library) {
+  if (phase === "loading") {
     return (
       <Centered>
         <span className="w-6 h-6 rounded-full border-2 border-border border-t-foreground animate-spin" />
-        <p className="mt-5 font-sans text-sm text-muted-foreground">Loading library…</p>
+        <p className="mt-5 font-sans text-sm text-muted-foreground">Opening admin…</p>
       </Centered>
     );
   }
@@ -344,11 +385,9 @@ export default function Admin() {
             <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mx-auto mb-6">
               <Lock className="w-5 h-5 text-foreground" />
             </div>
-            <h1 className="font-serif text-4xl mb-2">
-              Reference <span className="italic opacity-50">library</span>
-            </h1>
+            <h1 className="font-serif text-4xl mb-2">Admin</h1>
             <p className="font-sans text-sm text-muted-foreground">
-              Enter the admin password to continue.
+              Enter the operator password to review campaigns and link Meta, TikTok, and Google.
             </p>
           </div>
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
@@ -383,133 +422,193 @@ export default function Admin() {
     );
   }
 
-  if (!library) return <Centered>{null}</Centered>;
-
   const placementName = (s: AdSurface) =>
-    library.placements.find((p) => p.id === s)?.name ?? s;
+    library?.placements.find((p) => p.id === s)?.name ?? s;
+
+  const desks: { id: AdminDesk; href: string; label: string }[] = [
+    { id: "review", href: "/admin", label: "Review" },
+    { id: "clients", href: "/admin/clients", label: "Clients" },
+    { id: "connectors", href: "/admin/connectors", label: "Connectors" },
+    { id: "library", href: "/admin/library", label: "Library" },
+  ];
 
   return (
     <div className="min-h-[100dvh] bg-background animate-in fade-in duration-700">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border/60">
-        <div className="max-w-[1100px] mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-[1100px] mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <button
             onClick={() => setLocation("/")}
             className="font-sans font-bold text-xl tracking-tighter hover:opacity-70 transition-opacity"
           >
             LP
           </button>
-          <div className="flex items-center gap-5">
-            <span className="font-sans text-[11px] uppercase tracking-[2px] text-muted-foreground hidden sm:inline">
-              Reference Library
-            </span>
+          <nav className="flex items-center gap-3 sm:gap-5 overflow-x-auto">
+            {desks.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setLocation(d.href)}
+                className={cn(
+                  "font-sans text-[11px] uppercase tracking-[1.5px] whitespace-nowrap transition-colors",
+                  desk === d.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
             <button
               onClick={logout}
               className="inline-flex items-center gap-1.5 font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <LogOut className="w-4 h-4" /> Log out
             </button>
-          </div>
+          </nav>
         </div>
       </header>
 
       <div className="max-w-[1100px] mx-auto px-6 py-16">
-        <div className="mb-20 max-w-2xl">
-          <h1 className="font-serif text-6xl md:text-7xl leading-none mb-5">
-            The <span className="italic opacity-50">reference</span> library
-          </h1>
-          <p className="font-sans text-base text-muted-foreground leading-relaxed">
-            The curated, in-house knowledge LaunchPad draws on — best-in-class 2026 design-forward
-            paid-social ads and landing pages, distilled into patterns, platform specs and
-            principles. This is what shapes every campaign.
-          </p>
-        </div>
+        {desk === "review" && (
+          <>
+            <div className="mb-12 max-w-2xl">
+              <h1 className="font-serif text-6xl md:text-7xl leading-none mb-5">
+                Review
+              </h1>
+              <p className="font-sans text-base text-muted-foreground leading-relaxed">
+                Paid campaigns wait here. Approve after per-customer ad accounts are set. Link
+                house Meta / TikTok / Google under{" "}
+                <button
+                  type="button"
+                  onClick={() => setLocation("/admin/connectors")}
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Connectors
+                </button>
+                .
+              </p>
+            </div>
+            <CampaignsSection token={token ?? ""} />
+          </>
+        )}
 
-        <CampaignsSection token={token ?? ""} />
+        {desk === "clients" && <ClientAccountsSection token={token ?? ""} />}
 
-        <ClientAccountsSection token={token ?? ""} />
-
-        <ConnectorsSection
-          data={connectors}
-          loading={connectorsLoading}
-          error={connectorsError}
-          onRefresh={() => void refetchConnectors()}
-          token={token ?? ""}
-        />
-
-        <ReferenceExamples
-          assets={assets}
-          platforms={assetPlatforms}
-          uploading={uploading}
-          uploadError={uploadError}
-          onUpload={handleUpload}
-          onDelete={handleDelete}
-        />
-
-        <Section label="Creative strategy patterns">
-          <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] items-start">
-            {library.adArchetypes.map((ad) => (
-              <ArchetypeCard key={ad.id} ad={ad} placement={placementName(ad.surface)} />
-            ))}
+        {desk === "connectors" && (
+          <div id="connectors">
+            <div className="mb-12 max-w-2xl">
+              <h1 className="font-serif text-6xl md:text-7xl leading-none mb-5">
+                Connectors
+              </h1>
+              <p className="font-sans text-base text-muted-foreground leading-relaxed">
+                Paste house Meta, TikTok, and Google secrets. Names only in this UI. Encrypted at
+                rest. Status is connected or missing. Saving never flips ADS_MODE.
+              </p>
+            </div>
+            <ConnectorsSection
+              data={connectors}
+              loading={connectorsLoading}
+              error={connectorsError}
+              onRefresh={() => void refetchConnectors()}
+              token={token ?? ""}
+            />
           </div>
-        </Section>
+        )}
 
-        <Section label="Landing page references">
-          <div className="grid gap-x-8 gap-y-12 md:grid-cols-2 items-start">
-            {library.websiteReferences.map((site) => (
-              <WebsiteMockup key={site.id} site={site} />
-            ))}
-          </div>
-        </Section>
+        {desk === "library" && (
+          <>
+            <div className="mb-20 max-w-2xl">
+              <h1 className="font-serif text-6xl md:text-7xl leading-none mb-5">
+                The <span className="italic opacity-50">reference</span> library
+              </h1>
+              <p className="font-sans text-base text-muted-foreground leading-relaxed">
+                The curated, in-house knowledge LaunchPad draws on — best-in-class 2026
+                design-forward paid-social ads and landing pages, distilled into patterns,
+                platform specs and principles. This is what shapes every campaign.
+              </p>
+            </div>
 
-        <Section label="Placement specs">
-          <div className="grid md:grid-cols-2 gap-5">
-            {library.placements
-              .filter((p) => p.id !== "landing")
-              .map((p) => (
-                <div key={p.id} className="bg-card border border-border rounded-2xl p-6">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <h4 className="font-serif text-2xl leading-tight">{p.name}</h4>
-                    <span className="flex-shrink-0 text-[11px] font-sans bg-secondary rounded-full px-2.5 py-1 text-muted-foreground">
-                      {p.aspectRatio} · {p.dimensions}
-                    </span>
+            <ReferenceExamples
+              assets={assets}
+              platforms={assetPlatforms}
+              uploading={uploading}
+              uploadError={uploadError}
+              onUpload={handleUpload}
+              onDelete={handleDelete}
+            />
+
+            {library ? (
+              <>
+                <Section label="Creative strategy patterns">
+                  <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] items-start">
+                    {library.adArchetypes.map((ad) => (
+                      <ArchetypeCard key={ad.id} ad={ad} placement={placementName(ad.surface)} />
+                    ))}
                   </div>
-                  <p className="font-sans text-xs text-muted-foreground mb-4">{p.platforms}</p>
-                  <SpecRow label="Imagery" value={p.imageryNotes} />
-                  <SpecRow label="Copy" value={p.copyNorms} />
-                  <SpecRow label="Safe zone" value={p.safeZone} />
-                </div>
-              ))}
-          </div>
-        </Section>
+                </Section>
 
-        <Section label="Ad slot contracts">
-          <div className="flex flex-col gap-4">
-            {library.slotContracts.map((s) => (
-              <div
-                key={s.idx}
-                className="bg-card border border-border rounded-2xl p-5 flex gap-5 items-start"
-              >
-                <span className="font-serif text-3xl opacity-25 leading-none">
-                  {String(s.idx + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <h4 className="font-sans font-semibold text-sm mb-1">{s.label}</h4>
-                  <p className="font-sans text-sm text-muted-foreground leading-relaxed">
-                    {s.direction}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
+                <Section label="Landing page references">
+                  <div className="grid gap-x-8 gap-y-12 md:grid-cols-2 items-start">
+                    {library.websiteReferences.map((site) => (
+                      <WebsiteMockup key={site.id} site={site} />
+                    ))}
+                  </div>
+                </Section>
 
-        <Section label="2026 design-forward principles">
-          <PrincipleList items={library.designPrinciples} />
-        </Section>
+                <Section label="Placement specs">
+                  <div className="grid md:grid-cols-2 gap-5">
+                    {library.placements
+                      .filter((p) => p.id !== "landing")
+                      .map((p) => (
+                        <div key={p.id} className="bg-card border border-border rounded-2xl p-6">
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <h4 className="font-serif text-2xl leading-tight">{p.name}</h4>
+                            <span className="flex-shrink-0 text-[11px] font-sans bg-secondary rounded-full px-2.5 py-1 text-muted-foreground">
+                              {p.aspectRatio} · {p.dimensions}
+                            </span>
+                          </div>
+                          <p className="font-sans text-xs text-muted-foreground mb-4">{p.platforms}</p>
+                          <SpecRow label="Imagery" value={p.imageryNotes} />
+                          <SpecRow label="Copy" value={p.copyNorms} />
+                          <SpecRow label="Safe zone" value={p.safeZone} />
+                        </div>
+                      ))}
+                  </div>
+                </Section>
 
-        <Section label="Web design principles">
-          <PrincipleList items={library.webPrinciples} />
-        </Section>
+                <Section label="Ad slot contracts">
+                  <div className="flex flex-col gap-4">
+                    {library.slotContracts.map((s) => (
+                      <div
+                        key={s.idx}
+                        className="bg-card border border-border rounded-2xl p-5 flex gap-5 items-start"
+                      >
+                        <span className="font-serif text-3xl opacity-25 leading-none">
+                          {String(s.idx + 1).padStart(2, "0")}
+                        </span>
+                        <div>
+                          <h4 className="font-sans font-semibold text-sm mb-1">{s.label}</h4>
+                          <p className="font-sans text-sm text-muted-foreground leading-relaxed">
+                            {s.direction}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+
+                <Section label="2026 design-forward principles">
+                  <PrincipleList items={library.designPrinciples} />
+                </Section>
+
+                <Section label="Web design principles">
+                  <PrincipleList items={library.webPrinciples} />
+                </Section>
+              </>
+            ) : (
+              <p className="font-sans text-sm text-muted-foreground">
+                Library is still loading, or it failed. Connectors and review still work.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

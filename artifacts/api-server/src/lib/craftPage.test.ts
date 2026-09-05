@@ -28,7 +28,9 @@ test("briefing is an art director table, not a variant gallery", () => {
   assert.match(home, /Creative/);
   assert.match(home, /\bMedia\b/);
   assert.match(home, /briefing/);
-  assert.doesNotMatch(home, /<iframe/);
+  // Dark /p/ landing preview is the briefing iframe. Platform chrome is locked out.
+  assert.match(home, /src=\{`\/p\/\$\{campaign\.landingSlug\}`\}/);
+  assert.doesNotMatch(home, /facebook\.com|tiktok\.com|adsmanager|InSituAd/i);
   assert.doesNotMatch(home, /The live page/);
   assert.match(home, /The page/);
   assert.doesNotMatch(home, /Writing…|Writing the campaign/);

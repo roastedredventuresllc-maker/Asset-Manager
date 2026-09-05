@@ -30,12 +30,12 @@ On Vercel, `DATABASE_URL` is required (Neon pooled URL). Locally, unset `DATABAS
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM (`DATABASE_URL` required to boot)
 - AI copy: Grok via Vercel AI Gateway (`xai/grok-4.6`) or `XAI_API_KEY` fallback. Anthropic is not required.
-- Image gen: `gemini-3-pro-image-preview` then `gpt-image-1`; fail-closed (no silent SVG). Optional fal.ai for product-photo background removal only.
+- Image gen: Grok Imagine (`xai/grok-imagine-image`) then `gpt-image-2`; fail-closed (no silent SVG). Never Gemini. Optional fal.ai for product-photo background removal only.
 - Storage: Vercel Blob on Vercel (`BLOB_READ_WRITE_TOKEN` required). Off Vercel: Replit Object Storage fallback, then local `/tmp/launchpad-assets`; public URLs are relative `/api/assets/...`
 - Payments: Stripe Checkout; webhook sets `in_review` (does **not** auto-publish)
 - Ads: Meta + TikTok + Google (v1). LinkedIn unimplemented. Mock by default (`ADS_MODE=mock`). Saving connector creds never flips live. Client brands publish to per-customer ad account IDs; house env IDs are LaunchPad tests only.
 - Auth: magic links via email (log-only in v1)
-- Admin: `/admin` requires `ADMIN_PASSWORD` (503 without it)
+- Admin: `/admin`, `/admin/connectors`, and `/login` are the operator password desk. Requires `ADMIN_PASSWORD` (unconfigured without it). Connectors encrypt Meta / TikTok / Google secrets at rest. Saving never flips `ADS_MODE`.
 - Validation: Zod (zod/v4), drizzle-zod
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
@@ -81,7 +81,7 @@ The experience is one page that evolves through states:
 - `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` — optional (reference vision only)
 - `GEMINI_API_KEY` / `OPENAI_API_KEY` — photoreal ads (do not call Pro Image until CEO approves spend)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — locally: `stripe listen --forward-to localhost:8080/api/webhooks/stripe`
-- `ADMIN_PASSWORD` — `/admin` + encrypted connectors
+- `ADMIN_PASSWORD` — `/admin` + `/login` + encrypted connectors. Set on the Vercel **api** service, then redeploy.
 - `META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID` (**house/test Ad Account ID**, digits only, no `act_` prefix, not Business Manager ID), `META_DEFAULT_PAGE_ID`
 - `TIKTOK_ACCESS_TOKEN`, `TIKTOK_BC_ID`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_IDENTITY_ID` (CUSTOMIZED_USER identity, required for image ads) — house/test advertiser only
 - `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID` (house/test), `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (MCC)
